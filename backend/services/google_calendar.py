@@ -172,6 +172,7 @@ def get_upcoming_events(days: int = 7, max_results: int = 20) -> list[dict]:
                 "description": event.get("description", ""),
                 "all_day": "date" in event["start"],
                 "link": event.get("htmlLink", ""),
+                "updated": event.get("updated", ""),
             })
         
         return formatted_events

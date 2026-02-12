@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Task {
     id: string;
@@ -10,38 +12,73 @@ interface Task {
     done: boolean;
 }
 
-const SAMPLE_TASKS: Task[] = [
-    {
-        id: "1",
-        title: "Configurer la connexion Google Calendar",
-        meta: "NovaFlow · Setup",
-        priority: "high",
-        done: false,
-    },
-    {
-        id: "2",
-        title: "Glisser un premier PDF dans la Drop Zone",
-        meta: "NovaFlow · Démarrage",
-        priority: "medium",
-        done: false,
-    },
-    {
-        id: "3",
-        title: "Tester le chat avec l'IA locale",
-        meta: "NovaFlow · Test",
-        priority: "low",
-        done: false,
-    },
-];
-
 export default function TaskList() {
-    const [tasks, setTasks] = useState<Task[]>(SAMPLE_TASKS);
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const toggleTask = (id: string) => {
+    const fetchTasks = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/tasks`);
+            if (res.ok) {
+                const data = await res.json();
+                setTasks(data);
+            }
+        } catch (error) {
+            console.error("Erreur chargement tâches:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    // Charger initialement et poller toutes les 5 secondes pour voir les tâches créées par l'IA
+    useEffect(() => {
+        fetchTasks();
+        const interval = setInterval(fetchTasks, 5000);
+        return () => clearInterval(interval);
+    }, [fetchTasks]);
+
+    const toggleTask = async (id: string) => {
+        // Optimistic update
         setTasks((prev) =>
             prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
         );
+
+        try {
+            await fetch(`${API_URL}/api/tasks/${id}/toggle`, {
+                method: "PATCH",
+            });
+        } catch (error) {
+            console.error("Erreur toggle tâche:", error);
+            fetchTasks(); // Rollback en cas d'erreur
+        }
     };
+
+    const deleteTask = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer cette tâche ?")) return;
+
+        try {
+            await fetch(`${API_URL}/api/tasks/${id}`, {
+                method: "DELETE",
+            });
+            fetchTasks();
+        } catch (error) {
+            console.error("Erreur suppression tâche:", error);
+        }
+    }
+
+    if (isLoading && tasks.length === 0) {
+        return (
+            <div className="nf-card nf-animate-in">
+                <div className="nf-card__header">
+                    <span className="nf-card__title">✅ Tâches</span>
+                </div>
+                <div style={{ padding: "20px", textAlign: "center", color: "var(--nf-text-muted)" }}>
+                    Chargement...
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="nf-card nf-animate-in">
@@ -53,30 +90,54 @@ export default function TaskList() {
             </div>
 
             <div className="nf-task-list">
-                {tasks.map((task) => (
-                    <div
-                        key={task.id}
-                        className="nf-task"
-                        onClick={() => toggleTask(task.id)}
-                    >
+                {tasks.length === 0 ? (
+                    <div style={{ padding: "20px", textAlign: "center", color: "var(--nf-text-muted)", fontSize: "14px" }}>
+                        Aucune tâche. Demande à l'IA d'en créer !<br />
+                        <em style={{ fontSize: "12px", opacity: 0.7 }}>Ex: "Rappelle-moi d'acheter du pain"</em>
+                    </div>
+                ) : (
+                    tasks.map((task) => (
                         <div
-                            className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""
-                                }`}
+                            key={task.id}
+                            className="nf-task"
+                            onClick={() => toggleTask(task.id)}
+                            style={{ position: "relative", group: "task" } as any}
                         >
-                            {task.done && "✓"}
-                        </div>
-                        <div className="nf-task__content">
                             <div
-                                className={`nf-task__title ${task.done ? "nf-task__title--done" : ""
+                                className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""
                                     }`}
                             >
-                                {task.title}
+                                {task.done && "✓"}
                             </div>
-                            <div className="nf-task__meta">{task.meta}</div>
+                            <div className="nf-task__content">
+                                <div
+                                    className={`nf-task__title ${task.done ? "nf-task__title--done" : ""
+                                        }`}
+                                >
+                                    {task.title}
+                                </div>
+                                <div className="nf-task__meta">{task.meta}</div>
+                            </div>
+                            <div className={`nf-task__priority nf-task__priority--${task.priority}`} />
+
+                            {/* Bouton supprimer (visible au survol, géré via CSS ou simple click droit en prod, ici simple bouton pour demo) */}
+                            <button
+                                style={{
+                                    background: "none",
+                                    border: "none",
+                                    color: "var(--nf-text-muted)",
+                                    cursor: "pointer",
+                                    marginLeft: "8px",
+                                    fontSize: "16px"
+                                }}
+                                onClick={(e) => deleteTask(e, task.id)}
+                                title="Supprimer"
+                            >
+                                ×
+                            </button>
                         </div>
-                        <div className={`nf-task__priority nf-task__priority--${task.priority}`} />
-                    </div>
-                ))}
+                    ))
+                )}
             </div>
         </div>
     );

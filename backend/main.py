@@ -7,13 +7,18 @@ Ce fichier définit toutes les routes de l'API FastAPI.
 import sys
 import os
 import shutil
+from datetime import datetime
+import asyncio
+import os
+import json
 
 # Ajouter le dossier backend au path pour les imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -35,6 +40,17 @@ from services.google_calendar import (
     get_upcoming_events,
     get_today_events,
 )
+from services.task_manager import get_tasks, add_task, update_task, delete_task, toggle_task
+import re
+from services.automation import (
+    analyze_document_for_tasks, 
+    analyze_calendar_for_tasks, 
+    get_recent_logs,
+    start_job,
+    cancel_job,
+    get_active_jobs,
+    has_new_events
+)
 
 # === App Setup ===
 
@@ -47,10 +63,8 @@ app = FastAPI(
 # CORS - Permettre au Frontend Next.js de communiquer avec le Backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js dev server
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -65,6 +79,10 @@ class ChatRequest(BaseModel):
     mode: Optional[str] = None  # "local" ou "cloud", None = config par défaut
     sensitive_entities: Optional[List[str]] = None  # Entités à censurer manuellement
     use_rag: Optional[bool] = True  # Utiliser la recherche documentaire
+
+
+class TaskRequest(BaseModel):
+    title: str
 
 
 class ChatResponse(BaseModel):
@@ -115,9 +133,12 @@ async def chat_endpoint(request: ChatRequest):
 
     prompt = request.message
 
-    # Recherche de contexte RAG dans les documents
+    # Recherche de contexte RAG dans les documents (Optimisation: n_results=2)
     if request.use_rag:
-        context = get_relevant_context(prompt, n_results=5)
+        try:
+            context = get_relevant_context(prompt, n_results=2)
+        except Exception:
+            context = ""
 
     # Si mode Cloud, sanitizer le message AVANT l'envoi
     if active_mode == "cloud":
@@ -126,12 +147,13 @@ async def chat_endpoint(request: ChatRequest):
             context, _ = sanitize(context)  # Sanitizer aussi le contexte
         was_sanitized = True
 
-        # Récupération events Google Calendar (si connecté)
+        # Récupération events Google Calendar (si connecté) - Optimisation: 7 jours max
     if google_is_connected():
         try:
-            events = get_upcoming_events(days=30, max_results=50)
+            # Réduire à 7 jours et 20 résultats max pour éviter de bloquer trop longtemps
+            events = get_upcoming_events(days=7, max_results=20)
             if events:
-                cal_ctx = "\n\n## Mon Calendrier (30 prochains jours)\n"
+                cal_ctx = "\n\n## Mon Calendrier (7 prochains jours)\n"
                 for evt in events:
                     start_str = f"{evt['start'].replace('T', ' ')}"
                     end_str = f"{evt['end'].replace('T', ' ')}" if evt.get('end') else ""
@@ -156,6 +178,17 @@ async def chat_endpoint(request: ChatRequest):
         if was_sanitized and san_map:
             ai_response = desanitize(ai_response, san_map)
 
+        # Post-process : Détection de commandes (Tool Calling)
+        # Format attendu : [TASK: Titre de la tâche]
+        task_pattern = r"\[TASK:\s*(.*?)\]"
+        tasks_to_create = re.findall(task_pattern, ai_response)
+        
+        for task_title in tasks_to_create:
+            print(f"✨ AI Action: Creating task '{task_title}'")
+            add_task(title=task_title, priority="medium", meta="AI Generated")
+            # Remplacer la commande par une confirmation visible
+            ai_response = ai_response.replace(f"[TASK: {task_title}]", f"✅ Tâche '{task_title}' ajoutée.")
+
         return ChatResponse(
             response=ai_response,
             mode_used=active_mode,
@@ -174,7 +207,10 @@ async def chat_endpoint(request: ChatRequest):
 # === Endpoints Documents (RAG) ===
 
 @app.post("/api/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...)
+):
     """
     Upload et ingère un document.
     
@@ -202,6 +238,16 @@ async def upload_document(file: UploadFile = File(...)):
     
     # Ingérer le document
     result = ingest_document(file_path, file.filename or "uploaded_file")
+    
+    # ⚡ AUTOMATION: Lancer l'analyse en tant que Job tracké
+    if result["status"] == "analyzed":
+        start_job(
+            f"Analyse doc: {result['file_name']}",
+            analyze_document_for_tasks(
+                doc_id=result["doc_id"], 
+                file_name=result["file_name"]
+            )
+        )
     
     return result
 
@@ -286,6 +332,27 @@ def google_status():
     """Vérifie si Google Calendar est connecté."""
     return {"connected": google_is_connected()}
 
+# === Endpoints Automation ===
+
+@app.get("/api/automation/logs")
+def get_automation_logs():
+    """Récupère les logs récents de l'automatisation."""
+    logs = get_recent_logs(lines=5)
+    return {"logs": logs}
+
+@app.get("/api/automation/jobs")
+def get_automation_jobs():
+    """Récupère la liste des jobs en cours."""
+    return get_active_jobs()
+
+@app.delete("/api/automation/jobs/{job_id}")
+async def cancel_automation_job(job_id: str):
+    """Annule un job en cours."""
+    success = await cancel_job(job_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Job non trouvé ou déjà terminé")
+    return {"status": "cancelled"}
+
 
 @app.delete("/api/auth/google")
 def google_logout():
@@ -294,15 +361,72 @@ def google_logout():
     return {"status": "disconnected"}
 
 
+# === Endpoints Tâches ===
+
+@app.get("/api/tasks")
+def get_all_tasks():
+    """Récupère toutes les tâches."""
+    return get_tasks()
+
+@app.post("/api/tasks")
+def create_new_task(task: TaskRequest):
+    """Crée une nouvelle tâche."""
+    return add_task(task.title, priority="medium", meta="Utilisateur")
+
+@app.patch("/api/tasks/{task_id}/toggle")
+def toggle_task_status(task_id: str):
+    """Inverse le statut d'une tâche."""
+    result = toggle_task(task_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+    return result
+
+@app.delete("/api/tasks/{task_id}")
+def remove_task(task_id: str):
+    """Supprime une tâche."""
+    result = delete_task(task_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+    return {"status": "deleted"}
+
+
 # === Google Calendar Events ===
 
 @app.get("/api/calendar/events")
-def calendar_events(days: int = 7):
+async def calendar_events(days: int = 7):
     """Récupère les événements des X prochains jours."""
     if not google_is_connected():
         raise HTTPException(status_code=401, detail="Google Calendar non connecté.")
     
-    events = get_upcoming_events(days=days)
+    # Exécuter l'appel synchrone dans un threadpool pour ne pas bloquer la boucle async
+    events = await run_in_threadpool(get_upcoming_events, days=days)
+    
+    # ⚡ AUTOMATION: Analyser les événements (Job Tracké)
+    try:
+        # Debug: Vérifier si une loop existe
+        try:
+            loop = asyncio.get_running_loop()
+        except Exception as e:
+            print(f"DEBUG Loop Error: {e}")
+
+        # DEDUPLICATION: Vérifier si un job "Analyse Calendrier" tourne déjà
+        existing_jobs = get_active_jobs()
+        is_running = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
+        
+        if is_running:
+            # print("ℹ️ Auto: Analyse Calendrier déjà en cours, on ignore.")
+            pass
+        elif has_new_events(events):
+            start_job("Analyse Calendrier", analyze_calendar_for_tasks(events))
+        else:
+            # print("ℹ️ Auto: Rien de nouveau dans le calendrier.")
+            pass
+
+    except Exception as e:
+        print(f"ERREUR CRITIQUE START_JOB: {e}")
+        # On ne raise PAS d'erreur pour ne pas bloquer l'affichage du calendrier
+
+    
     return {"events": events, "count": len(events)}
 
 

@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
     id: string;
@@ -99,8 +101,14 @@ export default function ChatPanel() {
                         <div className={`nf-chat__avatar nf-chat__avatar--${msg.role}`}>
                             {msg.role === "ai" ? "⚡" : "👤"}
                         </div>
-                        <div className={`nf-chat__bubble nf-chat__bubble--${msg.role}`}>
-                            {msg.content}
+                        <div className={`nf-chat__bubble nf-chat__bubble--${msg.role} ${msg.role === 'ai' ? 'nf-markdown' : ''}`}>
+                            {msg.role === "ai" ? (
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {msg.content}
+                                </ReactMarkdown>
+                            ) : (
+                                msg.content
+                            )}
                         </div>
                     </div>
                 ))}

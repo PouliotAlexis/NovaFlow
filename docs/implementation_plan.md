@@ -34,5 +34,31 @@ Créer un assistant personnel unifié capbable de gérer des données académiqu
 /NovaFlow
   /frontend (Next.js)
   /backend (FastAPI)
+  /NovaFlow
+  /frontend (Next.js)
+  /backend (FastAPI)
   /docs (Documentation)
+
+## 4. Automation Features (New)
+
+### Background Task Analysis
+- **Goal**: Analyze documents and calendar events without blocking the user.
+- **Implementation**: use FastAPI `BackgroundTasks`.
+
+### Document to Tasks
+- **Trigger**: `/api/upload`
+- **Action**: 
+    1. Ingest document.
+    2. Trigger `analyze_doc_for_tasks(doc_id)`.
+    3. AI prompts: "Extract all action items from this text as tasks."
+    4. Call `task_manager.add_task` for each item.
+
+### Calendar to Tasks
+- **Trigger**: `/api/calendar/events` (or periodic background job)
+- **Action**:
+    1. Fetch events.
+    2. Filter events not in `processed_events.json`.
+    3. Triger `analyze_event_for_tasks(event)`.
+    4. AI prompts: "Does this event require preparation? If yes, create a task."
+    5. Save event ID to `processed_events.json`.
 ```

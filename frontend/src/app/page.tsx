@@ -10,6 +10,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import CalendarView from "@/components/CalendarView";
 import DocumentsView from "@/components/DocumentsView";
 import FocusMode from "@/components/FocusMode";
+import AutomationStatus from "@/components/AutomationStatus";
 
 export default function Home() {
   const [activeView, setActiveView] = useState("dashboard");
@@ -84,6 +85,7 @@ export default function Home() {
             <p className="nf-header__subtitle">{subtitle}</p>
           </div>
           <div className="nf-header__actions">
+            <AutomationStatus />
             <div className="nf-ai-mode nf-ai-mode--local">
               <span className="nf-ai-mode__dot" />
               AI Locale
