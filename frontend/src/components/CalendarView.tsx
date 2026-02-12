@@ -15,6 +15,7 @@ interface CalendarEvent {
     location?: string;
     all_day?: boolean;
     link?: string;
+    accounts?: string[];
 }
 
 const EVENT_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -54,6 +55,7 @@ function parseGoogleEvent(event: {
     location: string;
     all_day: boolean;
     link: string;
+    accounts: string[];
 }): CalendarEvent {
     const startDate = event.start.split("T")[0];
     const startTime = event.all_day ? "Journée" : new Date(event.start).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
@@ -71,6 +73,7 @@ function parseGoogleEvent(event: {
         location: event.location,
         all_day: event.all_day,
         link: event.link,
+        accounts: event.accounts,
     };
 }
 
@@ -80,21 +83,23 @@ export default function CalendarView() {
     const [currentYear, setCurrentYear] = useState(today.getFullYear());
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [events, setEvents] = useState<CalendarEvent[]>([]);
-    const [isConnected, setIsConnected] = useState(false);
+    const [googleAccounts, setGoogleAccounts] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
     const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
 
-    // Vérifier le statut de connexion Google
+    // Vérifier les comptes Google connectés
     const checkConnection = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/auth/google/status`);
-            const data = await res.json();
-            setIsConnected(data.connected);
-            return data.connected;
+            const res = await fetch(`${API_URL}/api/auth/google/accounts`);
+            if (res.ok) {
+                const data = await res.json();
+                setGoogleAccounts(data.accounts || []);
+                return (data.accounts || []).length > 0;
+            }
+            return false;
         } catch {
-            setIsConnected(false);
             return false;
         }
     }, []);
@@ -130,7 +135,7 @@ export default function CalendarView() {
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         if (params.get("google_connected") === "true") {
-            setIsConnected(true);
+            checkConnection();
             fetchEvents();
             // Nettoyer l'URL
             window.history.replaceState({}, "", window.location.pathname);
@@ -139,25 +144,18 @@ export default function CalendarView() {
 
     const handleConnect = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/auth/google`);
+            const res = await fetch(`${API_URL}/api/auth/google/login`);
             const data = await res.json();
-            if (data.auth_url) {
-                window.location.href = data.auth_url;
+            if (data.url) {
+                window.location.href = data.url;
             }
         } catch {
             console.error("Erreur connexion Google");
         }
     };
 
-    const handleDisconnect = async () => {
-        try {
-            await fetch(`${API_URL}/api/auth/google`, { method: "DELETE" });
-            setIsConnected(false);
-            setEvents([]);
-        } catch {
-            console.error("Erreur déconnexion");
-        }
-    };
+    // Déconnexion gérée uniquement via les réglages maintenant
+    const handleDisconnect = () => { };
 
     const prevMonth = () => {
         if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1); }
@@ -187,8 +185,8 @@ export default function CalendarView() {
 
     const selectedEvents = selectedDate ? getEventsForDate(selectedDate) : [];
 
-    // Si pas connecté, afficher le bouton de connexion
-    if (!isConnected && !isLoading) {
+    // Si aucun compte connecté, afficher le bouton de connexion
+    if (googleAccounts.length === 0 && !isLoading) {
         return (
             <div className="nf-animate-in" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                 <div className="nf-card" style={{ textAlign: "center", padding: "60px 40px" }}>
@@ -223,14 +221,12 @@ export default function CalendarView() {
                 <div className="nf-card__header">
                     <span className="nf-card__title">📅 {MONTHS_FR[currentMonth]} {currentYear}</span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        {isConnected && (
+                        {googleAccounts.length > 0 && (
                             <span
                                 className="nf-card__badge nf-card__badge--success"
-                                style={{ cursor: "pointer" }}
-                                onClick={handleDisconnect}
-                                title="Cliquer pour déconnecter"
+                                style={{ pointerEvents: "none" }}
                             >
-                                ✅ Google connecté
+                                ✅ {googleAccounts.length} compte{googleAccounts.length > 1 ? "s" : ""} connecté{googleAccounts.length > 1 ? "s" : ""}
                             </span>
                         )}
                         <button className="nf-btn--icon" onClick={prevMonth}>◀</button>
@@ -380,6 +376,11 @@ export default function CalendarView() {
                                                 {evt.time}{evt.end_time ? ` → ${evt.end_time}` : ""}
                                                 {evt.location ? ` · 📍 ${evt.location}` : ""}
                                             </div>
+                                            {evt.accounts && (
+                                                <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "4px" }}>
+                                                    👤 {evt.accounts.join(" · ")}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className={`nf-task__priority nf-task__priority--${evt.priority}`} />
                                     </div>
@@ -434,6 +435,11 @@ export default function CalendarView() {
                                                 {evt.time}
                                                 {evt.location ? ` · 📍 ${evt.location}` : ""}
                                             </div>
+                                            {evt.accounts && (
+                                                <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "2px" }}>
+                                                    👤 {evt.accounts.map(email => email.split("@")[0]).join(" · ")}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className={`nf-task__priority nf-task__priority--${evt.priority}`} />
                                     </div>
@@ -442,7 +448,7 @@ export default function CalendarView() {
                         </div>
                     ) : (
                         <p style={{ color: "var(--nf-text-muted)", fontSize: "13px", textAlign: "center", padding: "16px" }}>
-                            {isConnected ? "Aucun événement à venir" : "Connecte Google Calendar pour voir tes événements"}
+                            {googleAccounts.length > 0 ? "Aucun événement à venir" : "Connecte Google Calendar pour voir tes événements"}
                         </p>
                     )}
                 </div>

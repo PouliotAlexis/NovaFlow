@@ -138,9 +138,9 @@ def disconnect_account(email: str) -> bool:
 # === Calendar API (Aggregated) ===
 
 def get_upcoming_events(days: int = 7, max_results: int = 20) -> List[Dict]:
-    """Récupère et fusionne les événements de TOUS les comptes connectés."""
+    """Récupère et fusionne les événements de TOUS les comptes connectés avec déduplication."""
     emails = list_connected_accounts()
-    all_events = []
+    events_by_uid = {} # iCalUID -> EventData
     
     for email in emails:
         creds = _get_credentials_for_email(email)
@@ -165,25 +165,35 @@ def get_upcoming_events(days: int = 7, max_results: int = 20) -> List[Dict]:
             
             items = events_result.get("items", [])
             for item in items:
+                uid = item.get("iCalUID", item["id"]) # Utiliser iCalUID pour la déduplication
                 start = item["start"].get("dateTime", item["start"].get("date"))
                 end = item["end"].get("dateTime", item["end"].get("date"))
                 
-                all_events.append({
-                    "id": f"{email}_{item['id']}", # ID unique combiné
-                    "account": email,
-                    "title": item.get("summary", "Sans titre"),
-                    "start": start,
-                    "end": end,
-                    "location": item.get("location", ""),
-                    "description": item.get("description", ""),
-                    "all_day": "date" in item["start"],
-                    "link": item.get("htmlLink", ""),
-                    "updated": item.get("updated", ""),
-                })
+                if uid in events_by_uid:
+                    # Doublon détecté (événement partagé entre comptes)
+                    # Ajouter cet email à la liste des comptes de l'événement existant
+                    if email not in events_by_uid[uid]["accounts"]:
+                        events_by_uid[uid]["accounts"].append(email)
+                else:
+                    # Nouvel événement unique
+                    events_by_uid[uid] = {
+                        "id": f"{email}_{item['id']}",
+                        "uid": uid,
+                        "accounts": [email],
+                        "title": item.get("summary", "Sans titre"),
+                        "start": start,
+                        "end": end,
+                        "location": item.get("location", ""),
+                        "description": item.get("description", ""),
+                        "all_day": "date" in item["start"],
+                        "link": item.get("htmlLink", ""),
+                        "updated": item.get("updated", ""),
+                    }
         except Exception as e:
             print(f"Erreur Calendar pour {email}: {e}")
             
-    # Trier par date de début
+    # Convertir le dictionnaire en liste et trier par date de début
+    all_events = list(events_by_uid.values())
     all_events.sort(key=lambda x: x["start"])
     return all_events
 
