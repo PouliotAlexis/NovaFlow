@@ -13,7 +13,7 @@ from typing import List
 from services.document_processor import get_relevant_context, list_documents, extract_text, UPLOADS_DIR
 from services.ai_engine import chat
 from services.task_manager import add_task, get_tasks
-from services.google_calendar import get_upcoming_events
+from services.google_service import get_upcoming_events
 import datetime
 import asyncio
 import uuid

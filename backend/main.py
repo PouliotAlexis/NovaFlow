@@ -32,13 +32,14 @@ from services.document_processor import (
     delete_document,
     UPLOADS_DIR,
 )
-from services.google_calendar import (
+from services.google_service import (
     get_auth_url,
     handle_callback,
-    is_connected as google_is_connected,
-    disconnect as google_disconnect,
+    is_any_connected as google_is_connected,
+    disconnect_account as google_disconnect,
     get_upcoming_events,
     get_today_events,
+    list_connected_accounts
 )
 from services.task_manager import get_tasks, add_task, update_task, delete_task, toggle_task
 import re
@@ -322,36 +323,45 @@ def get_settings():
 
 # === Google Calendar OAuth ===
 
-@app.get("/api/auth/google")
-def google_auth():
-    """Démarre le flow OAuth Google Calendar."""
-    try:
-        auth_url = get_auth_url()
-        return {"auth_url": auth_url}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur OAuth: {str(e)}")
+@app.get("/api/auth/google/login")
+def google_login():
+    """Retourne l'URL de connexion Google."""
+    return {"url": get_auth_url()}
 
 
 @app.get("/api/auth/google/callback")
 def google_callback(code: str):
-    """
-    Callback OAuth Google.
-    Google redirige ici après l'autorisation.
-    """
-    try:
-        result = handle_callback(code)
-        # Rediriger vers le frontend avec un message de succès
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url="http://localhost:3000?google_connected=true")
-    except Exception as e:
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=f"http://localhost:3000?google_error={str(e)}")
+    """Callback OAuth Google."""
+    return handle_callback(code)
+
+
+@app.get("/api/auth/google/accounts")
+def google_accounts():
+    """Liste les comptes Google connectés."""
+    return {"accounts": list_connected_accounts()}
+
+
+@app.delete("/api/auth/google/accounts/{email}")
+def google_disconnect_account(email: str):
+    """Déconnecte un compte spécifique."""
+    if google_disconnect(email):
+        return {"status": "disconnected"}
+    raise HTTPException(status_code=404, detail="Compte non trouvé")
 
 
 @app.get("/api/auth/google/status")
 def google_status():
-    """Vérifie si Google Calendar est connecté."""
+    """Vérifie si au moins un compte est connecté."""
     return {"connected": google_is_connected()}
+
+
+@app.get("/api/auth/google/disconnect")
+def google_disconnect_all():
+    """Déconnecte TOUS les comptes Google (pour compatibilité)."""
+    accounts = list_connected_accounts()
+    for acc in accounts:
+        google_disconnect(acc)
+    return {"status": "all_disconnected"}
 
 # === Endpoints Automation ===
 
@@ -373,13 +383,6 @@ async def cancel_automation_job(job_id: str):
     if not success:
         raise HTTPException(status_code=404, detail="Job non trouvé ou déjà terminé")
     return {"status": "cancelled"}
-
-
-@app.delete("/api/auth/google")
-def google_logout():
-    """Déconnecte Google Calendar."""
-    google_disconnect()
-    return {"status": "disconnected"}
 
 
 # === Endpoints Tâches ===
