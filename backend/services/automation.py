@@ -14,6 +14,7 @@ from services.document_processor import get_relevant_context, list_documents, ex
 from services.ai_engine import chat
 from services.task_manager import add_task, get_tasks
 from services.google_service import get_upcoming_events
+from services.notification_manager import add_notification
 import datetime
 import asyncio
 import uuid
@@ -223,6 +224,11 @@ async def analyze_document_for_tasks(doc_id: str, file_name: str):
             add_task(f"{task_title}", priority="medium", meta=f"📄 {file_name}")
             count += 1
             
+        add_notification(
+            title="Extraction complète",
+            content=f"{count} tâches ont été extraites du document '{file_name}'.",
+            type="success" if count > 0 else "info"
+        )
         log_auto(f"✅ {count} tâches créées depuis {file_name}")
         
         # Marquer comme traité
@@ -262,6 +268,16 @@ async def analyze_calendar_for_tasks(events: list = None):
             
             title = event.get("title", "")
             desc = event.get("description", "")
+            
+            # 🔔 ALERTE: Événement critique détecté (Examen, Deadline)
+            lower_title = title.lower()
+            critical_keywords = ["examen", "intra", "final", "quiz", "test", "deadline", "remise", "date limite"]
+            if any(kw in lower_title for kw in critical_keywords):
+                add_notification(
+                    title="Échéance importante",
+                    content=f"Rappel : '{title}' approche dans votre calendrier.",
+                    type="deadline"
+                )
             
             # On ne déclenche l'IA que si la description contient des indices de tâches
             # Pour éviter d'inventer des prépas pour chaque cours

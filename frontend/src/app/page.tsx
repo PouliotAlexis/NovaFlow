@@ -10,6 +10,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import CalendarView from "@/components/CalendarView";
 import DocumentsView from "@/components/DocumentsView";
 import FocusMode from "@/components/FocusMode";
+import NotificationPanel from "@/components/NotificationPanel";
 import AutomationStatus from "@/components/AutomationStatus";
 
 export default function Home() {
@@ -90,7 +91,7 @@ export default function Home() {
               <span className="nf-ai-mode__dot" />
               AI Locale
             </div>
-            <button className="nf-btn--icon" title="Notifications">🔔</button>
+            <NotificationPanel />
           </div>
         </header>
 

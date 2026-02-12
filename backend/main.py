@@ -53,6 +53,7 @@ from services.automation import (
     has_new_events
 )
 from services.chat_manager import load_chat_history, save_chat_message, clear_chat_history
+import services.notification_manager as notification_manager
 
 # === App Setup ===
 
@@ -412,6 +413,40 @@ def remove_task(task_id: str):
     if not result:
         raise HTTPException(status_code=404, detail="Tâche non trouvée")
     return {"status": "deleted"}
+
+
+# === Endpoints Notifications ===
+
+@app.get("/api/notifications")
+def get_user_notifications(unread_only: bool = False):
+    """Récupère les notifications de l'utilisateur."""
+    return {"notifications": notification_manager.get_notifications(unread_only)}
+
+@app.post("/api/notifications/read/{notif_id}")
+def mark_notification_as_read(notif_id: str):
+    """Marque une notification comme lue."""
+    if notification_manager.mark_as_read(notif_id):
+        return {"status": "success"}
+    raise HTTPException(status_code=404, detail="Notification non trouvée")
+
+@app.post("/api/notifications/read-all")
+def mark_all_notifications_as_read():
+    """Marque toutes les notifications comme lues."""
+    count = notification_manager.mark_all_as_read()
+    return {"read_count": count}
+
+@app.delete("/api/notifications/{notif_id}")
+def delete_user_notification(notif_id: str):
+    """Supprime une notification."""
+    if notification_manager.delete_notification(notif_id):
+        return {"status": "success"}
+    raise HTTPException(status_code=404, detail="Notification non trouvée")
+
+@app.delete("/api/notifications")
+def clear_user_notifications():
+    """Efface toutes les notifications."""
+    notification_manager.clear_all_notifications()
+    return {"status": "cleared"}
 
 
 # === Google Calendar Events ===
