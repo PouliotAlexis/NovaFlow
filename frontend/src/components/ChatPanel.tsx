@@ -26,6 +26,37 @@ export default function ChatPanel() {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
 
+    // Charger l'historique au montage
+    React.useEffect(() => {
+        const fetchHistory = async () => {
+            try {
+                const response = await fetch(`${API_URL}/api/chat/history`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.history && data.history.length > 0) {
+                        setMessages(data.history);
+                    }
+                }
+            } catch (error) {
+                console.error("Erreur lors du chargement de l'historique:", error);
+            }
+        };
+        fetchHistory();
+    }, []);
+
+    const clearHistory = async () => {
+        if (!confirm("Effacer tout l'historique de chat ?")) return;
+
+        try {
+            const response = await fetch(`${API_URL}/api/chat/history`, { method: "DELETE" });
+            if (response.ok) {
+                setMessages(INITIAL_MESSAGES);
+            }
+        } catch (error) {
+            console.error("Erreur lors de la suppression de l'historique:", error);
+        }
+    };
+
     const sendMessage = async () => {
         if (!input.trim() || isLoading) return;
 
@@ -83,8 +114,18 @@ export default function ChatPanel() {
 
     return (
         <div className="nf-card nf-animate-in" style={{ display: "flex", flexDirection: "column", minHeight: "400px" }}>
-            <div className="nf-card__header">
-                <span className="nf-card__title">💬 Chat AI</span>
+            <div className="nf-card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="nf-card__title">💬 Chat AI</span>
+                    <button
+                        onClick={clearHistory}
+                        className="nf-btn nf-btn--ghost"
+                        style={{ padding: '2px 6px', fontSize: '0.8rem', opacity: 0.6 }}
+                        title="Effacer l'historique"
+                    >
+                        🗑️
+                    </button>
+                </div>
                 <div className="nf-ai-mode nf-ai-mode--local">
                     <span className="nf-ai-mode__dot" />
                     Local (Ollama)

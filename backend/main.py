@@ -51,6 +51,7 @@ from services.automation import (
     get_active_jobs,
     has_new_events
 )
+from services.chat_manager import load_chat_history, save_chat_message, clear_chat_history
 
 # === App Setup ===
 
@@ -132,6 +133,9 @@ async def chat_endpoint(request: ChatRequest):
     context = ""
 
     prompt = request.message
+    
+    # Sauvegarder le message utilisateur dans l'historique
+    save_chat_message("user", prompt)
 
     # Recherche de contexte RAG dans les documents (Optimisation: n_results=2)
     if request.use_rag:
@@ -189,6 +193,9 @@ async def chat_endpoint(request: ChatRequest):
             # Remplacer la commande par une confirmation visible
             ai_response = ai_response.replace(f"[TASK: {task_title}]", f"✅ Tâche '{task_title}' ajoutée.")
 
+        # Sauvegarder la réponse IA dans l'historique
+        save_chat_message("ai", ai_response)
+
         return ChatResponse(
             response=ai_response,
             mode_used=active_mode,
@@ -202,6 +209,20 @@ async def chat_endpoint(request: ChatRequest):
             status_code=500,
             detail=f"Erreur lors de la communication avec l'IA ({active_mode}): {str(e)}",
         )
+
+
+# === Endpoints Chat History ===
+
+@app.get("/api/chat/history")
+def get_chat_history():
+    """Récupère l'historique des conversations."""
+    return {"history": load_chat_history()}
+
+@app.delete("/api/chat/history")
+def delete_chat_history():
+    """Efface l'historique des conversations."""
+    clear_chat_history()
+    return {"status": "cleared"}
 
 
 # === Endpoints Documents (RAG) ===
