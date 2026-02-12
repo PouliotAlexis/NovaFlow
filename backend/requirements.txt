@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+ollama
+httpx
+pydantic
+python-multipart
+python-dotenv
+sqlalchemy
+pytest
+chromadb
+pypdf2
+google-auth
+google-auth-oauthlib
+google-api-python-client
