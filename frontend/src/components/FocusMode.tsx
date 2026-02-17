@@ -1,6 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+const AMBIENT_SOUNDS = [
+    { id: "rain", label: "🌧️ Pluie", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" }, // Placeholders pour démo
+    { id: "forest", label: "🌲 Forêt", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
+    { id: "white_noise", label: "🌫️ Bruit blanc", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
+];
 
 export default function FocusMode() {
     const [isActive, setIsActive] = useState(false);
@@ -8,8 +16,33 @@ export default function FocusMode() {
     const [seconds, setSeconds] = useState(0);
     const [totalMinutes, setTotalMinutes] = useState(25);
     const [sessionsCompleted, setSessionsCompleted] = useState(0);
-    const [currentTask, setCurrentTask] = useState("Étudier pour l'examen intra");
+    const [currentTask, setCurrentTask] = useState("");
+    const [isZenMode, setIsZenMode] = useState(false);
+    const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+    const [currentSound, setCurrentSound] = useState<string | null>(null);
+    const [stats, setStats] = useState<any>(null);
 
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    // Fetch stats au chargement
+    const fetchStats = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/focus/stats`);
+            if (res.ok) {
+                const data = await res.json();
+                setStats(data);
+                setSessionsCompleted(data.session_count);
+            }
+        } catch (err) {
+            console.error("Erreur stats focus:", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchStats();
+    }, []);
+
+    // Timer Logic
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -17,14 +50,13 @@ export default function FocusMode() {
             interval = setInterval(() => {
                 if (seconds === 0) {
                     if (minutes === 0) {
-                        setIsActive(false);
-                        setSessionsCompleted((s) => s + 1);
+                        handleSessionComplete();
                     } else {
-                        setMinutes(minutes - 1);
+                        setMinutes(m => m - 1);
                         setSeconds(59);
                     }
                 } else {
-                    setSeconds(seconds - 1);
+                    setSeconds(s => s - 1);
                 }
             }, 1000);
         }
@@ -34,13 +66,72 @@ export default function FocusMode() {
         };
     }, [isActive, minutes, seconds]);
 
-    const startTimer = useCallback(() => setIsActive(true), []);
-    const pauseTimer = useCallback(() => setIsActive(false), []);
+    // Motivation Guard
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isActive) {
+                e.preventDefault();
+                e.returnValue = "Ta session de focus est en cours. Es-tu sûr de vouloir quitter NovaFlow ?";
+            }
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, [isActive]);
+
+    const handleSessionComplete = async () => {
+        setIsActive(false);
+        if (activeSessionId) {
+            await fetch(`${API_URL}/api/focus/stop/${activeSessionId}`, { method: "POST" });
+            setActiveSessionId(null);
+            fetchStats();
+        }
+        alert("Bravo ! Session de focus terminée. Prends une petite pause.");
+    };
+
+    const startTimer = async () => {
+        setIsActive(true);
+        try {
+            const res = await fetch(`${API_URL}/api/focus/start`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ task_title: currentTask || "Focus Libre" })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setActiveSessionId(data.id);
+            }
+        } catch (err) {
+            console.error("Erreur start focus:", err);
+        }
+    };
+
+    const pauseTimer = () => setIsActive(false);
+
     const resetTimer = useCallback(() => {
         setIsActive(false);
         setMinutes(totalMinutes);
         setSeconds(0);
     }, [totalMinutes]);
+
+    const toggleZenMode = () => setIsZenMode(!isZenMode);
+
+    const toggleSound = (soundId: string) => {
+        if (currentSound === soundId) {
+            if (audioRef.current) audioRef.current.pause();
+            setCurrentSound(null);
+        } else {
+            const sound = AMBIENT_SOUNDS.find(s => s.id === soundId);
+            if (sound) {
+                if (!audioRef.current) audioRef.current = new Audio(sound.url);
+                else audioRef.current.src = sound.url;
+
+                audioRef.current.loop = true;
+                audioRef.current.play();
+                setCurrentSound(soundId);
+            }
+        }
+    };
 
     const progress = 1 - (minutes * 60 + seconds) / (totalMinutes * 60);
     const circumference = 2 * Math.PI * 120;
@@ -53,35 +144,72 @@ export default function FocusMode() {
         { label: "Pause", min: 5 },
     ];
 
+    if (isZenMode) {
+        return (
+            <div style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 9999,
+                background: "var(--nf-bg-primary)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                animation: "nf-fade-in 0.5s ease-out"
+            }}>
+                <button
+                    onClick={toggleZenMode}
+                    className="nf-btn nf-btn--ghost"
+                    style={{ position: "absolute", top: "24px", right: "24px" }}
+                >
+                    ✖ Quitter l'Espace Zen
+                </button>
+
+                <div style={{ textAlign: "center", maxWidth: "600px", width: "90%" }}>
+                    <h1 style={{ fontSize: "24px", marginBottom: "40px", opacity: 0.7 }}>
+                        {currentTask || "Session de Focus"}
+                    </h1>
+
+                    <div style={{ fontSize: "120px", fontWeight: 700, fontVariantNumeric: "tabular-nums", marginBottom: "40px" }}>
+                        {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+                    </div>
+
+                    <div style={{ display: "flex", gap: "20px", justifyContent: "center" }}>
+                        <button className="nf-btn nf-btn--primary" onClick={isActive ? pauseTimer : startTimer} style={{ padding: "16px 40px", fontSize: "18px" }}>
+                            {isActive ? "⏸ Pause" : "▶ Continuer"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="nf-animate-in" style={{ display: "flex", flexDirection: "column", gap: "24px", alignItems: "center" }}>
             {/* Timer Card */}
             <div className="nf-card" style={{ width: "100%", maxWidth: "500px", textAlign: "center", padding: "40px" }}>
-                <h2 style={{
-                    fontSize: "20px",
-                    fontWeight: 700,
-                    marginBottom: "8px",
-                    background: "var(--nf-accent-gradient)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                }}>
-                    🎯 Focus Mode
-                </h2>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                    <h2 style={{
+                        fontSize: "20px",
+                        fontWeight: 700,
+                        background: "var(--nf-accent-gradient)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                    }}>
+                        🎯 Espace Zen
+                    </h2>
+                    <button onClick={toggleZenMode} className="nf-btn nf-btn--ghost" style={{ fontSize: "12px" }}>
+                        🖵 Plein écran
+                    </button>
+                </div>
                 <p style={{ color: "var(--nf-text-muted)", fontSize: "13px", marginBottom: "32px" }}>
-                    Élimine les distractions. Concentre-toi.
+                    Élimine les distractions. Concentre-toi sur l'essentiel.
                 </p>
 
                 {/* Circular Timer */}
                 <div style={{ position: "relative", width: "260px", height: "260px", margin: "0 auto 32px" }}>
                     <svg width="260" height="260" style={{ transform: "rotate(-90deg)" }}>
-                        {/* Background circle */}
-                        <circle
-                            cx="130" cy="130" r="120"
-                            fill="none"
-                            stroke="var(--nf-bg-tertiary)"
-                            strokeWidth="6"
-                        />
-                        {/* Progress circle */}
+                        <circle cx="130" cy="130" r="120" fill="none" stroke="var(--nf-bg-tertiary)" strokeWidth="6" />
                         <circle
                             cx="130" cy="130" r="120"
                             fill="none"
@@ -100,7 +228,6 @@ export default function FocusMode() {
                         </defs>
                     </svg>
 
-                    {/* Timer Display */}
                     <div style={{
                         position: "absolute",
                         inset: 0,
@@ -109,21 +236,26 @@ export default function FocusMode() {
                         alignItems: "center",
                         justifyContent: "center",
                     }}>
-                        <span style={{
-                            fontSize: "56px",
-                            fontWeight: 700,
-                            fontVariantNumeric: "tabular-nums",
-                            letterSpacing: "-0.02em",
-                        }}>
+                        <span style={{ fontSize: "56px", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
                             {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
-                        </span>
-                        <span style={{ color: "var(--nf-text-muted)", fontSize: "13px" }}>
-                            {isActive ? "En cours..." : progress > 0 ? "En pause" : "Prêt"}
                         </span>
                     </div>
                 </div>
 
-                {/* Controls */}
+                {/* Ambient Sounds */}
+                <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginBottom: "24px" }}>
+                    {AMBIENT_SOUNDS.map(s => (
+                        <button
+                            key={s.id}
+                            className={`nf-btn ${currentSound === s.id ? "nf-btn--primary" : "nf-btn--ghost"}`}
+                            onClick={() => toggleSound(s.id)}
+                            style={{ fontSize: "12px", padding: "6px 12px" }}
+                        >
+                            {s.label}
+                        </button>
+                    ))}
+                </div>
+
                 <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginBottom: "24px" }}>
                     {!isActive ? (
                         <button className="nf-btn nf-btn--primary" onClick={startTimer} style={{ minWidth: "120px" }}>
@@ -135,11 +267,10 @@ export default function FocusMode() {
                         </button>
                     )}
                     <button className="nf-btn nf-btn--ghost" onClick={resetTimer}>
-                        ↩ Réinitialiser
+                        ↩ Reset
                     </button>
                 </div>
 
-                {/* Presets */}
                 <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
                     {presets.map((p) => (
                         <button
@@ -153,30 +284,9 @@ export default function FocusMode() {
                             }}
                             style={{ fontSize: "12px", padding: "6px 14px" }}
                         >
-                            {p.label} ({p.min}m)
+                            {p.min}m
                         </button>
                     ))}
-                </div>
-            </div>
-
-            {/* Stats & Task */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", width: "100%", maxWidth: "500px" }}>
-                <div className="nf-card" style={{ textAlign: "center" }}>
-                    <div className="nf-stat">
-                        <span className="nf-stat__value" style={{ color: "var(--nf-accent-primary)" }}>
-                            {sessionsCompleted}
-                        </span>
-                        <span className="nf-stat__label">Sessions aujourd&apos;hui</span>
-                    </div>
-                </div>
-
-                <div className="nf-card" style={{ textAlign: "center" }}>
-                    <div className="nf-stat">
-                        <span className="nf-stat__value" style={{ color: "var(--nf-success)" }}>
-                            {sessionsCompleted * totalMinutes}m
-                        </span>
-                        <span className="nf-stat__label">Temps concentré</span>
-                    </div>
                 </div>
             </div>
 
@@ -192,6 +302,23 @@ export default function FocusMode() {
                     placeholder="Sur quoi travailles-tu ?"
                     style={{ width: "100%" }}
                 />
+            </div>
+
+            {/* Backend Stats */}
+            <div className="nf-card" style={{ width: "100%", maxWidth: "500px" }}>
+                <div className="nf-card__header">
+                    <span className="nf-card__title">📊 Statistiques Focus</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div className="nf-stat">
+                        <span className="nf-stat__value">{stats?.total_minutes || 0}m</span>
+                        <span className="nf-stat__label">Cumul total</span>
+                    </div>
+                    <div className="nf-stat">
+                        <span className="nf-stat__value">{stats?.session_count || 0}</span>
+                        <span className="nf-stat__label">Sessions</span>
+                    </div>
+                </div>
             </div>
         </div>
     );

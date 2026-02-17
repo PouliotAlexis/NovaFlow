@@ -16,7 +16,8 @@ import AutomationStatus from "@/components/AutomationStatus";
 export default function Home() {
   const [activeView, setActiveView] = useState("dashboard");
 
-  const renderView = () => {
+  // Rendu des onglets qui ne sont PAS pré-chargés (montage/démontage classique)
+  const renderDynamicView = () => {
     switch (activeView) {
       case "dashboard":
         return (
@@ -31,10 +32,6 @@ export default function Home() {
         );
       case "chat":
         return <ChatPanel />;
-      case "tasks":
-        return <TaskList />;
-      case "calendar":
-        return <CalendarView />;
       case "documents":
         return <DocumentsView />;
       case "dropzone":
@@ -43,6 +40,9 @@ export default function Home() {
         return <FocusMode />;
       case "settings":
         return <SettingsPanel />;
+      case "tasks":
+      case "calendar":
+        return null; // Gérés par les composants persistants ci-dessous
       default:
         return (
           <div className="nf-card nf-animate-in" style={{ textAlign: "center", padding: "60px" }}>
@@ -80,7 +80,7 @@ export default function Home() {
 
       <main className="nf-main">
         {/* Header */}
-        <header className="nf-header">
+        <header className="nf-header" style={{ position: "relative", zIndex: 50 }}>
           <div>
             <h1 className="nf-header__title">{title}</h1>
             <p className="nf-header__subtitle">{subtitle}</p>
@@ -97,7 +97,16 @@ export default function Home() {
 
         {/* Content */}
         <div className="nf-content">
-          {renderView()}
+          {/* Composants persistants (toujours montés, masqués quand inactifs) */}
+          <div style={{ display: activeView === "tasks" ? "block" : "none" }}>
+            <TaskList />
+          </div>
+          <div style={{ display: activeView === "calendar" ? "block" : "none" }}>
+            <CalendarView onNavigate={setActiveView} />
+          </div>
+
+          {/* Composants dynamiques (montés/démontés au besoin) */}
+          {renderDynamicView()}
         </div>
       </main>
     </div>

@@ -34,7 +34,19 @@ export default function TaskList() {
     useEffect(() => {
         fetchTasks();
         const interval = setInterval(fetchTasks, 5000);
-        return () => clearInterval(interval);
+
+        // Écouter les changements de tâches depuis d'autres composants (ex: CalendarView)
+        const handleExternalChange = () => fetchTasks();
+        window.addEventListener("novaflow-task-changed", handleExternalChange);
+
+        // Re-fetch quand un job d'automation se termine
+        window.addEventListener("novaflow-automation-done", handleExternalChange);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("novaflow-task-changed", handleExternalChange);
+            window.removeEventListener("novaflow-automation-done", handleExternalChange);
+        };
     }, [fetchTasks]);
 
     const toggleTask = async (id: string) => {
@@ -47,6 +59,8 @@ export default function TaskList() {
             await fetch(`${API_URL}/api/tasks/${id}/toggle`, {
                 method: "PATCH",
             });
+            // Notifier les autres composants (CalendarView) du changement
+            window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
             console.error("Erreur toggle tâche:", error);
             fetchTasks(); // Rollback en cas d'erreur
@@ -62,6 +76,8 @@ export default function TaskList() {
                 method: "DELETE",
             });
             fetchTasks();
+            // Notifier les autres composants (CalendarView) du changement
+            window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
             console.error("Erreur suppression tâche:", error);
         }

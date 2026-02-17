@@ -137,8 +137,8 @@ def disconnect_account(email: str) -> bool:
 
 # === Calendar API (Aggregated) ===
 
-def get_upcoming_events(days: int = 7, max_results: int = 20) -> List[Dict]:
-    """Récupère et fusionne les événements de TOUS les comptes connectés avec déduplication."""
+def get_upcoming_events(days: int = 30, max_results: int = 250) -> List[Dict]:
+    """Récupère et fusionne les événements de TOUS les comptes et TOUS les calendriers connectés."""
     emails = list_connected_accounts()
     events_by_uid = {} # iCalUID -> EventData
     
@@ -150,47 +150,89 @@ def get_upcoming_events(days: int = 7, max_results: int = 20) -> List[Dict]:
         try:
             service = build("calendar", "v3", credentials=creds)
             
+            # 1. Lister tous les calendriers auxquels l'utilisateur a accès
+            calendar_list = service.calendarList().list().execute()
+            calendars = calendar_list.get("items", [])
+            
             now = datetime.utcnow()
             time_min = now.isoformat() + "Z"
             time_max = (now + timedelta(days=days)).isoformat() + "Z"
             
-            events_result = service.events().list(
-                calendarId="primary",
-                timeMin=time_min,
-                timeMax=time_max,
-                maxResults=max_results,
-                singleEvents=True,
-                orderBy="startTime",
-            ).execute()
-            
-            items = events_result.get("items", [])
-            for item in items:
-                uid = item.get("iCalUID", item["id"]) # Utiliser iCalUID pour la déduplication
-                start = item["start"].get("dateTime", item["start"].get("date"))
-                end = item["end"].get("dateTime", item["end"].get("date"))
+            for cal in calendars:
+                cal_id = cal["id"]
+                # On ignore les calendriers masqués ou sans importance si nécessaire
+                # Mais par défaut, on prend tout ce qui est sélectionné
                 
-                if uid in events_by_uid:
-                    # Doublon détecté (événement partagé entre comptes)
-                    # Ajouter cet email à la liste des comptes de l'événement existant
-                    if email not in events_by_uid[uid]["accounts"]:
-                        events_by_uid[uid]["accounts"].append(email)
-                else:
-                    # Nouvel événement unique
-                    events_by_uid[uid] = {
-                        "id": f"{email}_{item['id']}",
-                        "uid": uid,
-                        "accounts": [email],
-                        "title": item.get("summary", "Sans titre"),
-                        "start": start,
-                        "end": end,
-                        "location": item.get("location", ""),
-                        "description": item.get("description", ""),
-                        "all_day": "date" in item["start"],
-                        "link": item.get("htmlLink", ""),
-                        "updated": item.get("updated", ""),
-                    }
+                try:
+                    events_result = service.events().list(
+                        calendarId=cal_id,
+                        timeMin=time_min,
+                        timeMax=time_max,
+                        maxResults=max_results,
+                        singleEvents=True,
+                        orderBy="startTime",
+                    ).execute()
+                    
+                    items = events_result.get("items", [])
+                    for item in items:
+                        uid = item.get("iCalUID", item["id"])
+                        start = item["start"].get("dateTime", item["start"].get("date"))
+                        end = item["end"].get("dateTime", item["end"].get("date"))
+                        
+                        # Clé de déduplication : (UID, début)
+                        # Cela permet de garder les différentes occurrences d'une série récurrente
+                        # tout en fusionnant les doublons parfaits entre plusieurs comptes/calendriers.
+                        # On l'utilise aussi comme ID UNIQUE et STABLE pour NovaFlow.
+                        
+                        # NORMALISATION: On simplifie la date pour éviter les problèmes de timezone
+                        # On garde juste YYYY-MM-DDTHH:MM:SS pour l'ID
+                        
+                        clean_start = start
+                        # Si c'est une datetime (contient T), on convertit en UTC pour être certain
+                        if "T" in start:
+                            try:
+                                # On essaie de parser proprement
+                                # Gestion basique des formats ISO
+                                dt = None
+                                if start.endswith("Z"):
+                                    dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+                                else:
+                                    dt = datetime.fromisoformat(start)
+                                
+                                # Convertir en UTC
+                                dt_utc = dt.astimezone(datetime.timezone.utc)
+                                clean_start = dt_utc.strftime("%Y-%m-%dT%H:%M:%S")
+                            except Exception:
+                                # Fallback au slice si erreur de parsing (très robuste)
+                                # Mais on risque le bug si Google alterne. Espérons que non
+                                clean_start = start[:19]
+                        
+                        dedup_key = f"{uid}_{clean_start}"
+                        
+                        if dedup_key in events_by_uid:
+                            if email not in events_by_uid[dedup_key]["accounts"]:
+                                events_by_uid[dedup_key]["accounts"].append(email)
+                        else:
+                            events_by_uid[dedup_key] = {
+                                "id": dedup_key, # Stable ID
+                                "uid": uid,
+                                "google_id": f"{email}_{item['id']}", # Keep for reference if needed
+                                "accounts": [email],
+                                "calendar_name": cal.get("summary", "Inconnu"),
+                                "title": item.get("summary", "Sans titre"),
+                                "start": start,
+                                "end": end,
+                                "location": item.get("location", ""),
+                                "description": item.get("description", ""),
+                                "all_day": "date" in item["start"],
+                                "link": item.get("htmlLink", ""),
+                                "updated": item.get("updated", ""),
+                            }
+                except Exception as e:
+                    print(f"Erreur Calendar {cal_id} pour {email}: {e}")
+                    
         except Exception as e:
-            print(f"Erreur Calendar pour {email}: {e}")
+            print(f"Erreur liste calendriers pour {email}: {e}")
             
     # Convertir le dictionnaire en liste et trier par date de début
     all_events = list(events_by_uid.values())
@@ -200,4 +242,4 @@ def get_upcoming_events(days: int = 7, max_results: int = 20) -> List[Dict]:
 
 def get_today_events() -> List[Dict]:
     """Raccourci pour les événements d'aujourd'hui (tous comptes)."""
-    return get_upcoming_events(days=1, max_results=20)
+    return get_upcoming_events(days=1, max_results=50)

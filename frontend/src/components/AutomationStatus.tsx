@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 type Job = {
     id: string;
@@ -13,6 +13,7 @@ export default function AutomationStatus() {
     const [isAnalysing, setIsAnalysing] = useState(false);
     const [lastMessage, setLastMessage] = useState("");
     const [showDetails, setShowDetails] = useState(false);
+    const prevJobCount = useRef(0);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -33,12 +34,18 @@ export default function AutomationStatus() {
                     }
                 }
 
-                // 2. Acive Jobs
+                // 2. Active Jobs
                 const jobsRes = await fetch(`${API_URL}/api/automation/jobs`);
                 if (jobsRes.ok) {
                     const jobsData = await jobsRes.json();
                     setJobs(jobsData);
                     setIsAnalysing(jobsData.length > 0);
+
+                    // Détecter la fin de jobs (transition: jobs > 0 → jobs = 0)
+                    if (prevJobCount.current > 0 && jobsData.length === 0) {
+                        window.dispatchEvent(new CustomEvent("novaflow-automation-done"));
+                    }
+                    prevJobCount.current = jobsData.length;
                 }
 
             } catch (error) {
@@ -111,7 +118,7 @@ export default function AutomationStatus() {
                     right: 0,
                     marginTop: '8px',
                     width: '320px',
-                    zIndex: 100,
+                    zIndex: 1000,
                     padding: '12px',
                     boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
                     background: 'var(--nf-bg-secondary)',

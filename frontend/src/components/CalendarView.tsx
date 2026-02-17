@@ -4,6 +4,15 @@ import React, { useState, useEffect, useCallback } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+interface Task {
+    id: string;
+    title: string;
+    meta: string;
+    priority: "high" | "medium" | "low";
+    done: boolean;
+    parent_event_id?: string;
+}
+
 interface CalendarEvent {
     id: string;
     title: string;
@@ -16,6 +25,8 @@ interface CalendarEvent {
     all_day?: boolean;
     link?: string;
     accounts?: string[];
+    source?: string;
+    tasks: Task[];
 }
 
 const EVENT_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -47,16 +58,7 @@ function guessEventType(title: string): "exam" | "deadline" | "meeting" | "perso
     return "personal";
 }
 
-function parseGoogleEvent(event: {
-    id: string;
-    title: string;
-    start: string;
-    end: string;
-    location: string;
-    all_day: boolean;
-    link: string;
-    accounts: string[];
-}): CalendarEvent {
+function parseUnifiedEvent(event: any): CalendarEvent {
     const startDate = event.start.split("T")[0];
     const startTime = event.all_day ? "Journée" : new Date(event.start).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
     const endTime = event.all_day ? "" : new Date(event.end).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
@@ -74,10 +76,12 @@ function parseGoogleEvent(event: {
         all_day: event.all_day,
         link: event.link,
         accounts: event.accounts,
+        source: event.source,
+        tasks: event.tasks || []
     };
 }
 
-export default function CalendarView() {
+export default function CalendarView({ onNavigate }: { onNavigate?: (view: string) => void }) {
     const today = new Date();
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
     const [currentYear, setCurrentYear] = useState(today.getFullYear());
@@ -85,6 +89,7 @@ export default function CalendarView() {
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [googleAccounts, setGoogleAccounts] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [showAccountsDropdown, setShowAccountsDropdown] = useState(false);
 
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
     const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -110,7 +115,7 @@ export default function CalendarView() {
             const res = await fetch(`${API_URL}/api/calendar/events?days=30`);
             if (!res.ok) return;
             const data = await res.json();
-            const parsed = (data.events || []).map(parseGoogleEvent);
+            const parsed = (data.events || []).map(parseUnifiedEvent);
             setEvents(parsed);
         } catch {
             console.error("Erreur récupération événements");
@@ -129,6 +134,28 @@ export default function CalendarView() {
             }
         };
         init();
+
+        // Écouter les changements de tâches depuis d'autres composants (ex: TaskList)
+        const handleExternalChange = () => fetchEvents();
+        window.addEventListener("novaflow-task-changed", handleExternalChange);
+
+        // Re-fetch quand un job d'automation se termine (ex: Analyse Calendrier)
+        window.addEventListener("novaflow-automation-done", handleExternalChange);
+
+        // Re-check connexion + events quand un compte Google est ajouté/supprimé
+        const handleAccountChange = async () => {
+            const connected = await checkConnection();
+            if (connected) {
+                await fetchEvents();
+            }
+        };
+        window.addEventListener("novaflow-account-changed", handleAccountChange);
+
+        return () => {
+            window.removeEventListener("novaflow-task-changed", handleExternalChange);
+            window.removeEventListener("novaflow-automation-done", handleExternalChange);
+            window.removeEventListener("novaflow-account-changed", handleAccountChange);
+        };
     }, [checkConnection, fetchEvents]);
 
     // Vérifier le paramètre URL (retour de OAuth)
@@ -156,6 +183,28 @@ export default function CalendarView() {
 
     // Déconnexion gérée uniquement via les réglages maintenant
     const handleDisconnect = () => { };
+
+    const toggleTask = async (taskId: string, eventId: string) => {
+        // Optimistic update locally
+        setEvents(prev => prev.map(evt => {
+            if (evt.id === eventId) {
+                return {
+                    ...evt,
+                    tasks: evt.tasks.map(t => t.id === taskId ? { ...t, done: !t.done } : t)
+                };
+            }
+            return evt;
+        }));
+
+        try {
+            await fetch(`${API_URL}/api/tasks/${taskId}/toggle`, { method: "PATCH" });
+            // Notifier les autres composants (TaskList) du changement
+            window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
+        } catch (error) {
+            console.error("Erreur toggle tâche:", error);
+            fetchEvents(); // Rollback if error
+        }
+    };
 
     const prevMonth = () => {
         if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1); }
@@ -185,34 +234,9 @@ export default function CalendarView() {
 
     const selectedEvents = selectedDate ? getEventsForDate(selectedDate) : [];
 
-    // Si aucun compte connecté, afficher le bouton de connexion
-    if (googleAccounts.length === 0 && !isLoading) {
-        return (
-            <div className="nf-animate-in" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                <div className="nf-card" style={{ textAlign: "center", padding: "60px 40px" }}>
-                    <span style={{ fontSize: "64px", display: "block", marginBottom: "16px" }}>📅</span>
-                    <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "8px" }}>
-                        Connecte ton Google Calendar
-                    </h2>
-                    <p style={{ color: "var(--nf-text-secondary)", fontSize: "14px", marginBottom: "24px", maxWidth: "400px", margin: "0 auto 24px" }}>
-                        NovaFlow peut lire ton calendrier pour t&apos;afficher tes événements,
-                        t&apos;envoyer des rappels et organiser ta journée intelligemment.
-                    </p>
-                    <button
-                        className="nf-btn nf-btn--primary"
-                        onClick={handleConnect}
-                        style={{ padding: "12px 32px", fontSize: "15px", gap: "8px", display: "inline-flex", alignItems: "center" }}
-                    >
-                        <span style={{ fontSize: "20px" }}>🔗</span>
-                        Connecter Google Calendar
-                    </button>
-                    <p style={{ color: "var(--nf-text-muted)", fontSize: "12px", marginTop: "16px" }}>
-                        🔒 Accès en lecture seule — NovaFlow ne modifie jamais ton calendrier
-                    </p>
-                </div>
-            </div>
-        );
-    }
+    // Si aucun compte connecté, on affiche quand même le calendrier (grid vide)
+    // Le bouton de connexion est maintenant dans le header
+
 
     return (
         <div className="nf-animate-in" style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "20px" }}>
@@ -221,13 +245,70 @@ export default function CalendarView() {
                 <div className="nf-card__header">
                     <span className="nf-card__title">📅 {MONTHS_FR[currentMonth]} {currentYear}</span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        {googleAccounts.length > 0 && (
-                            <span
-                                className="nf-card__badge nf-card__badge--success"
-                                style={{ pointerEvents: "none" }}
+                        {googleAccounts.length > 0 ? (
+                            <div style={{ position: "relative" }}>
+                                <span
+                                    className="nf-card__badge nf-card__badge--success"
+                                    style={{ cursor: "pointer", userSelect: "none" }}
+                                    onClick={() => setShowAccountsDropdown(!showAccountsDropdown)}
+                                >
+                                    ✅ {googleAccounts.length} compte{googleAccounts.length > 1 ? "s" : ""} connecté{googleAccounts.length > 1 ? "s" : ""}
+                                </span>
+                                {showAccountsDropdown && (
+                                    <div className="nf-card nf-animate-in" style={{
+                                        position: "absolute",
+                                        top: "100%",
+                                        right: 0,
+                                        marginTop: "8px",
+                                        width: "280px",
+                                        zIndex: 1000,
+                                        padding: "12px",
+                                        boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+                                        background: "var(--nf-bg-secondary)",
+                                        border: "1px solid var(--nf-border)"
+                                    }}>
+                                        <h4 style={{ fontSize: "13px", fontWeight: 600, marginBottom: "10px" }}>Calendriers connectés</h4>
+                                        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                                            {googleAccounts.map((email) => (
+                                                <li key={email} style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "8px",
+                                                    padding: "6px 0",
+                                                    borderBottom: "1px solid var(--nf-border-dim)",
+                                                    fontSize: "12px"
+                                                }}>
+                                                    <span style={{ fontSize: "16px" }}>📧</span>
+                                                    <span style={{ color: "var(--nf-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        <button
+                                            className="nf-btn nf-btn--ghost"
+                                            onClick={() => {
+                                                setShowAccountsDropdown(false);
+                                                if (onNavigate) onNavigate("settings");
+                                            }}
+                                            style={{ marginTop: "10px", fontSize: "11px", width: "100%", padding: "6px", textAlign: "center" }}
+                                        >
+                                            ⚙️ Gérer les comptes
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <button
+                                className="nf-btn nf-btn--primary"
+                                onClick={() => {
+                                    if (onNavigate) {
+                                        onNavigate("settings");
+                                        window.location.hash = "connections";
+                                    }
+                                }}
+                                style={{ padding: "6px 12px", fontSize: "12px", gap: "6px", display: "inline-flex", alignItems: "center", height: "32px" }}
                             >
-                                ✅ {googleAccounts.length} compte{googleAccounts.length > 1 ? "s" : ""} connecté{googleAccounts.length > 1 ? "s" : ""}
-                            </span>
+                                <span>🔗</span> Connecter
+                            </button>
                         )}
                         <button className="nf-btn--icon" onClick={prevMonth}>◀</button>
                         <button className="nf-btn--icon" onClick={nextMonth}>▶</button>
@@ -357,33 +438,59 @@ export default function CalendarView() {
                         {selectedEvents.length > 0 ? (
                             <div className="nf-task-list">
                                 {selectedEvents.map((evt) => (
-                                    <div
-                                        key={evt.id}
-                                        className="nf-task"
-                                        style={{ cursor: evt.link ? "pointer" : "default" }}
-                                        onClick={() => evt.link && window.open(evt.link, "_blank")}
-                                    >
-                                        <div style={{
-                                            width: "4px",
-                                            height: "100%",
-                                            minHeight: "36px",
-                                            borderRadius: "2px",
-                                            background: EVENT_COLORS[evt.type]?.text || "var(--nf-text-muted)",
-                                        }} />
-                                        <div className="nf-task__content">
-                                            <div className="nf-task__title">{evt.title}</div>
-                                            <div className="nf-task__meta">
-                                                {evt.time}{evt.end_time ? ` → ${evt.end_time}` : ""}
-                                                {evt.location ? ` · 📍 ${evt.location}` : ""}
-                                            </div>
-                                            {evt.accounts && (
-                                                <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "4px" }}>
-                                                    👤 {evt.accounts.join(" · ")}
+                                    <React.Fragment key={evt.id}>
+                                        <div
+                                            className="nf-task"
+                                            style={{ cursor: evt.link ? "pointer" : "default" }}
+                                            onClick={() => evt.link && window.open(evt.link, "_blank")}
+                                        >
+                                            <div style={{
+                                                width: "4px",
+                                                height: "100%",
+                                                minHeight: "36px",
+                                                borderRadius: "2px",
+                                                background: EVENT_COLORS[evt.type]?.text || "var(--nf-text-muted)",
+                                            }} />
+                                            <div className="nf-task__content">
+                                                <div className="nf-task__title">{evt.title}</div>
+                                                <div className="nf-task__meta">
+                                                    {evt.time}{evt.end_time ? ` → ${evt.end_time}` : ""}
+                                                    {evt.location ? ` · 📍 ${evt.location}` : ""}
                                                 </div>
-                                            )}
+                                                {evt.accounts && (
+                                                    <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "4px" }}>
+                                                        👤 {evt.accounts.join(" · ")}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className={`nf-task__priority nf-task__priority--${evt.priority}`} />
                                         </div>
-                                        <div className={`nf-task__priority nf-task__priority--${evt.priority}`} />
-                                    </div>
+
+                                        {evt.tasks && evt.tasks.length > 0 && (
+                                            <div style={{ paddingLeft: "24px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "-8px", marginBottom: "8px" }}>
+                                                {evt.tasks.map(task => (
+                                                    <div
+                                                        key={task.id}
+                                                        className="nf-task"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            toggleTask(task.id, evt.id);
+                                                        }}
+                                                        style={{ minHeight: "32px", padding: "4px 8px", background: "rgba(255,255,255,0.02)" }}
+                                                    >
+                                                        <div className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""}`} style={{ width: "14px", height: "14px", fontSize: "10px" }}>
+                                                            {task.done && "✓"}
+                                                        </div>
+                                                        <div className="nf-task__content">
+                                                            <div className={`nf-task__title ${task.done ? "nf-task__title--done" : ""}`} style={{ fontSize: "12px" }}>
+                                                                {task.title}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </React.Fragment>
                                 ))}
                             </div>
                         ) : (

@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 export default function SettingsPanel() {
     const [aiMode, setAiMode] = useState<"local" | "cloud">("local");
     const [profile, setProfile] = useState<"student" | "pro" | "personal">("student");
     const [googleAccounts, setGoogleAccounts] = useState<string[]>([]);
+    const prevAccountCount = useRef<number | null>(null);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -15,7 +16,14 @@ export default function SettingsPanel() {
             const res = await fetch(`${API_URL}/api/auth/google/accounts`);
             if (res.ok) {
                 const data = await res.json();
-                setGoogleAccounts(data.accounts || []);
+                const accounts = data.accounts || [];
+                setGoogleAccounts(accounts);
+
+                // Détecter un changement de nombre de comptes → notifier le CalendarView
+                if (prevAccountCount.current !== null && accounts.length !== prevAccountCount.current) {
+                    window.dispatchEvent(new CustomEvent("novaflow-account-changed"));
+                }
+                prevAccountCount.current = accounts.length;
             }
         } catch (err) {
             console.error("Erreur fetch accounts:", err);
@@ -26,12 +34,30 @@ export default function SettingsPanel() {
         fetchGoogleAccounts();
     }, []);
 
+    useEffect(() => {
+        if (window.location.hash === "#connections") {
+            setTimeout(() => {
+                document.getElementById("connections")?.scrollIntoView({ behavior: "smooth" });
+                // Clean hash after scroll to allow re-triggering if needed
+                window.history.replaceState(null, "", window.location.pathname);
+            }, 100);
+        }
+    }, []);
+
     const connectGoogle = async () => {
         try {
             const res = await fetch(`${API_URL}/api/auth/google/login`);
             if (res.ok) {
                 const data = await res.json();
                 window.open(data.url, "_blank", "width=600,height=600");
+
+                // Quand l'utilisateur revient du popup OAuth, vérifier les comptes
+                const onFocus = () => {
+                    // Petit délai pour laisser le backend traiter le callback
+                    setTimeout(fetchGoogleAccounts, 1500);
+                    window.removeEventListener("focus", onFocus);
+                };
+                window.addEventListener("focus", onFocus);
             }
         } catch (err) {
             alert("Erreur lors de la connexion Google");
@@ -148,7 +174,7 @@ export default function SettingsPanel() {
             </div>
 
             {/* Connections */}
-            <div className="nf-card">
+            <div className="nf-card" id="connections">
                 <div className="nf-card__header">
                     <span className="nf-card__title">🔗 Connexions</span>
                 </div>

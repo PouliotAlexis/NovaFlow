@@ -41,7 +41,7 @@ from services.google_service import (
     get_today_events,
     list_connected_accounts
 )
-from services.task_manager import get_tasks, add_task, update_task, delete_task, toggle_task
+from services.task_manager import TaskManager, NovaFlowTask
 import re
 from services.automation import (
     analyze_document_for_tasks, 
@@ -53,7 +53,7 @@ from services.automation import (
     has_new_events
 )
 from services.chat_manager import load_chat_history, save_chat_message, clear_chat_history
-import services.notification_manager as notification_manager
+from services.notification_manager import NotificationManager
 
 # === App Setup ===
 
@@ -62,6 +62,10 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="NovaFlow - Votre Life OS intelligent et privé.",
 )
+
+# Managers Instances
+task_manager = TaskManager.instance()
+notif_manager = NotificationManager.instance()
 
 # CORS - Permettre au Frontend Next.js de communiquer avec le Backend
 app.add_middleware(
@@ -356,6 +360,11 @@ def google_status():
     return {"connected": google_is_connected()}
 
 
+@app.get("/api/auth/google/accounts")
+def google_accounts_list():
+    """Liste les comptes Google connectés."""
+    return {"accounts": list_connected_accounts()}
+
 @app.get("/api/auth/google/disconnect")
 def google_disconnect_all():
     """Déconnecte TOUS les comptes Google (pour compatibilité)."""
@@ -391,17 +400,17 @@ async def cancel_automation_job(job_id: str):
 @app.get("/api/tasks")
 def get_all_tasks():
     """Récupère toutes les tâches."""
-    return get_tasks()
+    return task_manager.get_all_tasks()
 
 @app.post("/api/tasks")
 def create_new_task(task: TaskRequest):
     """Crée une nouvelle tâche."""
-    return add_task(task.title, priority="medium", meta="Utilisateur")
+    return task_manager.add_task(task.title, priority="medium", meta="Utilisateur")
 
 @app.patch("/api/tasks/{task_id}/toggle")
 def toggle_task_status(task_id: str):
     """Inverse le statut d'une tâche."""
-    result = toggle_task(task_id)
+    result = task_manager.toggle_task(task_id)
     if not result:
         raise HTTPException(status_code=404, detail="Tâche non trouvée")
     return result
@@ -409,7 +418,7 @@ def toggle_task_status(task_id: str):
 @app.delete("/api/tasks/{task_id}")
 def remove_task(task_id: str):
     """Supprime une tâche."""
-    result = delete_task(task_id)
+    result = task_manager.delete_task(task_id)
     if not result:
         raise HTTPException(status_code=404, detail="Tâche non trouvée")
     return {"status": "deleted"}
@@ -420,70 +429,58 @@ def remove_task(task_id: str):
 @app.get("/api/notifications")
 def get_user_notifications(unread_only: bool = False):
     """Récupère les notifications de l'utilisateur."""
-    return {"notifications": notification_manager.get_notifications(unread_only)}
+    return {"notifications": notif_manager.get_notifications(unread_only)}
 
 @app.post("/api/notifications/read/{notif_id}")
 def mark_notification_as_read(notif_id: str):
     """Marque une notification comme lue."""
-    if notification_manager.mark_as_read(notif_id):
+    if notif_manager.mark_as_read(notif_id):
         return {"status": "success"}
     raise HTTPException(status_code=404, detail="Notification non trouvée")
 
 @app.post("/api/notifications/read-all")
 def mark_all_notifications_as_read():
     """Marque toutes les notifications comme lues."""
-    count = notification_manager.mark_all_as_read()
+    count = notif_manager.mark_all_as_read()
     return {"read_count": count}
 
 @app.delete("/api/notifications/{notif_id}")
 def delete_user_notification(notif_id: str):
     """Supprime une notification."""
-    if notification_manager.delete_notification(notif_id):
+    if notif_manager.delete_notification(notif_id):
         return {"status": "success"}
     raise HTTPException(status_code=404, detail="Notification non trouvée")
 
 @app.delete("/api/notifications")
 def clear_user_notifications():
     """Efface toutes les notifications."""
-    notification_manager.clear_all_notifications()
+    notif_manager.clear_all_notifications()
     return {"status": "cleared"}
 
 
 # === Google Calendar Events ===
 
 @app.get("/api/calendar/events")
-async def calendar_events(days: int = 7):
-    """Récupère les événements des X prochains jours."""
+async def calendar_events(days: int = 30):
+    """Récupère les événements unifiés (Google + Tâches locales) pour les X prochains jours."""
+    from services.calendar_aggregator import get_unified_events
+    
     if not google_is_connected():
         raise HTTPException(status_code=401, detail="Google Calendar non connecté.")
     
-    # Exécuter l'appel synchrone dans un threadpool pour ne pas bloquer la boucle async
-    events = await run_in_threadpool(get_upcoming_events, days=days)
+    # Exécuter l'appel dans un threadpool pour l'agrégation
+    events = await run_in_threadpool(get_unified_events, days=days)
     
-    # ⚡ AUTOMATION: Analyser les événements (Job Tracké)
+    # ⚡ AUTOMATION — Déclencher l'analyse IA si de nouveaux events sont détectés
+    # NOTE: L'analyse se fait TOUJOURS sur la plage complète (30j), peu importe le `days` demandé par le frontend.
+    # Cela évite les analyses partielles (ex: SmartFeed days=3 puis CalendarView days=30).
     try:
-        # Debug: Vérifier si une loop existe
-        try:
-            loop = asyncio.get_running_loop()
-        except Exception as e:
-            print(f"DEBUG Loop Error: {e}")
-
-        # DEDUPLICATION: Vérifier si un job "Analyse Calendrier" tourne déjà
         existing_jobs = get_active_jobs()
         is_running = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
-        
-        if is_running:
-            # print("ℹ️ Auto: Analyse Calendrier déjà en cours, on ignore.")
-            pass
-        elif has_new_events(events):
-            start_job("Analyse Calendrier", analyze_calendar_for_tasks(events))
-        else:
-            # print("ℹ️ Auto: Rien de nouveau dans le calendrier.")
-            pass
-
+        if not is_running and has_new_events(events):
+             start_job("Analyse Calendrier", analyze_calendar_for_tasks(events=None, days=30))
     except Exception as e:
-        print(f"ERREUR CRITIQUE START_JOB: {e}")
-        # On ne raise PAS d'erreur pour ne pas bloquer l'affichage du calendrier
+        print(f"Erreur déclenchement automation calendrier: {e}")
 
     
     return {"events": events, "count": len(events)}
@@ -497,6 +494,35 @@ def calendar_today():
     
     events = get_today_events()
     return {"events": events, "count": len(events)}
+
+
+@app.post("/api/maintenance/reset")
+def maintenance_reset():
+    """Réinitialise les données de l'application (Tâches, Notifications, Historique)."""
+    from services.cleanup_utils import reset_all_data
+    return {"status": "success", "results": reset_all_data()}
+
+
+# === Focus Mode ===
+from services import focus_manager
+
+@app.post("/api/focus/start")
+def start_focus(task_id: Optional[str] = None, task_title: Optional[str] = None):
+    """Démarre une session de focus."""
+    return focus_manager.start_focus_session(task_id, task_title)
+
+@app.post("/api/focus/stop/{session_id}")
+def stop_focus(session_id: str):
+    """Termine une session de focus."""
+    session = focus_manager.stop_focus_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session non trouvée")
+    return session
+
+@app.get("/api/focus/stats")
+def focus_stats():
+    """Récupère les statistiques de focus."""
+    return focus_manager.get_focus_stats()
 
 
 if __name__ == "__main__":
