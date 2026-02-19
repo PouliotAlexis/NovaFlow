@@ -15,6 +15,7 @@ from services.document_processor import get_relevant_context, list_documents, ex
 from services.ai_engine import chat
 from services.task_manager import TaskManager, NovaFlowTask
 from services.google_service import get_upcoming_events
+from services.microsoft_calendar import get_outlook_events
 from services.notification_manager import NotificationManager
 from services.event_manager import EventManager, NovaFlowEvent
 import datetime
@@ -151,7 +152,7 @@ def _save_processed_items(data: dict):
 def has_new_events(events: list) -> bool:
     """
     Vérifie s'il y a des événements non traités ou modifiés.
-    Utilise EventManager comme source de vérité (plus de processed_items.json pour les events).
+    Supporte les deux sources : Google Calendar et Outlook Calendar.
     """
     try:
         evt_manager = EventManager.instance()
@@ -160,34 +161,55 @@ def has_new_events(events: list) -> bool:
             ext_id = event["id"]
             description = event.get("description", "") or ""
             title = event.get("title", "Sans titre")
+            source = event.get("source", "google")
+            
+            # Mapper la source de l'aggregator vers la source EventManager
+            if source == "outlook":
+                em_source = "outlook_calendar"
+            else:
+                em_source = "google_calendar"
             
             # Calculer le hash de la description actuelle
             desc_normalized = re.sub(r'\s+', ' ', description.replace('\r', ' ')).strip()
             current_hash = hashlib.md5(desc_normalized.encode('utf-8')).hexdigest()
             
-            nf_event = evt_manager.get_event_by_external_id(ext_id, "google_calendar")
+            nf_event = evt_manager.get_event_by_external_id(ext_id, em_source)
             
             if not nf_event:
                 # Nouvel événement non encore tracké
-                log_auto(f"DEBUG: New event detected: {title}")
+                log_auto(f"DEBUG: New event detected: {title} (source: {em_source})")
                 return True
             
             # Vérifier si le contenu a changé
             if nf_event.desc_hash != current_hash or nf_event.title != title:
-                log_auto(f"DEBUG: Updated event detected: {title}")
+                log_auto(f"DEBUG: Updated event detected: {title} (source: {em_source})")
                 return True
         
-        # Détection des suppressions — events connus qui ne sont plus dans la liste Google
+        # Détection des suppressions — events connus qui ne sont plus dans la liste
         all_nf_events = evt_manager.get_all_events()
+        
+        # Google
         google_nf_events = {e.external_id: e for e in all_nf_events if e.source == "google_calendar"}
-        current_google_ids = {e["id"] for e in events}
+        current_google_ids = {e["id"] for e in events if e.get("source") != "outlook"}
+        
+        # Outlook
+        outlook_nf_events = {e.external_id: e for e in all_nf_events if e.source == "outlook_calendar"}
+        current_outlook_ids = {e["id"] for e in events if e.get("source") == "outlook"}
         
         now_iso = datetime.datetime.now().isoformat()
+        
         for ext_id, nf_event in google_nf_events.items():
             if ext_id not in current_google_ids:
                 start_date = nf_event.start or ""
                 if not start_date or start_date > now_iso:
-                    log_auto(f"DEBUG: Deleted event detected (id: {ext_id}). Triggering cleanup.")
+                    log_auto(f"DEBUG: Deleted Google event detected (id: {ext_id}). Triggering cleanup.")
+                    return True
+        
+        for ext_id, nf_event in outlook_nf_events.items():
+            if ext_id not in current_outlook_ids:
+                start_date = nf_event.start or ""
+                if not start_date or start_date > now_iso:
+                    log_auto(f"DEBUG: Deleted Outlook event detected (id: {ext_id}). Triggering cleanup.")
                     return True
                 
         return False
@@ -274,7 +296,7 @@ async def analyze_document_for_tasks(doc_id: str, file_name: str):
 
 # EventManager imported at top of file
 
-async def analyze_calendar_for_tasks(events: list = None, days: int = 30):
+async def analyze_calendar_for_tasks(events: list = None, days: int = 30, source: str = "google_calendar"):
     """
     Analyse les événements futurs pour suggérer des tâches de préparation.
     Utilise le nouveau système NovaFlowEvent pour la persistance (OOP).
@@ -282,22 +304,27 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30):
     Args:
         events: Liste d'événements déjà récupérés (optionnel).
         days: La fenêtre de temps (en jours) sur laquelle porte le nettoyage.
+        source: Source des événements ('google_calendar' ou 'outlook_calendar').
     """
     # Instanciation des Managers
     evt_manager = EventManager.instance()
     task_manager = TaskManager.instance()
     notif_manager = NotificationManager.instance()
 
-    # Si pas d'events fournis, on récupère un range par défaut (30j)
+    # Si pas d'events fournis, on récupère selon la source
     if events is None:
-        events = await asyncio.to_thread(get_upcoming_events, days=days, max_results=250)
+        if source == "outlook_calendar":
+            events = await asyncio.to_thread(get_outlook_events, days=days, max_results=250)
+        else:
+            events = await asyncio.to_thread(get_upcoming_events, days=days, max_results=250)
         
-    log_auto(f"📅 Scan: {len(events)} événements Google récupérés.")
+    source_label = "Outlook" if source == "outlook_calendar" else "Google"
+    log_auto(f"📅 Scan: {len(events)} événements {source_label} récupérés.")
 
     # 1. Gestion des suppressions (Events NovaFlow qui n'existent plus chez Google)
     # On récupère tous les events connus de source 'google_calendar'
     all_nf_events = evt_manager.get_all_events()
-    google_nf_events = {e.external_id: e for e in all_nf_events if e.source == "google_calendar"}
+    source_nf_events = {e.external_id: e for e in all_nf_events if e.source == source}
     
     current_google_ids = {e["id"] for e in events}
     
@@ -309,7 +336,7 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30):
     now_iso = now_dt.isoformat()
     limit_iso = limit_dt.isoformat()
     
-    for ext_id, nf_event in google_nf_events.items():
+    for ext_id, nf_event in source_nf_events.items():
         if ext_id not in current_google_ids:
             # Est-ce que cet event devrait être dans la liste ? (Date de début dans [now, limit])
             start_date = nf_event.start or ""
@@ -331,7 +358,7 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30):
         desc_normalized = re.sub(r'\s+', ' ', (description or "").replace('\r', ' ')).strip()
         current_hash = hashlib.md5(desc_normalized.encode('utf-8')).hexdigest()
         
-        nf_event = evt_manager.get_event_by_external_id(ext_id, "google_calendar")
+        nf_event = evt_manager.get_event_by_external_id(ext_id, source)
         
         should_analyze = False
         
@@ -341,7 +368,7 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30):
             # Création de l'objet NovaFlowEvent
             nf_event = evt_manager.create_event(
                 external_id=ext_id,
-                source="google_calendar",
+                source=source,
                 title=title,
                 start=start,
                 updated=updated,
@@ -440,6 +467,16 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30):
                 log_auto(f"❌ Erreur analyse IA : {e}")
 
     if new_tasks_count > 0:
-        log_auto(f"✅ Cycle terminé. {new_tasks_count} nouvelles tâches.")
+        log_auto(f"✅ Cycle {source_label} terminé. {new_tasks_count} nouvelles tâches.")
     else:
-        log_auto("✅ Cycle terminé. Aucun changement majeur.")
+        log_auto(f"✅ Cycle {source_label} terminé. Aucun changement majeur.")
+
+
+async def analyze_all_calendars(days: int = 30):
+    """Analyse les événements de toutes les sources (Google + Outlook)."""
+    await analyze_calendar_for_tasks(events=None, days=days, source="google_calendar")
+    
+    # Outlook : seulement si au moins un compte est connecté
+    from services.microsoft_auth import MicrosoftAuthService
+    if MicrosoftAuthService.is_any_connected():
+        await analyze_calendar_for_tasks(events=None, days=days, source="outlook_calendar")

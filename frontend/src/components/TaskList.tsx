@@ -2,19 +2,27 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = typeof window !== "undefined"
+    ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
+    : "http://localhost:8000";
 
 interface Task {
     id: string;
     title: string;
-    meta: string;
-    priority: "high" | "medium" | "low";
     done: boolean;
+    priority?: string;
+    source_event_start?: string;
+    created_at?: string;
 }
 
-export default function TaskList() {
+interface TaskListProps {
+    compact?: boolean;
+    onNavigate?: (view: string) => void;
+}
+
+export default function TaskList({ compact = false, onNavigate }: TaskListProps) {
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [loading, setLoading] = useState(true);
 
     const fetchTasks = useCallback(async () => {
         try {
@@ -24,136 +32,196 @@ export default function TaskList() {
                 setTasks(data);
             }
         } catch (error) {
-            console.error("Erreur chargement tâches:", error);
+            console.error("Erreur fetch tasks", error);
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
     }, []);
 
-    // Charger initialement et poller toutes les 5 secondes pour voir les tâches créées par l'IA
     useEffect(() => {
         fetchTasks();
-        const interval = setInterval(fetchTasks, 5000);
-
-        // Écouter les changements de tâches depuis d'autres composants (ex: CalendarView)
-        const handleExternalChange = () => fetchTasks();
-        window.addEventListener("novaflow-task-changed", handleExternalChange);
-
-        // Re-fetch quand un job d'automation se termine
-        window.addEventListener("novaflow-automation-done", handleExternalChange);
-
+        const onTaskChanged = () => fetchTasks();
+        const onAutomationDone = () => fetchTasks();
+        window.addEventListener("novaflow-task-changed", onTaskChanged);
+        window.addEventListener("novaflow-automation-done", onAutomationDone);
         return () => {
-            clearInterval(interval);
-            window.removeEventListener("novaflow-task-changed", handleExternalChange);
-            window.removeEventListener("novaflow-automation-done", handleExternalChange);
+            window.removeEventListener("novaflow-task-changed", onTaskChanged);
+            window.removeEventListener("novaflow-automation-done", onAutomationDone);
         };
     }, [fetchTasks]);
 
-    const toggleTask = async (id: string) => {
-        // Optimistic update
-        setTasks((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
-        );
-
+    const toggleTask = async (task: Task) => {
         try {
-            await fetch(`${API_URL}/api/tasks/${id}/toggle`, {
-                method: "PATCH",
-            });
-            // Notifier les autres composants (CalendarView) du changement
+            await fetch(`${API_URL}/api/tasks/${task.id}/toggle`, { method: "PATCH" });
+            await fetchTasks();
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
-            console.error("Erreur toggle tâche:", error);
-            fetchTasks(); // Rollback en cas d'erreur
+            console.error("Erreur toggle task", error);
         }
     };
 
-    const deleteTask = async (e: React.MouseEvent, id: string) => {
-        e.stopPropagation();
-        if (!confirm("Supprimer cette tâche ?")) return;
-
+    const deleteTask = async (taskId: string) => {
         try {
-            await fetch(`${API_URL}/api/tasks/${id}`, {
-                method: "DELETE",
-            });
-            fetchTasks();
-            // Notifier les autres composants (CalendarView) du changement
+            await fetch(`${API_URL}/api/tasks/${taskId}`, { method: "DELETE" });
+            await fetchTasks();
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
-            console.error("Erreur suppression tâche:", error);
+            console.error("Erreur delete task", error);
         }
-    }
+    };
 
-    if (isLoading && tasks.length === 0) {
+    const getPriority = (task: Task): string => {
+        if (task.priority) return task.priority;
+        return "medium";
+    };
+
+    const getDueDate = (task: Task): string => {
+        if (task.source_event_start) {
+            const date = new Date(task.source_event_start);
+            const now = new Date();
+            const diff = date.getTime() - now.getTime();
+            const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+            if (days === 0) return "Due Today";
+            if (days === 1) return "Due Tomorrow";
+            if (days < 0) return "Overdue";
+            return `Due in ${days} days`;
+        }
+        return "";
+    };
+
+    const activeTasks = tasks.filter(t => !t.done);
+    const displayTasks = compact ? activeTasks.slice(0, 5) : tasks;
+    const totalActive = activeTasks.length;
+
+    if (loading) {
         return (
             <div className="nf-card nf-animate-in">
-                <div className="nf-card__header">
-                    <span className="nf-card__title">✅ Tâches</span>
-                </div>
-                <div style={{ padding: "20px", textAlign: "center", color: "var(--nf-text-muted)" }}>
-                    Chargement...
+                <div className="nf-loading">
+                    <span className="nf-spinner">⏳</span> Loading tasks...
                 </div>
             </div>
         );
     }
 
-    return (
-        <div className="nf-card nf-animate-in">
-            <div className="nf-card__header">
-                <span className="nf-card__title">✅ Tâches</span>
-                <span className="nf-card__badge nf-card__badge--info">
-                    {tasks.filter((t) => !t.done).length} actives
-                </span>
-            </div>
-
-            <div className="nf-task-list">
-                {tasks.length === 0 ? (
-                    <div style={{ padding: "20px", textAlign: "center", color: "var(--nf-text-muted)", fontSize: "14px" }}>
-                        Aucune tâche. Demande à l'IA d'en créer !<br />
-                        <em style={{ fontSize: "12px", opacity: 0.7 }}>Ex: "Rappelle-moi d'acheter du pain"</em>
-                    </div>
-                ) : (
-                    tasks.map((task) => (
-                        <div
-                            key={task.id}
-                            className="nf-task"
-                            onClick={() => toggleTask(task.id)}
-                            style={{ position: "relative", group: "task" } as any}
-                        >
-                            <div
-                                className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""
-                                    }`}
-                            >
-                                {task.done && "✓"}
-                            </div>
-                            <div className="nf-task__content">
-                                <div
-                                    className={`nf-task__title ${task.done ? "nf-task__title--done" : ""
-                                        }`}
-                                >
-                                    {task.title}
-                                </div>
-                                <div className="nf-task__meta">{task.meta}</div>
-                            </div>
-                            <div className={`nf-task__priority nf-task__priority--${task.priority}`} />
-
-                            {/* Bouton supprimer (visible au survol, géré via CSS ou simple click droit en prod, ici simple bouton pour demo) */}
-                            <button
-                                style={{
-                                    background: "none",
-                                    border: "none",
-                                    color: "var(--nf-text-muted)",
-                                    cursor: "pointer",
-                                    marginLeft: "8px",
-                                    fontSize: "16px"
-                                }}
-                                onClick={(e) => deleteTask(e, task.id)}
-                                title="Supprimer"
-                            >
-                                ×
+    // Dashboard compact mode
+    if (compact) {
+        return (
+            <div className="nf-card nf-card--glow nf-animate-in">
+                <div className="nf-card__header">
+                    <span className="nf-card__title">✅ Upcoming Tasks</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span className="nf-card__badge nf-card__badge--info">{totalActive} tasks</span>
+                        {onNavigate && (
+                            <button className="nf-card__link" onClick={() => onNavigate("tasks")}>
+                                View All
                             </button>
+                        )}
+                    </div>
+                </div>
+                <div className="nf-task-list">
+                    {displayTasks.length === 0 ? (
+                        <div className="nf-empty-state">
+                            <span className="nf-empty-state__icon">🎉</span>
+                            <span className="nf-empty-state__text">All done!</span>
                         </div>
-                    ))
-                )}
+                    ) : (
+                        displayTasks.map((task) => {
+                            const priority = getPriority(task);
+                            const dueDate = getDueDate(task);
+                            return (
+                                <div
+                                    key={task.id}
+                                    className={`nf-task nf-task--${priority}`}
+                                    onClick={() => toggleTask(task)}
+                                    style={{ cursor: "pointer" }}
+                                >
+                                    <div
+                                        className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""}`}
+                                    >
+                                        {task.done && <span style={{ fontSize: "10px", color: "white" }}>✓</span>}
+                                    </div>
+                                    <div className="nf-task__content">
+                                        <div className={`nf-task__title ${task.done ? "nf-task__title--done" : ""}`}>
+                                            {task.title}
+                                        </div>
+                                        <div className="nf-task__meta">
+                                            <span className={`nf-task__priority-badge nf-task__priority-badge--${priority}`}>
+                                                {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                                            </span>
+                                            {dueDate && <span>{dueDate}</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Full page mode
+    return (
+        <div className="nf-animate-in">
+            <div className="nf-page-header">
+                <h1 className="nf-page-header__title">Tasks</h1>
+                <p className="nf-page-header__subtitle">Manage your priorities</p>
+            </div>
+            <div className="nf-card">
+                <div className="nf-card__header">
+                    <span className="nf-card__title">All Tasks</span>
+                    <span className="nf-card__badge nf-card__badge--info">{totalActive} active</span>
+                </div>
+                <div className="nf-task-list">
+                    {tasks.length === 0 ? (
+                        <div className="nf-empty-state">
+                            <span className="nf-empty-state__icon">📋</span>
+                            <span className="nf-empty-state__text">No tasks yet</span>
+                        </div>
+                    ) : (
+                        tasks.map((task) => {
+                            const priority = getPriority(task);
+                            const dueDate = getDueDate(task);
+                            return (
+                                <div
+                                    key={task.id}
+                                    className={`nf-task nf-task--${priority}`}
+                                    onClick={() => toggleTask(task)}
+                                    style={{ cursor: "pointer" }}
+                                >
+                                    <div
+                                        className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""}`}
+                                    >
+                                        {task.done && <span style={{ fontSize: "10px", color: "white" }}>✓</span>}
+                                    </div>
+                                    <div className="nf-task__content">
+                                        <div className={`nf-task__title ${task.done ? "nf-task__title--done" : ""}`}>
+                                            {task.title}
+                                        </div>
+                                        <div className="nf-task__meta">
+                                            <span className={`nf-task__priority-badge nf-task__priority-badge--${priority}`}>
+                                                {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                                            </span>
+                                            {dueDate && <span>{dueDate}</span>}
+                                        </div>
+                                    </div>
+                                    <div className="nf-task__actions">
+                                        <button
+                                            className="nf-btn--icon"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteTask(task.id);
+                                            }}
+                                            title="Delete task"
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
             </div>
         </div>
     );

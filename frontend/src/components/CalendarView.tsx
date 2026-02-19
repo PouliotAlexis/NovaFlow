@@ -88,25 +88,33 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [googleAccounts, setGoogleAccounts] = useState<string[]>([]);
+    const [microsoftAccounts, setMicrosoftAccounts] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAccountsDropdown, setShowAccountsDropdown] = useState(false);
 
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
     const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
 
-    // Vérifier les comptes Google connectés
+    // Vérifier les comptes connectés (Google + Microsoft)
     const checkConnection = useCallback(async () => {
+        let hasAny = false;
         try {
             const res = await fetch(`${API_URL}/api/auth/google/accounts`);
             if (res.ok) {
                 const data = await res.json();
                 setGoogleAccounts(data.accounts || []);
-                return (data.accounts || []).length > 0;
+                if ((data.accounts || []).length > 0) hasAny = true;
             }
-            return false;
-        } catch {
-            return false;
-        }
+        } catch { }
+        try {
+            const res = await fetch(`${API_URL}/api/auth/microsoft/accounts`);
+            if (res.ok) {
+                const data = await res.json();
+                setMicrosoftAccounts(data.accounts || []);
+                if ((data.accounts || []).length > 0) hasAny = true;
+            }
+        } catch { }
+        return hasAny;
     }, []);
 
     // Récupérer les événements
@@ -142,7 +150,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
         // Re-fetch quand un job d'automation se termine (ex: Analyse Calendrier)
         window.addEventListener("novaflow-automation-done", handleExternalChange);
 
-        // Re-check connexion + events quand un compte Google est ajouté/supprimé
+        // Re-check connexion + events quand un compte est ajouté/supprimé
         const handleAccountChange = async () => {
             const connected = await checkConnection();
             if (connected) {
@@ -151,10 +159,16 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
         };
         window.addEventListener("novaflow-account-changed", handleAccountChange);
 
+        // Polling : re-fetch les événements toutes les 60s pour capter les modifications Outlook/Google
+        const pollInterval = setInterval(() => {
+            fetchEvents();
+        }, 60_000);
+
         return () => {
             window.removeEventListener("novaflow-task-changed", handleExternalChange);
             window.removeEventListener("novaflow-automation-done", handleExternalChange);
             window.removeEventListener("novaflow-account-changed", handleAccountChange);
+            clearInterval(pollInterval);
         };
     }, [checkConnection, fetchEvents]);
 
@@ -245,14 +259,14 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                 <div className="nf-card__header">
                     <span className="nf-card__title">📅 {MONTHS_FR[currentMonth]} {currentYear}</span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        {googleAccounts.length > 0 ? (
+                        {(googleAccounts.length + microsoftAccounts.length) > 0 ? (
                             <div style={{ position: "relative" }}>
                                 <span
                                     className="nf-card__badge nf-card__badge--success"
                                     style={{ cursor: "pointer", userSelect: "none" }}
                                     onClick={() => setShowAccountsDropdown(!showAccountsDropdown)}
                                 >
-                                    ✅ {googleAccounts.length} compte{googleAccounts.length > 1 ? "s" : ""} connecté{googleAccounts.length > 1 ? "s" : ""}
+                                    ✅ {googleAccounts.length + microsoftAccounts.length} compte{(googleAccounts.length + microsoftAccounts.length) > 1 ? "s" : ""} connecté{(googleAccounts.length + microsoftAccounts.length) > 1 ? "s" : ""}
                                 </span>
                                 {showAccountsDropdown && (
                                     <div className="nf-card nf-animate-in" style={{
@@ -278,7 +292,20 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                                     borderBottom: "1px solid var(--nf-border-dim)",
                                                     fontSize: "12px"
                                                 }}>
-                                                    <span style={{ fontSize: "16px" }}>📧</span>
+                                                    <span style={{ fontSize: "16px" }}>🔵</span>
+                                                    <span style={{ color: "var(--nf-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
+                                                </li>
+                                            ))}
+                                            {microsoftAccounts.map((email) => (
+                                                <li key={email} style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "8px",
+                                                    padding: "6px 0",
+                                                    borderBottom: "1px solid var(--nf-border-dim)",
+                                                    fontSize: "12px"
+                                                }}>
+                                                    <span style={{ fontSize: "16px" }}>🟦</span>
                                                     <span style={{ color: "var(--nf-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
                                                 </li>
                                             ))}
@@ -369,7 +396,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                             ? "var(--nf-bg-tertiary)"
                                             : "transparent",
                                     border: isSelected
-                                        ? "1px solid var(--nf-accent-primary)"
+                                        ? "1px solid var(--nf-accent)"
                                         : isTodayDay
                                             ? "1px solid var(--nf-border-active)"
                                             : "1px solid transparent",
@@ -380,7 +407,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                 <div style={{
                                     fontSize: "14px",
                                     fontWeight: isTodayDay ? 700 : 400,
-                                    color: isTodayDay ? "var(--nf-accent-primary)" : "var(--nf-text-primary)",
+                                    color: isTodayDay ? "var(--nf-accent)" : "var(--nf-text)",
                                     marginBottom: "4px",
                                 }}>
                                     {day}
@@ -525,6 +552,14 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                         style={{ cursor: evt.link ? "pointer" : "default" }}
                                         onClick={() => evt.link && window.open(evt.link, "_blank")}
                                     >
+                                        <div style={{
+                                            width: "4px",
+                                            height: "100%",
+                                            minHeight: "36px",
+                                            borderRadius: "2px",
+                                            background: EVENT_COLORS[evt.type]?.text || "var(--nf-text-muted)",
+                                            marginRight: "8px"
+                                        }} />
                                         <span style={{
                                             padding: "4px 8px",
                                             borderRadius: "6px",
@@ -533,6 +568,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                             background: EVENT_COLORS[evt.type]?.bg || "var(--nf-bg-tertiary)",
                                             color: EVENT_COLORS[evt.type]?.text || "var(--nf-text-muted)",
                                             whiteSpace: "nowrap",
+                                            marginRight: "8px"
                                         }}>
                                             {relativeDay}
                                         </span>
@@ -555,7 +591,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                         </div>
                     ) : (
                         <p style={{ color: "var(--nf-text-muted)", fontSize: "13px", textAlign: "center", padding: "16px" }}>
-                            {googleAccounts.length > 0 ? "Aucun événement à venir" : "Connecte Google Calendar pour voir tes événements"}
+                            {(googleAccounts.length + microsoftAccounts.length) > 0 ? "Aucun événement à venir" : "Connecte un calendrier pour voir tes événements"}
                         </p>
                     )}
                 </div>

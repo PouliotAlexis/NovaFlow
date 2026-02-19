@@ -28,13 +28,12 @@ export default function NotificationPanel() {
                 setNotifications(data.notifications || []);
             }
         } catch (err) {
-            console.error("Erreur fetch notifications:", err);
+            console.error("Error fetching notifications:", err);
         }
     };
 
     useEffect(() => {
         fetchNotifications();
-        // Refresh every 30 seconds
         const interval = setInterval(fetchNotifications, 30000);
         return () => clearInterval(interval);
     }, []);
@@ -58,7 +57,7 @@ export default function NotificationPanel() {
                 );
             }
         } catch (err) {
-            console.error("Erreur mark as read:", err);
+            console.error("Error marking as read:", err);
         }
     };
 
@@ -69,19 +68,19 @@ export default function NotificationPanel() {
                 setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
             }
         } catch (err) {
-            console.error("Erreur mark all as read:", err);
+            console.error("Error marking all as read:", err);
         }
     };
 
     const clearAll = async () => {
-        if (!confirm("Effacer toutes les notifications ?")) return;
+        if (!confirm("Clear all notifications?")) return;
         try {
             const res = await fetch(`${API_URL}/api/notifications`, { method: "DELETE" });
             if (res.ok) {
                 setNotifications([]);
             }
         } catch (err) {
-            console.error("Erreur clear all:", err);
+            console.error("Error clearing notifications:", err);
         }
     };
 
@@ -90,10 +89,10 @@ export default function NotificationPanel() {
         const now = new Date();
         const diff = now.getTime() - date.getTime();
 
-        if (diff < 60000) return "À l'instant";
-        if (diff < 3600000) return `Il y a ${Math.floor(diff / 60000)} min`;
-        if (diff < 86400000) return `Il y a ${Math.floor(diff / 3600000)}h`;
-        return date.toLocaleDateString("fr-CA");
+        if (diff < 60000) return "Just now";
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+        return date.toLocaleDateString("en-US");
     };
 
     const getTypeIcon = (type: string) => {
@@ -120,7 +119,7 @@ export default function NotificationPanel() {
                         right: "-2px",
                         background: "var(--nf-danger)",
                         color: "white",
-                        fontSize: "10px",
+                        fontSize: "9px",
                         fontWeight: 700,
                         borderRadius: "50%",
                         width: "16px",
@@ -145,7 +144,7 @@ export default function NotificationPanel() {
                     zIndex: 1000,
                     padding: 0,
                     overflow: "hidden",
-                    boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+                    boxShadow: "var(--nf-shadow-lg)",
                     border: "1px solid var(--nf-border-active)"
                 }}>
                     <div style={{
@@ -156,20 +155,20 @@ export default function NotificationPanel() {
                         alignItems: "center",
                         background: "var(--nf-bg-secondary)"
                     }}>
-                        <span style={{ fontWeight: 600, fontSize: "14px" }}>Notifications</span>
+                        <span style={{ fontWeight: 600, fontSize: "13px" }}>Notifications</span>
                         {notifications.length > 0 && (
                             <div style={{ display: "flex", gap: "8px" }}>
                                 <button
                                     onClick={markAllAsRead}
-                                    style={{ fontSize: "11px", color: "var(--nf-accent-primary)", background: "none", border: "none", cursor: "pointer" }}
+                                    style={{ fontSize: "11px", color: "var(--nf-accent)", background: "none", border: "none", cursor: "pointer", fontWeight: 500 }}
                                 >
-                                    Tout lire
+                                    Read All
                                 </button>
                                 <button
                                     onClick={clearAll}
                                     style={{ fontSize: "11px", color: "var(--nf-text-muted)", background: "none", border: "none", cursor: "pointer" }}
                                 >
-                                    Effacer
+                                    Clear
                                 </button>
                             </div>
                         )}
@@ -179,7 +178,7 @@ export default function NotificationPanel() {
                         {notifications.length === 0 ? (
                             <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--nf-text-muted)" }}>
                                 <span style={{ fontSize: "24px", display: "block", marginBottom: "8px" }}>📭</span>
-                                <p style={{ fontSize: "13px" }}>Aucune notification</p>
+                                <p style={{ fontSize: "13px" }}>No notifications</p>
                             </div>
                         ) : (
                             notifications.map((notif) => (
@@ -189,13 +188,13 @@ export default function NotificationPanel() {
                                     style={{
                                         padding: "12px 16px",
                                         borderBottom: "1px solid var(--nf-border)",
-                                        background: notif.read ? "transparent" : "rgba(var(--nf-accent-rgb), 0.05)",
+                                        background: notif.read ? "transparent" : "var(--nf-accent-glow)",
                                         cursor: "pointer",
-                                        transition: "background 0.2s",
+                                        transition: "background var(--nf-transition)",
                                         position: "relative"
                                     }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-                                    onMouseLeave={(e) => (e.currentTarget.style.background = notif.read ? "transparent" : "rgba(var(--nf-accent-rgb), 0.05)")}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--nf-bg-hover)")}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = notif.read ? "transparent" : "var(--nf-accent-glow)")}
                                 >
                                     {!notif.read && (
                                         <div style={{
@@ -203,19 +202,19 @@ export default function NotificationPanel() {
                                             left: "4px",
                                             top: "50%",
                                             transform: "translateY(-50%)",
-                                            width: "6px",
-                                            height: "6px",
+                                            width: "5px",
+                                            height: "5px",
                                             borderRadius: "50%",
-                                            background: "var(--nf-accent-primary)"
+                                            background: "var(--nf-accent)"
                                         }} />
                                     )}
                                     <div style={{ display: "flex", gap: "10px" }}>
-                                        <span style={{ fontSize: "18px" }}>{getTypeIcon(notif.type)}</span>
+                                        <span style={{ fontSize: "16px" }}>{getTypeIcon(notif.type)}</span>
                                         <div style={{ flex: 1 }}>
                                             <div style={{
                                                 fontSize: "13px",
                                                 fontWeight: notif.read ? 500 : 700,
-                                                color: "var(--nf-text-primary)",
+                                                color: "var(--nf-text)",
                                                 marginBottom: "2px"
                                             }}>
                                                 {notif.title}
@@ -223,7 +222,7 @@ export default function NotificationPanel() {
                                             <div style={{ fontSize: "12px", color: "var(--nf-text-secondary)", lineHeight: 1.4 }}>
                                                 {notif.content}
                                             </div>
-                                            <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "6px" }}>
+                                            <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "4px" }}>
                                                 {formatTime(notif.timestamp)}
                                             </div>
                                         </div>

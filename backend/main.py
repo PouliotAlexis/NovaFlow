@@ -41,11 +41,13 @@ from services.google_service import (
     get_today_events,
     list_connected_accounts
 )
+from services.microsoft_auth import MicrosoftAuthService
 from services.task_manager import TaskManager, NovaFlowTask
 import re
 from services.automation import (
     analyze_document_for_tasks, 
-    analyze_calendar_for_tasks, 
+    analyze_calendar_for_tasks,
+    analyze_all_calendars,
     get_recent_logs,
     start_job,
     cancel_job,
@@ -373,7 +375,71 @@ def google_disconnect_all():
         google_disconnect(acc)
     return {"status": "all_disconnected"}
 
-# === Endpoints Automation ===
+    return {"status": "all_disconnected"}
+
+
+# === Microsoft Azure OAuth ===
+
+@app.get("/api/auth/microsoft/login")
+def microsoft_login():
+    """Retourne l'URL de connexion Microsoft."""
+    auth_service = MicrosoftAuthService()
+    return {"url": auth_service.get_auth_url()}
+
+
+@app.get("/api/auth/microsoft/callback")
+def microsoft_callback(code: str):
+    """Callback OAuth Microsoft - retourne une page HTML qui se ferme automatiquement."""
+    from fastapi.responses import HTMLResponse
+    
+    auth_service = MicrosoftAuthService()
+    result = auth_service.acquire_token_by_code(code)
+    
+    if "error" in result:
+        html = f"""
+        <html><body style="background:#1a1a2e;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
+            <div style="text-align:center">
+                <h2>❌ Connection failed</h2>
+                <p>{result.get('error_description', 'Unknown error')}</p>
+                <p style="color:#888">You can close this window.</p>
+            </div>
+        </body></html>
+        """
+        return HTMLResponse(content=html, status_code=400)
+    
+    email = result.get("email", "")
+    html = f"""
+    <html><body style="background:#1a1a2e;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
+        <div style="text-align:center">
+            <h2>✅ Microsoft connected!</h2>
+            <p>Account: <strong>{email}</strong></p>
+            <p style="color:#888">This window will close automatically...</p>
+        </div>
+        <script>setTimeout(() => window.close(), 1500);</script>
+    </body></html>
+    """
+    return HTMLResponse(content=html)
+
+
+@app.get("/api/auth/microsoft/accounts")
+def microsoft_accounts():
+    """Liste les comptes Microsoft connectés."""
+    return {"accounts": MicrosoftAuthService.list_connected_accounts()}
+
+
+@app.delete("/api/auth/microsoft/accounts/{email}")
+def microsoft_disconnect(email: str):
+    """Déconnecte un compte Microsoft spécifique."""
+    if MicrosoftAuthService.disconnect_account(email):
+        return {"status": "disconnected"}
+    raise HTTPException(status_code=404, detail="Compte non trouvé")
+
+
+@app.get("/api/auth/microsoft/status")
+def microsoft_status():
+    """Vérifie si au moins un compte Microsoft est connecté."""
+    return {"connected": MicrosoftAuthService.is_any_connected()}
+
 
 @app.get("/api/automation/logs")
 def get_automation_logs():
@@ -462,11 +528,12 @@ def clear_user_notifications():
 
 @app.get("/api/calendar/events")
 async def calendar_events(days: int = 30):
-    """Récupère les événements unifiés (Google + Tâches locales) pour les X prochains jours."""
+    """Récupère les événements unifiés (Google + Outlook + Tâches locales) pour les X prochains jours."""
     from services.calendar_aggregator import get_unified_events
+    from services.microsoft_auth import MicrosoftAuthService
     
-    if not google_is_connected():
-        raise HTTPException(status_code=401, detail="Google Calendar non connecté.")
+    if not google_is_connected() and not MicrosoftAuthService.is_any_connected():
+        raise HTTPException(status_code=401, detail="Aucun calendrier connecté.")
     
     # Exécuter l'appel dans un threadpool pour l'agrégation
     events = await run_in_threadpool(get_unified_events, days=days)
@@ -478,7 +545,7 @@ async def calendar_events(days: int = 30):
         existing_jobs = get_active_jobs()
         is_running = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
         if not is_running and has_new_events(events):
-             start_job("Analyse Calendrier", analyze_calendar_for_tasks(events=None, days=30))
+             start_job("Analyse Calendrier", analyze_all_calendars(days=30))
     except Exception as e:
         print(f"Erreur déclenchement automation calendrier: {e}")
 

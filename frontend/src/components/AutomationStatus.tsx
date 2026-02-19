@@ -14,19 +14,18 @@ export default function AutomationStatus() {
     const [lastMessage, setLastMessage] = useState("");
     const [showDetails, setShowDetails] = useState(false);
     const prevJobCount = useRef(0);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // 1. Logs
                 const logsRes = await fetch(`${API_URL}/api/automation/logs`);
                 if (logsRes.ok) {
                     const data = await logsRes.json();
                     const newLogs = data.logs || [];
                     setLogs(newLogs);
-
                     if (newLogs.length > 0) {
                         const lastLog = newLogs[newLogs.length - 1];
                         const cleanMessage = lastLog.replace(/^\[.*?\]\s*/, '');
@@ -34,20 +33,17 @@ export default function AutomationStatus() {
                     }
                 }
 
-                // 2. Active Jobs
                 const jobsRes = await fetch(`${API_URL}/api/automation/jobs`);
                 if (jobsRes.ok) {
                     const jobsData = await jobsRes.json();
                     setJobs(jobsData);
                     setIsAnalysing(jobsData.length > 0);
 
-                    // Détecter la fin de jobs (transition: jobs > 0 → jobs = 0)
                     if (prevJobCount.current > 0 && jobsData.length === 0) {
                         window.dispatchEvent(new CustomEvent("novaflow-automation-done"));
                     }
                     prevJobCount.current = jobsData.length;
                 }
-
             } catch (error) {
                 console.error("Error fetching automation data", error);
             }
@@ -55,133 +51,134 @@ export default function AutomationStatus() {
 
         const interval = setInterval(fetchData, 2000);
         fetchData();
-
         return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowDetails(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     const killJob = async (jobId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!confirm("Arrêter cette tâche ?")) return;
+        if (!confirm("Stop this process?")) return;
         try {
             await fetch(`${API_URL}/api/automation/jobs/${jobId}`, { method: 'DELETE' });
-            // Force refresh
             setJobs(jobs.filter(j => j.id !== jobId));
         } catch (err) {
-            alert("Erreur lors de l'annulation");
+            alert("Error stopping process");
         }
     };
 
     if (!lastMessage && jobs.length === 0) return null;
 
     return (
-        <div style={{ position: 'relative' }}>
-            {/* Badge Principal */}
+        <div style={{ position: 'relative' }} ref={dropdownRef}>
+            {/* Main Badge */}
             <div
-                className="nf-automation-status"
                 onClick={() => setShowDetails(!showDetails)}
                 style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '12px',
+                    gap: '6px',
+                    fontSize: '11px',
                     color: isAnalysing ? 'var(--nf-accent)' : 'var(--nf-text-muted)',
-                    background: 'rgba(0,0,0,0.2)',
-                    padding: '4px 12px',
-                    borderRadius: '20px',
-                    marginRight: '12px',
-                    border: isAnalysing ? '1px solid var(--nf-accent-dim)' : '1px solid transparent',
-                    transition: 'all 0.3s ease',
+                    background: isAnalysing ? 'var(--nf-accent-glow)' : 'var(--nf-bg-card)',
+                    padding: '5px 12px',
+                    borderRadius: '16px',
+                    border: isAnalysing ? '1px solid var(--nf-accent-dim)' : '1px solid var(--nf-border)',
+                    transition: 'all var(--nf-transition)',
                     cursor: 'pointer',
-                    userSelect: 'none'
+                    userSelect: 'none' as const,
+                    fontWeight: 500,
                 }}
             >
                 {isAnalysing && (
-                    <span className="nf-spinner-dot" style={{
-                        width: '6px',
-                        height: '6px',
+                    <span style={{
+                        width: '5px',
+                        height: '5px',
                         borderRadius: '50%',
                         background: 'currentColor',
                         display: 'inline-block',
-                        animation: 'pulse 1s infinite'
+                        animation: 'pulse 1.5s infinite'
                     }} />
                 )}
-                <span style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {jobs.length > 0 ? `${jobs.length} tâche(s) en cours...` : lastMessage}
+                <span style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {jobs.length > 0 ? `${jobs.length} active process${jobs.length > 1 ? "es" : ""}` : lastMessage}
                 </span>
             </div>
 
-            {/* Dropdown Détails */}
+            {/* Dropdown */}
             {showDetails && (
                 <div className="nf-card nf-animate-in" style={{
                     position: 'absolute',
-                    top: '100%',
+                    top: '110%',
                     right: 0,
-                    marginTop: '8px',
                     width: '320px',
                     zIndex: 1000,
-                    padding: '12px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                    background: 'var(--nf-bg-secondary)',
-                    border: '1px solid var(--nf-border)'
+                    padding: 0,
+                    overflow: 'hidden',
+                    boxShadow: 'var(--nf-shadow-lg)',
+                    border: '1px solid var(--nf-border-active)',
                 }}>
-                    <h4 style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
-                        Processus Actifs
-                        <span style={{ color: 'var(--nf-text-muted)', fontSize: '11px', fontWeight: 400 }}>Mise à jour auto</span>
-                    </h4>
-
-                    {jobs.length === 0 ? (
-                        <p style={{ fontSize: '12px', color: 'var(--nf-text-muted)', fontStyle: 'italic' }}>Aucun processus en cours.</p>
-                    ) : (
-                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {jobs.map(job => (
-                                <li key={job.id} style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    padding: '8px 0',
-                                    borderBottom: '1px solid var(--nf-border-dim)',
-                                    fontSize: '12px'
-                                }}>
-                                    <div>
-                                        <div style={{ fontWeight: 500 }}>{job.name}</div>
-                                        <div style={{ color: 'var(--nf-text-muted)', fontSize: '10px' }}>{job.duration} écoulées</div>
-                                    </div>
-                                    <button
-                                        onClick={(e) => killJob(job.id, e)}
-                                        title="Arrêter le processus"
-                                        style={{
-                                            background: 'var(--nf-error)',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: '4px',
-                                            padding: '2px 6px',
-                                            fontSize: '10px',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        KILL
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-
-                    <div style={{ marginTop: '12px', borderTop: '1px solid var(--nf-border)', paddingTop: '8px' }}>
-                        <h4 style={{ fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: 'var(--nf-text-muted)' }}>Derniers Logs</h4>
-                        <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--nf-text-muted)', maxHeight: '100px', overflowY: 'auto' }}>
-                            {logs.map((log, i) => (
-                                <div key={i} style={{ marginBottom: '2px' }}>{log}</div>
-                            ))}
-                        </div>
+                    <div style={{
+                        padding: '12px 16px',
+                        borderBottom: '1px solid var(--nf-border)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        background: 'var(--nf-bg-secondary)'
+                    }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px' }}>Active Processes</span>
+                        <span style={{ color: 'var(--nf-text-muted)', fontSize: '10px' }}>Auto-refresh</span>
                     </div>
 
-                    <style jsx>{`
-                    @keyframes pulse {
-                    0% { opacity: 1; transform: scale(1); }
-                    50% { opacity: 0.5; transform: scale(1.2); }
-                    100% { opacity: 1; transform: scale(1); }
-                    }
-                `}</style>
+                    <div style={{ padding: '12px 16px' }}>
+                        {jobs.length === 0 ? (
+                            <p style={{ fontSize: '12px', color: 'var(--nf-text-muted)', fontStyle: 'italic' }}>No active processes.</p>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {jobs.map(job => (
+                                    <div key={job.id} style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        padding: '8px',
+                                        background: 'var(--nf-bg-card)',
+                                        borderRadius: 'var(--nf-radius-xs)',
+                                        border: '1px solid var(--nf-border)',
+                                        fontSize: '12px'
+                                    }}>
+                                        <div>
+                                            <div style={{ fontWeight: 500, color: 'var(--nf-text)' }}>{job.name}</div>
+                                            <div style={{ color: 'var(--nf-text-muted)', fontSize: '10px' }}>{job.duration} elapsed</div>
+                                        </div>
+                                        <button
+                                            onClick={(e) => killJob(job.id, e)}
+                                            className="nf-btn nf-btn--danger"
+                                            style={{ fontSize: '10px', padding: '3px 8px' }}
+                                        >
+                                            STOP
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div style={{ marginTop: '12px', borderTop: '1px solid var(--nf-border)', paddingTop: '8px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: 'var(--nf-text-muted)' }}>Recent Logs</div>
+                            <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--nf-text-muted)', maxHeight: '80px', overflowY: 'auto' }}>
+                                {logs.slice(-5).map((log, i) => (
+                                    <div key={i} style={{ marginBottom: '2px' }}>{log}</div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

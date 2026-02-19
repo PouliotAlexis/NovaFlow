@@ -3,46 +3,38 @@
 import React, { useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import SmartFeed from "@/components/SmartFeed";
+import DailySummary from "@/components/DailySummary";
+import ProductivityTrend from "@/components/ProductivityTrend";
+import WeatherWidget from "@/components/WeatherWidget";
 import TaskList from "@/components/TaskList";
 import DropZone from "@/components/DropZone";
+import MiniCalendar from "@/components/MiniCalendar";
 import ChatPanel from "@/components/ChatPanel";
-import SettingsPanel from "@/components/SettingsPanel";
+import FocusMode from "@/components/FocusMode";
 import CalendarView from "@/components/CalendarView";
 import DocumentsView from "@/components/DocumentsView";
-import FocusMode from "@/components/FocusMode";
+import SettingsPanel from "@/components/SettingsPanel";
 import NotificationPanel from "@/components/NotificationPanel";
 import AutomationStatus from "@/components/AutomationStatus";
 
 export default function Home() {
   const [activeView, setActiveView] = useState("dashboard");
 
-  // Rendu des onglets qui ne sont PAS pré-chargés (montage/démontage classique)
   const renderDynamicView = () => {
     switch (activeView) {
       case "dashboard":
-        return (
-          <div className="nf-dashboard">
-            <SmartFeed />
-            <TaskList />
-            <DropZone />
-            <div className="nf-dashboard__full">
-              <ChatPanel />
-            </div>
-          </div>
-        );
+        return null; // Handled by persistent view
       case "chat":
         return <ChatPanel />;
       case "documents":
         return <DocumentsView />;
-      case "dropzone":
-        return <DropZone />;
       case "focus":
         return <FocusMode />;
       case "settings":
         return <SettingsPanel />;
       case "tasks":
       case "calendar":
-        return null; // Gérés par les composants persistants ci-dessous
+        return null;
       default:
         return (
           <div className="nf-card nf-animate-in" style={{ textAlign: "center", padding: "60px" }}>
@@ -58,38 +50,18 @@ export default function Home() {
     }
   };
 
-  const getPageTitle = () => {
-    const titles: Record<string, { title: string; subtitle: string }> = {
-      dashboard: { title: "Dashboard", subtitle: "Vue d'ensemble de ta journée" },
-      chat: { title: "Chat AI", subtitle: "Pose tes questions à l'IA" },
-      tasks: { title: "Tâches", subtitle: "Gère tes priorités" },
-      calendar: { title: "Calendrier", subtitle: "Tes échéances et événements" },
-      documents: { title: "Documents", subtitle: "Tes fichiers analysés" },
-      dropzone: { title: "Drop Zone", subtitle: "Importe de nouveaux fichiers" },
-      focus: { title: "Focus Mode", subtitle: "Concentration maximale" },
-      settings: { title: "Réglages", subtitle: "Configuration de NovaFlow" },
-    };
-    return titles[activeView] || { title: activeView, subtitle: "" };
-  };
-
-  const { title, subtitle } = getPageTitle();
-
   return (
     <div className="nf-layout">
       <Sidebar activeView={activeView} onNavigate={setActiveView} />
 
       <main className="nf-main">
-        {/* Header */}
+        {/* Compact header with actions only */}
         <header className="nf-header" style={{ position: "relative", zIndex: 50 }}>
-          <div>
-            <h1 className="nf-header__title">{title}</h1>
-            <p className="nf-header__subtitle">{subtitle}</p>
-          </div>
           <div className="nf-header__actions">
             <AutomationStatus />
             <div className="nf-ai-mode nf-ai-mode--local">
               <span className="nf-ai-mode__dot" />
-              AI Locale
+              AI Local
             </div>
             <NotificationPanel />
           </div>
@@ -97,7 +69,29 @@ export default function Home() {
 
         {/* Content */}
         <div className="nf-content">
-          {/* Composants persistants (toujours montés, masqués quand inactifs) */}
+          {/* Persistent tabs (always mounted, hidden when inactive) */}
+          <div style={{ display: activeView === "dashboard" ? "block" : "none" }}>
+            <div className="nf-dashboard">
+              {/* Row 1: Greeting */}
+              <SmartFeed />
+
+              {/* Row 2: Stats */}
+              <DailySummary />
+              <ProductivityTrend />
+              <WeatherWidget />
+
+              {/* Row 3: Tools */}
+              <DropZone />
+              <TaskList compact onNavigate={setActiveView} />
+              <MiniCalendar />
+
+              {/* Row 4: Focus + Chat */}
+              <div className="nf-dashboard__full" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                <FocusMode compact />
+                <ChatPanel compact />
+              </div>
+            </div>
+          </div>
           <div style={{ display: activeView === "tasks" ? "block" : "none" }}>
             <TaskList />
           </div>
@@ -105,7 +99,7 @@ export default function Home() {
             <CalendarView onNavigate={setActiveView} />
           </div>
 
-          {/* Composants dynamiques (montés/démontés au besoin) */}
+          {/* Dynamic views (mounted only when active) */}
           {renderDynamicView()}
         </div>
       </main>

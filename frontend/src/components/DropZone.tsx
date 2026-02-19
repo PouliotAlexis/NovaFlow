@@ -19,7 +19,6 @@ export default function DropZone() {
     const [files, setFiles] = useState<UploadedFile[]>([]);
 
     const uploadFile = async (file: File) => {
-        // Ajouter le fichier en statut "uploading"
         const tempFile: UploadedFile = { name: file.name, status: "uploading" };
         setFiles((prev) => [...prev, tempFile]);
 
@@ -34,12 +33,11 @@ export default function DropZone() {
 
             if (!response.ok) {
                 const err = await response.json();
-                throw new Error(err.detail || "Erreur upload");
+                throw new Error(err.detail || "Upload error");
             }
 
             const result = await response.json();
 
-            // Mettre à jour le statut du fichier
             setFiles((prev) =>
                 prev.map((f) =>
                     f.name === file.name
@@ -59,11 +57,7 @@ export default function DropZone() {
             setFiles((prev) =>
                 prev.map((f) =>
                     f.name === file.name
-                        ? {
-                            ...f,
-                            status: "error",
-                            message: err instanceof Error ? err.message : "Erreur inconnue",
-                        }
+                        ? { ...f, status: "error", message: err instanceof Error ? err.message : "Unknown error" }
                         : f
                 )
             );
@@ -82,7 +76,6 @@ export default function DropZone() {
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
-
         const droppedFiles = Array.from(e.dataTransfer.files);
         droppedFiles.forEach(uploadFile);
     }, []);
@@ -91,7 +84,7 @@ export default function DropZone() {
         const input = document.createElement("input");
         input.type = "file";
         input.multiple = true;
-        input.accept = ".pdf,.txt,.md,.csv";
+        input.accept = ".pdf,.txt,.md,.csv,.docx,.jpg,.png";
         input.onchange = (e) => {
             const target = e.target as HTMLInputElement;
             if (target.files) {
@@ -108,18 +101,18 @@ export default function DropZone() {
     };
 
     const statusLabels: Record<string, { text: string; badge: string }> = {
-        uploading: { text: "Analyse en cours...", badge: "nf-card__badge--warning" },
-        analyzed: { text: "Analysé", badge: "nf-card__badge--success" },
-        error: { text: "Erreur", badge: "nf-card__badge--danger" },
+        uploading: { text: "Analyzing...", badge: "nf-card__badge--warning" },
+        analyzed: { text: "Analyzed", badge: "nf-card__badge--success" },
+        error: { text: "Error", badge: "nf-card__badge--danger" },
     };
 
     return (
-        <div className="nf-card nf-animate-in">
+        <div className="nf-card nf-card--glow nf-animate-in">
             <div className="nf-card__header">
                 <span className="nf-card__title">📥 Drop Zone</span>
                 {files.length > 0 && (
                     <span className="nf-card__badge nf-card__badge--info">
-                        {files.filter((f) => f.status === "analyzed").length}/{files.length} analysé{files.length > 1 ? "s" : ""}
+                        {files.filter((f) => f.status === "analyzed").length}/{files.length} analyzed
                     </span>
                 )}
             </div>
@@ -132,15 +125,16 @@ export default function DropZone() {
                 onClick={handleClick}
             >
                 <span className="nf-dropzone__icon">
-                    {isDragging ? "🎯" : "📄"}
+                    {isDragging ? "🎯" : "☁️"}
                 </span>
                 <span className="nf-dropzone__title">
-                    {isDragging
-                        ? "Lâche ton fichier ici !"
-                        : "Glisse un fichier ou clique pour sélectionner"}
+                    {isDragging ? "Drop it here!" : "Drag & Drop Files Here"}
                 </span>
                 <span className="nf-dropzone__subtitle">
-                    PDF, TXT, Markdown, CSV
+                    or Click to Browse
+                </span>
+                <span className="nf-dropzone__formats">
+                    Supported formats: PDF, DOCX, JPG, PNG. Max size: 50MB.
                 </span>
             </div>
 
@@ -148,21 +142,18 @@ export default function DropZone() {
                 <div className="nf-task-list" style={{ marginTop: "12px" }}>
                     {files.map((file, i) => (
                         <div key={i} className="nf-task">
-                            <span style={{ fontSize: "18px" }}>{statusIcons[file.status]}</span>
+                            <span style={{ fontSize: "16px" }}>{statusIcons[file.status]}</span>
                             <div className="nf-task__content">
                                 <div className="nf-task__title">{file.name}</div>
                                 <div className="nf-task__meta">
                                     {file.status === "analyzed"
-                                        ? `${file.pages} page${(file.pages || 0) > 1 ? "s" : ""} · ${file.chunks} chunks indexés`
+                                        ? `${file.pages} page${(file.pages || 0) > 1 ? "s" : ""} · ${file.chunks} chunks indexed`
                                         : file.message || statusLabels[file.status].text}
                                 </div>
                                 {file.preview && file.status === "analyzed" && (
                                     <div className="nf-task__meta" style={{
-                                        marginTop: "4px",
-                                        fontStyle: "italic",
-                                        opacity: 0.7,
-                                        maxHeight: "40px",
-                                        overflow: "hidden",
+                                        marginTop: "4px", fontStyle: "italic", opacity: 0.6,
+                                        maxHeight: "32px", overflow: "hidden",
                                     }}>
                                         &quot;{file.preview.slice(0, 120)}...&quot;
                                     </div>

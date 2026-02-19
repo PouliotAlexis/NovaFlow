@@ -97,7 +97,7 @@ def list_connected_accounts() -> List[str]:
     
     accounts = []
     for filename in os.listdir(TOKENS_DIR):
-        if filename.endswith(".json"):
+        if filename.endswith(".json") and not filename.startswith("microsoft_"):
             accounts.append(filename.replace(".json", ""))
     return accounts
 

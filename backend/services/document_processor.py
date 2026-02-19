@@ -10,7 +10,18 @@ import hashlib
 from datetime import datetime
 from typing import Optional
 
-import chromadb
+# try:
+#     import chromadb
+#     CHROMA_AVAILABLE = True
+# except Exception as e:
+#     CHROMA_AVAILABLE = False
+#     print(f"WARNING: ChromaDB not available (Error: {e}), RAG features disabled.")
+# except:
+#     CHROMA_AVAILABLE = False
+#     print("WARNING: ChromaDB not available (Unknown Error), RAG features disabled.")
+
+CHROMA_AVAILABLE = False
+
 from PyPDF2 import PdfReader
 
 
@@ -25,13 +36,19 @@ os.makedirs(CHROMA_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Client ChromaDB persistant (stocké sur disque)
-chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+chroma_client = None
+collection = None
 
-# Collection principale pour les documents
-collection = chroma_client.get_or_create_collection(
-    name="novaflow_documents",
-    metadata={"hnsw:space": "cosine"},
-)
+if CHROMA_AVAILABLE:
+    try:
+        chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+        collection = chroma_client.get_or_create_collection(
+            name="novaflow_documents",
+            metadata={"hnsw:space": "cosine"},
+        )
+    except Exception as e:
+        print(f"ERROR initializing ChromaDB: {e}")
+        CHROMA_AVAILABLE = False
 
 
 # === Extraction de texte ===
@@ -194,20 +211,22 @@ def ingest_document(file_path: str, file_name: str) -> dict:
     
     # 3. Supprimer l'ancien document s'il existe
     try:
-        existing = collection.get(where={"doc_id": doc_id})
-        if existing and existing["ids"]:
-            collection.delete(ids=existing["ids"])
+        if collection:
+            existing = collection.get(where={"doc_id": doc_id})
+            if existing and existing["ids"]:
+                collection.delete(ids=existing["ids"])
     except Exception:
         pass
     
     # 4. Stocker dans ChromaDB
-    batch_size = 100
-    for i in range(0, len(all_chunks), batch_size):
-        collection.add(
-            documents=all_chunks[i:i + batch_size],
-            metadatas=all_metadatas[i:i + batch_size],
-            ids=all_ids[i:i + batch_size],
-        )
+    if collection:
+        batch_size = 100
+        for i in range(0, len(all_chunks), batch_size):
+            collection.add(
+                documents=all_chunks[i:i + batch_size],
+                metadatas=all_metadatas[i:i + batch_size],
+                ids=all_ids[i:i + batch_size],
+            )
     
     # 5. Générer un résumé rapide
     preview = total_text[:300] + "..." if len(total_text) > 300 else total_text
@@ -241,7 +260,7 @@ def get_relevant_context(query: str, n_results: int = 5) -> str:
     """
     try:
         # Vérifier s'il y a des documents
-        if collection.count() == 0:
+        if not collection or collection.count() == 0:
             return ""
         
         results = collection.query(
@@ -278,7 +297,7 @@ def list_documents() -> list[dict]:
         Liste de documents avec métadonnées enrichies.
     """
     try:
-        if collection.count() == 0:
+        if not collection or collection.count() == 0:
             return []
         
         all_data = collection.get(include=["metadatas"])
@@ -309,10 +328,11 @@ def list_documents() -> list[dict]:
 def delete_document(doc_id: str) -> bool:
     """Supprime un document de la base vectorielle."""
     try:
-        existing = collection.get(where={"doc_id": doc_id})
-        if existing and existing["ids"]:
-            collection.delete(ids=existing["ids"])
-            return True
+        if collection:
+            existing = collection.get(where={"doc_id": doc_id})
+            if existing and existing["ids"]:
+                collection.delete(ids=existing["ids"])
+                return True
         return False
     except Exception:
         return False

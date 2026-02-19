@@ -31,9 +31,9 @@ const FILE_ICONS: Record<string, string> = {
 };
 
 const STATUS_CONFIG = {
-    analyzed: { label: "Analysé", badge: "nf-card__badge--success" },
-    pending: { label: "En attente", badge: "nf-card__badge--warning" },
-    error: { label: "Erreur", badge: "nf-card__badge--danger" },
+    analyzed: { label: "Analyzed", badge: "nf-card__badge--success" },
+    pending: { label: "Pending", badge: "nf-card__badge--warning" },
+    error: { label: "Error", badge: "nf-card__badge--danger" },
 };
 
 function getFileIcon(fileName: string): string {
@@ -54,10 +54,10 @@ function buildTags(doc: {
     tags.push(`${doc.chunks} chunk${doc.chunks > 1 ? "s" : ""}`);
     if (doc.total_chars > 0) {
         const words = Math.round(doc.total_chars / 5);
-        tags.push(words > 1000 ? `~${(words / 1000).toFixed(1)}k mots` : `~${words} mots`);
+        tags.push(words > 1000 ? `~${(words / 1000).toFixed(1)}k words` : `~${words} words`);
     }
     if (doc.file_size && doc.file_size !== "—") tags.push(doc.file_size);
-    tags.push("RAG indexé");
+    tags.push("RAG indexed");
     return tags;
 }
 
@@ -70,7 +70,7 @@ export default function DocumentsView() {
     const fetchDocuments = useCallback(async () => {
         try {
             const res = await fetch(`${API_URL}/api/documents`);
-            if (!res.ok) throw new Error("Erreur API");
+            if (!res.ok) throw new Error("API Error");
             const data = await res.json();
 
             const docs: Document[] = (data.documents || []).map(
@@ -93,7 +93,7 @@ export default function DocumentsView() {
                     chars: doc.total_chars || 0,
                     chunks: doc.chunks,
                     uploadedAt: doc.ingested_at
-                        ? new Date(doc.ingested_at).toLocaleDateString("fr-CA", {
+                        ? new Date(doc.ingested_at).toLocaleDateString("en-US", {
                             year: "numeric",
                             month: "short",
                             day: "numeric",
@@ -103,13 +103,13 @@ export default function DocumentsView() {
                         : "—",
                     status: "analyzed" as const,
                     tags: buildTags(doc),
-                    summary: `Document indexé avec ${doc.chunks} passage${doc.chunks > 1 ? "s" : ""} pour la recherche contextuelle.`,
+                    summary: `Document indexed with ${doc.chunks} passage${doc.chunks > 1 ? "s" : ""} for contextual search.`,
                 })
             );
 
             setDocuments(docs);
         } catch {
-            console.error("Impossible de charger les documents");
+            console.error("Unable to load documents");
         } finally {
             setIsLoading(false);
         }
@@ -128,7 +128,7 @@ export default function DocumentsView() {
                 setDocuments((prev) => prev.filter((d) => d.id !== docId));
             }
         } catch {
-            console.error("Erreur de suppression");
+            console.error("Delete error");
         }
     };
 
@@ -150,28 +150,31 @@ export default function DocumentsView() {
 
     return (
         <div className="nf-animate-in" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div className="nf-page-header">
+                <h1 className="nf-page-header__title">Documents</h1>
+                <p className="nf-page-header__subtitle">Manage your knowledge base</p>
+            </div>
+
             {/* Stats Bar */}
-            <div style={{ display: "flex", gap: "16px" }}>
-                <div className="nf-stat" style={{ flex: 1 }}>
-                    <span className="nf-stat__value" style={{ color: "var(--nf-accent-primary)" }}>{documents.length}</span>
-                    <span className="nf-stat__label">Total</span>
-                </div>
-                <div className="nf-stat" style={{ flex: 1 }}>
-                    <span className="nf-stat__value" style={{ color: "var(--nf-success)" }}>{analyzedCount}</span>
-                    <span className="nf-stat__label">Analysés</span>
-                </div>
-                <div className="nf-stat" style={{ flex: 1 }}>
-                    <span className="nf-stat__value" style={{ color: "var(--nf-warning)" }}>{pendingCount}</span>
-                    <span className="nf-stat__label">En attente</span>
-                </div>
+            <div style={{ display: "flex", gap: "12px" }}>
+                {[
+                    { label: "Total", value: documents.length, color: "var(--nf-accent)" },
+                    { label: "Analyzed", value: analyzedCount, color: "var(--nf-success)" },
+                    { label: "Pending", value: pendingCount, color: "var(--nf-warning)" },
+                ].map((stat) => (
+                    <div key={stat.label} className="nf-card" style={{ flex: 1, textAlign: "center", padding: "16px" }}>
+                        <div style={{ fontSize: "24px", fontWeight: 700, color: stat.color }}>{stat.value}</div>
+                        <div style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginTop: "4px" }}>{stat.label}</div>
+                    </div>
+                ))}
             </div>
 
             {/* Search & Filters */}
             <div className="nf-card">
                 <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                     <input
-                        className="nf-chat__input"
-                        placeholder="🔍 Rechercher un document ou un tag..."
+                        className="nf-input"
+                        placeholder="🔍 Search documents or tags..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         style={{ flex: 1 }}
@@ -184,7 +187,7 @@ export default function DocumentsView() {
                                 onClick={() => setFilter(f)}
                                 style={{ fontSize: "12px", padding: "8px 14px" }}
                             >
-                                {f === "all" ? "Tous" : f === "analyzed" ? "✅ Analysés" : "⏳ En attente"}
+                                {f === "all" ? "All" : f === "analyzed" ? "✅ Analyzed" : "⏳ Pending"}
                             </button>
                         ))}
                     </div>
@@ -193,9 +196,8 @@ export default function DocumentsView() {
 
             {/* Loading */}
             {isLoading && (
-                <div className="nf-card" style={{ textAlign: "center", padding: "40px" }}>
-                    <span style={{ fontSize: "32px", display: "block", marginBottom: "8px" }}>⏳</span>
-                    <p style={{ color: "var(--nf-text-muted)" }}>Chargement des documents...</p>
+                <div className="nf-loading">
+                    <span className="nf-spinner">⏳</span> Loading documents...
                 </div>
             )}
 
@@ -205,18 +207,16 @@ export default function DocumentsView() {
                     {filteredDocs.map((doc) => (
                         <div
                             key={doc.id}
-                            className="nf-card"
-                            style={{ padding: "16px", cursor: "pointer", transition: "transform 0.15s" }}
+                            className="nf-card nf-card--glow"
+                            style={{ padding: "16px", cursor: "pointer" }}
                             onClick={() => handleOpen(doc.id)}
-                            onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1px)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
                         >
                             <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
                                 {/* File Icon */}
                                 <div style={{
-                                    fontSize: "32px",
-                                    width: "48px",
-                                    height: "48px",
+                                    fontSize: "28px",
+                                    width: "44px",
+                                    height: "44px",
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
@@ -239,28 +239,27 @@ export default function DocumentsView() {
                                     </div>
 
                                     {doc.summary && (
-                                        <p style={{ fontSize: "13px", color: "var(--nf-text-secondary)", lineHeight: 1.5, marginBottom: "8px" }}>
+                                        <p style={{ fontSize: "12px", color: "var(--nf-text-secondary)", lineHeight: 1.5, marginBottom: "8px" }}>
                                             {doc.summary}
                                         </p>
                                     )}
 
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                                        {/* Tags */}
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                         {doc.tags.map((tag) => (
                                             <span
                                                 key={tag}
                                                 style={{
-                                                    fontSize: "11px",
+                                                    fontSize: "10px",
                                                     padding: "2px 8px",
-                                                    borderRadius: "12px",
-                                                    background: tag === "RAG indexé"
-                                                        ? "rgba(139, 92, 246, 0.15)"
+                                                    borderRadius: "10px",
+                                                    background: tag === "RAG indexed"
+                                                        ? "rgba(124, 92, 252, 0.15)"
                                                         : "var(--nf-bg-tertiary)",
-                                                    color: tag === "RAG indexé"
-                                                        ? "var(--nf-accent-primary)"
+                                                    color: tag === "RAG indexed"
+                                                        ? "var(--nf-accent)"
                                                         : "var(--nf-text-muted)",
-                                                    border: tag === "RAG indexé"
-                                                        ? "1px solid rgba(139, 92, 246, 0.3)"
+                                                    border: tag === "RAG indexed"
+                                                        ? "1px solid rgba(124, 92, 252, 0.3)"
                                                         : "1px solid var(--nf-border)",
                                                 }}
                                             >
@@ -268,24 +267,21 @@ export default function DocumentsView() {
                                             </span>
                                         ))}
 
-                                        <span style={{ fontSize: "12px", color: "var(--nf-text-muted)", marginLeft: "auto", whiteSpace: "nowrap" }}>
+                                        <span style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginLeft: "auto", whiteSpace: "nowrap" }}>
                                             {doc.uploadedAt}
                                         </span>
 
-                                        {/* Actions */}
                                         <button
                                             className="nf-btn nf-btn--ghost"
                                             onClick={(e) => { e.stopPropagation(); handleOpen(doc.id); }}
-                                            style={{ fontSize: "12px", padding: "4px 10px" }}
-                                            title="Ouvrir"
+                                            style={{ fontSize: "11px", padding: "4px 10px" }}
                                         >
-                                            📂 Ouvrir
+                                            📂 Open
                                         </button>
                                         <button
-                                            className="nf-btn nf-btn--ghost"
+                                            className="nf-btn nf-btn--danger"
                                             onClick={(e) => { e.stopPropagation(); handleDelete(doc.id); }}
-                                            style={{ fontSize: "12px", padding: "4px 10px", color: "var(--nf-danger)" }}
-                                            title="Supprimer"
+                                            style={{ fontSize: "11px", padding: "4px 10px" }}
                                         >
                                             🗑️
                                         </button>
@@ -296,15 +292,15 @@ export default function DocumentsView() {
                     ))}
 
                     {filteredDocs.length === 0 && (
-                        <div className="nf-card" style={{ textAlign: "center", padding: "40px" }}>
-                            <span style={{ fontSize: "32px", display: "block", marginBottom: "8px" }}>
+                        <div className="nf-empty-state">
+                            <span className="nf-empty-state__icon">
                                 {documents.length === 0 ? "📄" : "🔍"}
                             </span>
-                            <p style={{ color: "var(--nf-text-muted)" }}>
+                            <span className="nf-empty-state__text">
                                 {documents.length === 0
-                                    ? "Aucun document. Glisse un fichier dans la Drop Zone pour commencer !"
-                                    : "Aucun document trouvé pour cette recherche."}
-                            </p>
+                                    ? "No documents yet. Drop a file in the Drop Zone to get started!"
+                                    : "No documents match your search."}
+                            </span>
                         </div>
                     )}
                 </div>
