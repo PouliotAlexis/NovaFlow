@@ -157,13 +157,15 @@ class EventManager:
     def delete_event(self, event_id: str) -> bool:
         evt = self.get_event(event_id)
         if not evt:
+            print(f"DEBUG: Delete failed - Event {event_id} not found")
             return False
         
         count_deleted = evt.clear_tasks()
-        print(f"🗑️ Event {evt.title} supprimé avec {count_deleted} tâches enfants.")
+        print(f"🗑️ Event {evt.title} supprimé avec {count_deleted} tâches enfants. (Internal ID: {event_id})")
         
         del self._events[event_id]
         self._save_events()
+        print(f"DEBUG: Event deleted and saved.")
         return True
 
     def add_task_to_event(self, event_id: str, task_id: str) -> bool:

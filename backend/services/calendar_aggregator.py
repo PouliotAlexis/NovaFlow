@@ -2,7 +2,10 @@ from typing import List, Dict, Any
 from difflib import SequenceMatcher
 from services.google_service import get_upcoming_events
 from services.microsoft_calendar import get_outlook_events
+from services.moodle_rss_service import get_moodle_events
 from services.task_manager import TaskManager
+import os
+import json
 
 def _dedup_key(title: str, start: str) -> str:
     """Crée une clé de déduplication normalisant titre + heure de début."""
@@ -57,7 +60,29 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
         print(f"Erreur récupération Outlook: {e}")
         outlook_events = []
 
-    # 3. Récupérer toutes les tâches NovaFlow
+    # 3. Récupérer les événements Moodle (multi-URL)
+    moodle_events = []
+    moodle_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "moodle_settings.json")
+    if os.path.exists(moodle_file):
+        try:
+            with open(moodle_file, "r", encoding="utf-8") as f:
+                moodle_settings = json.load(f)
+                # Support nouveau format {urls: [...]} et ancien {url: "..."}
+                urls = moodle_settings.get("urls", [])
+                if not urls:
+                    old_url = moodle_settings.get("url")
+                    if old_url:
+                        urls = [old_url]
+                for moodle_url in urls:
+                    if moodle_url:
+                        try:
+                            moodle_events.extend(get_moodle_events(moodle_url, days=days))
+                        except Exception as e:
+                            print(f"Erreur Moodle URL {moodle_url[:50]}: {e}")
+        except Exception as e:
+            print(f"Erreur récupération Moodle: {e}")
+
+    # 4. Récupérer toutes les tâches NovaFlow
     tm = TaskManager.instance()
     all_tasks = tm.get_all_tasks()
     
@@ -115,6 +140,12 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
             outlook_tasks = tasks_by_event.get(event_id, [])
             if outlook_tasks:
                 existing["tasks"] = _merge_tasks(existing["tasks"], outlook_tasks)
+            
+            # Stocker l'ID Outlook original pour éviter qu'il soit considéré comme supprimé par l'automation
+            if "linked_outlook_ids" not in existing:
+                existing["linked_outlook_ids"] = []
+            if event_id not in existing["linked_outlook_ids"]:
+                existing["linked_outlook_ids"].append(event_id)
         else:
             # Événement Outlook unique
             unified_event = {
@@ -133,7 +164,27 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
             dedup_index[dk] = unified_event
             unified_events.append(unified_event)
 
-    # 7. Trier par date de début
+    # 7. Ajouter les événements Moodle
+    for m_event in moodle_events:
+        event_id = m_event["id"]
+        title = m_event.get("title", "Sans titre")
+        start = m_event.get("start", "")
+        dk = _dedup_key(title, start)
+
+        if dk in dedup_index:
+            existing = dedup_index[dk]
+            if "moodle" not in existing["source"]:
+                existing["source"] += "+moodle"
+            for acct in m_event.get("accounts", []):
+                if acct not in existing["accounts"]:
+                    existing["accounts"].append(acct)
+        else:
+            unified_event = m_event.copy()
+            unified_event["tasks"] = tasks_by_event.get(event_id, [])
+            dedup_index[dk] = unified_event
+            unified_events.append(unified_event)
+
+    # 8. Trier par date de début
     unified_events.sort(key=lambda x: x["start"] or "")
     
     return unified_events

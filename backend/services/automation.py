@@ -68,10 +68,20 @@ async def cancel_job(job_id: str):
     return False
 
 
-def start_job(name: str, coro):
+async def start_job(name: str, coro):
     """Lance une coroutine en tant que job tracké."""
     job_id = str(uuid.uuid4())
     
+    # Si on passe une fonction (ex: analyze_all_calendars), on l'exécute pour avoir la coroutine
+    if callable(coro) and not asyncio.iscoroutine(coro):
+        try:
+            coro = coro()
+        except TypeError:
+            # Cas où la fonction attend des arguments obligatoires non fournis
+            # On suppose ici que les fonctions passées à start_job ont des valeurs par défaut
+            log_auto(f"❌ Erreur: Impossible d'instancier la coroutine pour {name}")
+            return None
+
     try:
         async def wrapper():
             try:
@@ -87,6 +97,7 @@ def start_job(name: str, coro):
                 if job_id in active_jobs:
                     del active_jobs[job_id]
 
+        # On est maintenant dans une fonction async, donc on a une boucle d'événements !
         task = asyncio.create_task(wrapper())
         active_jobs[job_id] = {
             "task": task,
@@ -95,7 +106,7 @@ def start_job(name: str, coro):
         }
         return job_id
     except Exception as e:
-        log_auto(f"CRICAL ERROR in start_job: {e}")
+        log_auto(f"CRITICAL ERROR in start_job: {e}")
         return None
 
 
@@ -163,6 +174,10 @@ def has_new_events(events: list) -> bool:
             title = event.get("title", "Sans titre")
             source = event.get("source", "google")
             
+            # Skip les events Moodle — ils ne sont pas trackés dans l'EventManager
+            if source == "moodle" or source.startswith("moodle"):
+                continue
+            
             # Mapper la source de l'aggregator vers la source EventManager
             if source == "outlook":
                 em_source = "outlook_calendar"
@@ -184,33 +199,56 @@ def has_new_events(events: list) -> bool:
             if nf_event.desc_hash != current_hash or nf_event.title != title:
                 log_auto(f"DEBUG: Updated event detected: {title} (source: {em_source})")
                 return True
+            
+            # Vérifier si l'event a une description mais aucune tâche (analyse manquée)
+            empty_hash = "d41d8cd98f00b204e9800998ecf8427e"
+            if not nf_event.task_ids and current_hash != empty_hash:
+                log_auto(f"DEBUG: Event sans tâches détecté: {title} (source: {em_source})")
+                return True
         
         # Détection des suppressions — events connus qui ne sont plus dans la liste
         all_nf_events = evt_manager.get_all_events()
         
         # Google
         google_nf_events = {e.external_id: e for e in all_nf_events if e.source == "google_calendar"}
-        current_google_ids = {e["id"] for e in events if e.get("source") != "outlook"}
+        current_google_ids = {e["id"] for e in events if e.get("source") not in ("outlook", "moodle")}
         
         # Outlook
         outlook_nf_events = {e.external_id: e for e in all_nf_events if e.source == "outlook_calendar"}
-        current_outlook_ids = {e["id"] for e in events if e.get("source") == "outlook"}
         
-        now_iso = datetime.datetime.now().isoformat()
+        current_outlook_ids = set()
+        for e in events:
+            # Event direct
+            if e.get("source") == "outlook":
+                current_outlook_ids.add(e["id"])
+            # Event fusionné (ex: source="google+outlook") qui contient un ID Outlook lié
+            if "linked_outlook_ids" in e:
+                for linked_id in e["linked_outlook_ids"]:
+                    current_outlook_ids.add(linked_id)
         
-        for ext_id, nf_event in google_nf_events.items():
-            if ext_id not in current_google_ids:
-                start_date = nf_event.start or ""
-                if not start_date or start_date > now_iso:
-                    log_auto(f"DEBUG: Deleted Google event detected (id: {ext_id}). Triggering cleanup.")
-                    return True
+        now_dt = datetime.datetime.now()
+        now_iso = now_dt.isoformat()
+        limit_iso = (now_dt + datetime.timedelta(days=30)).isoformat()
         
-        for ext_id, nf_event in outlook_nf_events.items():
-            if ext_id not in current_outlook_ids:
-                start_date = nf_event.start or ""
-                if not start_date or start_date > now_iso:
-                    log_auto(f"DEBUG: Deleted Outlook event detected (id: {ext_id}). Triggering cleanup.")
-                    return True
+        from services.google_service import is_any_connected as google_is_connected
+        from services.microsoft_auth import MicrosoftAuthService
+
+        if google_is_connected():
+            for ext_id, nf_event in google_nf_events.items():
+                if ext_id not in current_google_ids:
+                    start_date = nf_event.start or ""
+                    # On ne signale une suppression que si l'event devrait être dans la fenêtre (30 jours)
+                    if start_date and (now_iso < start_date < limit_iso):
+                        log_auto(f"DEBUG: Deleted Google event detected (id: {ext_id}). Triggering cleanup.")
+                        return True
+        
+        if MicrosoftAuthService.is_any_connected():
+            for ext_id, nf_event in outlook_nf_events.items():
+                if ext_id not in current_outlook_ids:
+                    start_date = nf_event.start or ""
+                    if start_date and (now_iso < start_date < limit_iso):
+                        log_auto(f"DEBUG: Deleted Outlook event detected (id: {ext_id}). Triggering cleanup.")
+                        return True
                 
         return False
     except Exception as e:
@@ -393,11 +431,15 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30, source
                 nf_event.clear_tasks()
                 should_analyze = True
             else:
-                # Mise à jour mineure (ex: updated timestamp changed but content is same, or just a heartbeat)
+                # Mise à jour mineure (ex: updated timestamp changed but content is same)
                 if nf_event.updated != updated:
                     evt_manager.update_event(nf_event.id, {"updated": updated})
-                # Skip AI
-                pass
+                
+                # Vérifier si l'event a été traité mais n'a aucune tâche enfant
+                # (cas: analyse précédente échouée, interrompue, ou tâches supprimées par le nettoyage)
+                if not nf_event.task_ids and description and len(description) > 5:
+                    log_auto(f"🔁 Re-analyse requise pour '{title}' (0 tâches, description non-vide)")
+                    should_analyze = True
 
         if should_analyze:
             # --- BLOC ANALYSE IA ---
@@ -414,7 +456,9 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30, source
                         type="deadline"
                     )
 
-                if description and len(description) > 5:
+                if not description or len(description) <= 5:
+                    log_auto(f"ℹ️ Description trop courte pour {title}")
+                else:
                     prompt = (
                         f"Voici un événement : '{title}'.\n"
                         f"Description de l'événement :\n---\n{description}\n---\n\n"
@@ -434,49 +478,97 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30, source
                     if tasks_found:
                         log_auto(f"✨ {len(tasks_found)} tâches extraites.")
                         for task_title in tasks_found:
-                            # Création de la tâche via TaskManager
                             t_title = task_title.strip()
-                            # Utilisation de l'instance TaskManager
                             new_task_dict = task_manager.add_task(
                                 f"{t_title}", 
                                 priority="high", 
                                 meta=f"📅 {title}", 
                                 parent_event_id=ext_id 
                             )
-                            # Récupération de l'ID depuis le dict retourné
                             new_task_id = new_task_dict["id"]
-                            
-                            # Lier la tâche à l'événement NovaFlow
-                            # En OOP, on appelle la méthode sur l'objet event
-                            nf_event.add_task(new_task_id)
-                            
-                            # Sauvegarder l'état de l'event (add_task modifie l'objet en mémoire, faut persister)
-                            # Note: EventManager.add_task_to_event le fait, mais ici on a l'objet.
-                            # Idéalement 'nf_event.add_task' devrait être suivi d'un save ou être géré par le manager.
-                            # Dans ma refactor EventManager, add_task_to_event fait le job.
-                            # On va utiliser le manager pour être sûr de la persistance immédiate.
                             evt_manager.add_task_to_event(nf_event.id, new_task_id)
-                            
                             new_tasks_count += 1
                     else:
                         log_auto(f"ℹ️ Aucun livrable détecté.")
-                else:
-                    log_auto(f"ℹ️ Description vide ou courte.")
                     
             except Exception as e:
                 log_auto(f"❌ Erreur analyse IA : {e}")
 
-    if new_tasks_count > 0:
-        log_auto(f"✅ Cycle {source_label} terminé. {new_tasks_count} nouvelles tâches.")
-    else:
-        log_auto(f"✅ Cycle {source_label} terminé. Aucun changement majeur.")
+
+# === Microsoft To Do Sync ===
+
+async def sync_microsoft_todo_tasks():
+    """
+    Tâche de fond : Synchronise les tâches Microsoft To Do.
+    Récupère les tâches depuis Graph API et les ajoute/met à jour dans TaskManager.
+    """
+    log_auto("🔄 Sync Microsoft To Do : Démarrage...")
+    from services.microsoft_todo import get_todo_tasks
+    from fastapi.concurrency import run_in_threadpool
+    
+    try:
+        # Exécuter l'appel bloquant requests dans un thread
+        tasks = await run_in_threadpool(get_todo_tasks)
+        
+        if not tasks:
+            log_auto("ℹ️ Aucune tâche To Do ou aucun compte connecté.")
+            return
+
+        count_new = 0
+        count_updated = 0
+        
+        for t_data in tasks:
+            # data from get_todo_tasks: 
+            # {id, title, priority, meta, done, parent_event_id, created_at, source, link, description}
+            
+            # 1. Tenter d'ajouter (dédoublonnage via external_id dans add_task)
+            # Note: add_task retourne le dict de la tâche (nouvelle ou existante)
+            task_result = task_manager.add_task(
+                title=t_data["title"],
+                priority=t_data["priority"],
+                meta=t_data["meta"],
+                parent_event_id=None,
+                external_id=t_data["id"],
+                source="microsoft_todo"
+            )
+            
+            # 2. Vérifier si on doit mettre à jour le statut 'done'
+            # (Si la tâche existait déjà mais que son statut local diffère du remote)
+            # Ici t_data['done'] vient de Microsoft. 
+            # task_result['done'] est la valeur locale.
+            
+            # Simple sync: Remote wins for status
+            if task_result["done"] != t_data["done"]:
+                task_manager.update_task(task_result["id"], {"done": t_data["done"]})
+                count_updated += 1
+            
+            # On pourrait aussi sync le titre si changé, mais attention aux écrasements locaux.
+            # Pour l'instant on sync juste le statut.
+            
+            # Si la tâche a été créée (on check si created_at est très récent ou si on avait pas cet ID avant)
+            # Mais add_task ne dit pas explicitement "created".
+            # On suppose que c'est un flux continu.
+            
+        log_auto(f"✅ Sync To Do terminée : {len(tasks)} tâches scannées ({count_updated} màj statut).")
+        
+    except Exception as e:
+        log_auto(f"❌ Erreur Sync Microsoft To Do : {e}")
+
+
 
 
 async def analyze_all_calendars(days: int = 30):
-    """Analyse les événements de toutes les sources (Google + Outlook)."""
-    await analyze_calendar_for_tasks(events=None, days=days, source="google_calendar")
+    """Analyse les événements de toutes les sources (Google + Outlook + To Do)."""
+    # 1. Google (seulement si connecté)
+    from services.google_service import is_any_connected as google_is_connected
+    if google_is_connected():
+        await analyze_calendar_for_tasks(events=None, days=days, source="google_calendar")
     
-    # Outlook : seulement si au moins un compte est connecté
+    # 2. Outlook (si connecté)
     from services.microsoft_auth import MicrosoftAuthService
     if MicrosoftAuthService.is_any_connected():
         await analyze_calendar_for_tasks(events=None, days=days, source="outlook_calendar")
+
+    # 3. Microsoft To Do (si connecté)
+    # La fonction gère elle-même la vérification des comptes
+    await sync_microsoft_todo_tasks()

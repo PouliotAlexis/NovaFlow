@@ -90,13 +90,37 @@ class MicrosoftAuthService:
             json.dump(token_data, f, indent=2)
 
     def get_token_for_email(self, email):
-        """Retrieves and refreshes token if needed."""
+        """
+        Retrieves and refreshes token if needed.
+        Returns a dict with 'access_token' if successful.
+        """
         token_file = os.path.join(TOKENS_DIR, f"microsoft_{email}.json")
         if not os.path.exists(token_file):
             return None
             
         with open(token_file, "r") as f:
             token_cache = json.load(f)
+        
+        # Check if we have a refresh token to ensure fresh access token
+        refresh_token = token_cache.get("refresh_token")
+        if refresh_token:
+            # Attempt to refresh
+            # Note: MSAL's acquire_token_by_refresh_token handles the logic
+            result = self.app.acquire_token_by_refresh_token(
+                refresh_token,
+                scopes=self.scopes
+            )
+            
+            if "access_token" in result:
+                # Update cache with new tokens (including new refresh token if provided)
+                # Preserve email as it might not be in the refresh response
+                result["email"] = email
+                self._save_token(email, result)
+                return result
+            else:
+                print(f"⚠️ Failed to refresh token for {email}: {result.get('error')}")
+                # Fallback to existing cache (might be expired, but better than nothing)
+                return token_cache
         
         return token_cache
 

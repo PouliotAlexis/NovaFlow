@@ -7,6 +7,9 @@ export default function SettingsPanel() {
     const [profile, setProfile] = useState<"student" | "pro" | "personal">("student");
     const [googleAccounts, setGoogleAccounts] = useState<string[]>([]);
     const [microsoftAccounts, setMicrosoftAccounts] = useState<string[]>([]);
+    const [moodleUrls, setMoodleUrls] = useState<string[]>([]);
+    const [newMoodleUrl, setNewMoodleUrl] = useState<string>("");
+    const [isSavingMoodle, setIsSavingMoodle] = useState(false);
     const prevAccountCount = useRef<number | null>(null);
     const prevMsAccountCount = useRef<number | null>(null);
 
@@ -48,9 +51,58 @@ export default function SettingsPanel() {
         }
     };
 
+    const fetchMoodleSettings = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/settings/moodle`);
+            if (res.ok) {
+                const data = await res.json();
+                setMoodleUrls(data.urls || (data.url ? [data.url] : []));
+            }
+        } catch (err) {
+            console.error("Error fetching Moodle settings:", err);
+        }
+    };
+
+    const addMoodleUrl = async () => {
+        if (!newMoodleUrl.trim()) return;
+        setIsSavingMoodle(true);
+        try {
+            const res = await fetch(`${API_URL}/api/settings/moodle`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: newMoodleUrl.trim() }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setMoodleUrls(data.urls || []);
+                setNewMoodleUrl("");
+                window.dispatchEvent(new CustomEvent("novaflow-account-changed"));
+            }
+        } catch (err) {
+            alert("Erreur lors de l'ajout de l'URL Moodle");
+        }
+        setIsSavingMoodle(false);
+    };
+
+    const removeMoodleUrl = async (url: string) => {
+        try {
+            const res = await fetch(`${API_URL}/api/settings/moodle?url=${encodeURIComponent(url)}`, {
+                method: "DELETE",
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setMoodleUrls(data.urls || []);
+                window.dispatchEvent(new CustomEvent("novaflow-account-changed"));
+            }
+        } catch (err) {
+            alert("Erreur lors de la suppression");
+        }
+    };
+
     useEffect(() => {
         fetchGoogleAccounts();
         fetchMicrosoftAccounts();
+        fetchMoodleSettings();
     }, []);
 
     useEffect(() => {
@@ -232,7 +284,7 @@ export default function SettingsPanel() {
                     {/* Google Section */}
                     <div className="nf-task" style={{ flexDirection: "column", alignItems: "flex-start", gap: "12px" }}>
                         <div style={{ display: "flex", width: "100%", alignItems: "center", gap: "12px" }}>
-                            <span style={{ fontSize: "22px" }}>🔵</span>
+                            <span style={{ width: "22px", height: "22px", display: "inline-flex" }}><svg viewBox="0 0 24 24" width="22" height="22"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" /><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" /><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" /><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" /></svg></span>
                             <div className="nf-task__content">
                                 <div className="nf-task__title">Google</div>
                                 <div className="nf-task__meta">Calendar, Gmail, Drive (Multi-account)</div>
@@ -271,7 +323,7 @@ export default function SettingsPanel() {
                     {/* Microsoft Section */}
                     <div className="nf-task" style={{ flexDirection: "column", alignItems: "flex-start", gap: "12px" }}>
                         <div style={{ display: "flex", width: "100%", alignItems: "center", gap: "12px" }}>
-                            <span style={{ fontSize: "22px" }}>🟦</span>
+                            <span style={{ width: "22px", height: "22px", display: "inline-flex" }}><svg viewBox="0 0 24 24" width="22" height="22"><rect x="1" y="1" width="10" height="10" fill="#F25022" /><rect x="13" y="1" width="10" height="10" fill="#7FBA00" /><rect x="1" y="13" width="10" height="10" fill="#00A4EF" /><rect x="13" y="13" width="10" height="10" fill="#FFB900" /></svg></span>
                             <div className="nf-task__content">
                                 <div className="nf-task__title">Microsoft</div>
                                 <div className="nf-task__meta">Outlook Calendar, To Do, OneDrive</div>
@@ -307,16 +359,72 @@ export default function SettingsPanel() {
                         )}
                     </div>
 
-                    {/* Moodle Placeholder */}
-                    <div className="nf-task">
-                        <span style={{ fontSize: "22px" }}>🟠</span>
-                        <div className="nf-task__content">
-                            <div className="nf-task__title">Moodle</div>
-                            <div className="nf-task__meta">Courses, assignments, grades</div>
+                    {/* Moodle Section */}
+                    <div className="nf-task" style={{ flexDirection: "column", alignItems: "flex-start", gap: "12px" }}>
+                        <div style={{ display: "flex", width: "100%", alignItems: "center", gap: "12px" }}>
+                            <span style={{ width: "22px", height: "22px", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", background: "#f98012", color: "#fff", fontSize: "14px", fontWeight: 700 }}>M</span>
+                            <div className="nf-task__content">
+                                <div className="nf-task__title">Moodle (Via Flux RSS / iCal)</div>
+                                <div className="nf-task__meta">Échéances de devoirs et événements</div>
+                            </div>
                         </div>
-                        <button className="nf-btn nf-btn--ghost" style={{ fontSize: "12px" }}>
-                            Connect
-                        </button>
+
+                        {moodleUrls.length > 0 && (
+                            <div style={{ width: "100%", paddingLeft: "34px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {moodleUrls.map((url, i) => (
+                                    <div key={i} style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        padding: "6px 10px",
+                                        background: "var(--nf-bg-card)",
+                                        borderRadius: "var(--nf-radius-xs)",
+                                        border: "1px solid var(--nf-border)",
+                                        fontSize: "12px"
+                                    }}>
+                                        <span style={{ color: "var(--nf-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
+                                            📅 Calendrier {i + 1} — {url.includes("usherbrooke") ? "UdeS" : url.split("/")[2] || "Moodle"}
+                                        </span>
+                                        <button
+                                            onClick={() => removeMoodleUrl(url)}
+                                            style={{ background: "transparent", border: "none", color: "var(--nf-danger)", cursor: "pointer", fontSize: "11px", fontWeight: 500 }}
+                                        >
+                                            Supprimer
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div style={{ width: "100%", paddingLeft: "34px", display: "flex", gap: "8px", alignItems: "center" }}>
+                            <input
+                                type="text"
+                                value={newMoodleUrl}
+                                onChange={(e) => setNewMoodleUrl(e.target.value)}
+                                placeholder="Collez l'URL d'exportation Moodle (iCal) ici"
+                                onKeyDown={(e) => e.key === "Enter" && addMoodleUrl()}
+                                style={{
+                                    flex: 1,
+                                    padding: "8px 12px",
+                                    borderRadius: "var(--nf-radius-xs)",
+                                    border: "1px solid var(--nf-border)",
+                                    background: "var(--nf-bg-secondary)",
+                                    color: "var(--nf-text)",
+                                    fontSize: "13px"
+                                }}
+                            />
+                            <button
+                                className="nf-btn nf-btn--primary"
+                                style={{ fontSize: "12px", padding: "8px 16px" }}
+                                onClick={addMoodleUrl}
+                                disabled={isSavingMoodle}
+                            >
+                                {isSavingMoodle ? "..." : "Ajouter"}
+                            </button>
+                        </div>
+                        <p style={{ paddingLeft: "34px", fontSize: "11px", color: "var(--nf-text-muted)", margin: 0 }}>
+                            Allez dans Moodle &gt; Calendrier &gt; Exporter le calendrier et collez le lien ci-dessus. Vous pouvez ajouter plusieurs calendriers.
+                        </p>
                     </div>
                 </div>
             </div>

@@ -9,7 +9,6 @@ import os
 import shutil
 from datetime import datetime
 import asyncio
-import os
 import json
 
 # Ajouter le dossier backend au path pour les imports
@@ -197,7 +196,7 @@ async def chat_endpoint(request: ChatRequest):
         
         for task_title in tasks_to_create:
             print(f"✨ AI Action: Creating task '{task_title}'")
-            add_task(title=task_title, priority="medium", meta="AI Generated")
+            task_manager.add_task(title=task_title, priority="medium", meta="AI Generated")
             # Remplacer la commande par une confirmation visible
             ai_response = ai_response.replace(f"[TASK: {task_title}]", f"✅ Tâche '{task_title}' ajoutée.")
 
@@ -270,7 +269,7 @@ async def upload_document(
     
     # ⚡ AUTOMATION: Lancer l'analyse en tant que Job tracké
     if result["status"] == "analyzed":
-        start_job(
+        await start_job(
             f"Analyse doc: {result['file_name']}",
             analyze_document_for_tasks(
                 doc_id=result["doc_id"], 
@@ -328,6 +327,85 @@ def get_settings():
     }
 
 
+# === Moodle Settings ===
+
+MOODLE_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "moodle_settings.json")
+
+def _load_moodle_urls() -> list:
+    """Charge les URLs Moodle. Compatible ancien format {url} et nouveau {urls}."""
+    if os.path.exists(MOODLE_SETTINGS_FILE):
+        try:
+            with open(MOODLE_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "urls" in data:
+                    return [u for u in data["urls"] if u]
+                old_url = data.get("url", "")
+                if old_url:
+                    return [old_url]
+        except Exception:
+            pass
+    return []
+
+def _save_moodle_urls(urls: list):
+    with open(MOODLE_SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"urls": urls}, f, indent=2)
+
+@app.get("/api/settings/moodle")
+def get_moodle_settings():
+    urls = _load_moodle_urls()
+    return {"urls": urls, "url": urls[0] if urls else ""}
+
+class MoodleAddUrl(BaseModel):
+    url: str
+
+@app.post("/api/settings/moodle")
+def save_moodle_settings(settings: MoodleAddUrl):
+    urls = _load_moodle_urls()
+    if settings.url and settings.url not in urls:
+        urls.append(settings.url)
+    _save_moodle_urls(urls)
+    return {"status": "success", "urls": urls}
+
+@app.delete("/api/settings/moodle")
+def delete_moodle_url(url: str):
+    urls = _load_moodle_urls()
+    urls = [u for u in urls if u != url]
+    _save_moodle_urls(urls)
+    return {"status": "success", "urls": urls}
+
+@app.post("/api/settings/moodle/test")
+def test_moodle_url():
+    """Teste toutes les URLs Moodle configurées."""
+    urls = _load_moodle_urls()
+    if not urls:
+        return {"status": "error", "message": "Aucune URL Moodle configurée.", "events_count": 0}
+    
+    import requests as req
+    from services.moodle_rss_service import get_moodle_events
+    
+    total_events = 0
+    errors = []
+    for url in urls:
+        try:
+            r = req.get(url, timeout=15, allow_redirects=True, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NovaFlow/1.0"
+            })
+            if r.status_code != 200:
+                errors.append(f"HTTP {r.status_code}")
+                continue
+            events = get_moodle_events(url, days=30)
+            total_events += len(events)
+        except Exception as e:
+            errors.append(str(e)[:50])
+    
+    if total_events > 0:
+        msg = f"{total_events} événements trouvés sur {len(urls)} calendrier(s)."
+        return {"status": "ok", "message": msg, "events_count": total_events}
+    elif errors:
+        return {"status": "error", "message": " | ".join(errors), "events_count": 0}
+    else:
+        return {"status": "warning", "message": "Aucun événement dans les 30 prochains jours.", "events_count": 0}
+
 # === Google Calendar OAuth ===
 
 @app.get("/api/auth/google/login")
@@ -362,19 +440,12 @@ def google_status():
     return {"connected": google_is_connected()}
 
 
-@app.get("/api/auth/google/accounts")
-def google_accounts_list():
-    """Liste les comptes Google connectés."""
-    return {"accounts": list_connected_accounts()}
-
 @app.get("/api/auth/google/disconnect")
 def google_disconnect_all():
     """Déconnecte TOUS les comptes Google (pour compatibilité)."""
     accounts = list_connected_accounts()
     for acc in accounts:
         google_disconnect(acc)
-    return {"status": "all_disconnected"}
-
     return {"status": "all_disconnected"}
 
 
@@ -523,20 +594,57 @@ def clear_user_notifications():
     notif_manager.clear_all_notifications()
     return {"status": "cleared"}
 
+# === Event Status (remis/done) ===
+
+EVENT_STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "event_status.json")
+
+def _load_event_status() -> dict:
+    if os.path.exists(EVENT_STATUS_FILE):
+        try:
+            with open(EVENT_STATUS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def _save_event_status(data: dict):
+    with open(EVENT_STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+@app.patch("/api/calendar/events/{event_id}/toggle")
+def toggle_event_done(event_id: str):
+    """Toggle le statut 'remis' d'un événement (ex: devoir Moodle)."""
+    status = _load_event_status()
+    current = status.get(event_id, False)
+    status[event_id] = not current
+    _save_event_status(status)
+    return {"id": event_id, "done": status[event_id]}
+
+@app.get("/api/calendar/event-status")
+def get_event_status():
+    """Retourne le statut de tous les événements marqués."""
+    return _load_event_status()
+
 
 # === Google Calendar Events ===
 
 @app.get("/api/calendar/events")
 async def calendar_events(days: int = 30):
     """Récupère les événements unifiés (Google + Outlook + Tâches locales) pour les X prochains jours."""
+    import traceback
     from services.calendar_aggregator import get_unified_events
     from services.microsoft_auth import MicrosoftAuthService
     
     if not google_is_connected() and not MicrosoftAuthService.is_any_connected():
         raise HTTPException(status_code=401, detail="Aucun calendrier connecté.")
     
-    # Exécuter l'appel dans un threadpool pour l'agrégation
-    events = await run_in_threadpool(get_unified_events, days=days)
+    try:
+        # Exécuter l'appel dans un threadpool pour l'agrégation
+        events = await run_in_threadpool(get_unified_events, days=days)
+    except Exception as e:
+        print(f"💥 CRASH in get_unified_events: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erreur récupération calendrier: {str(e)}")
     
     # ⚡ AUTOMATION — Déclencher l'analyse IA si de nouveaux events sont détectés
     # NOTE: L'analyse se fait TOUJOURS sur la plage complète (30j), peu importe le `days` demandé par le frontend.
@@ -545,7 +653,7 @@ async def calendar_events(days: int = 30):
         existing_jobs = get_active_jobs()
         is_running = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
         if not is_running and has_new_events(events):
-             start_job("Analyse Calendrier", analyze_all_calendars(days=30))
+             await start_job("Analyse Calendrier", analyze_all_calendars(days=30))
     except Exception as e:
         print(f"Erreur déclenchement automation calendrier: {e}")
 
@@ -562,6 +670,25 @@ def calendar_today():
     events = get_today_events()
     return {"events": events, "count": len(events)}
 
+
+
+@app.post("/api/sync")
+async def trigger_sync(background_tasks: BackgroundTasks):
+    """Déclenche une synchronisation complète (Calendriers + To Do)."""
+    from services.automation import analyze_all_calendars, sync_microsoft_todo_tasks, start_job
+    
+    # On lance les deux jobs
+    background_tasks.add_task(start_job, "Analyse Calendrier", analyze_all_calendars)
+    background_tasks.add_task(start_job, "Sync To Do", sync_microsoft_todo_tasks)
+    
+    return {"status": "Sync started"}
+
+@app.post("/api/sync/todo")
+async def trigger_todo_sync(background_tasks: BackgroundTasks):
+    """Déclenche uniquement la synchro Microsoft To Do."""
+    from services.automation import sync_microsoft_todo_tasks, start_job
+    background_tasks.add_task(start_job, "Sync To Do", sync_microsoft_todo_tasks)
+    return {"status": "To Do Sync started"}
 
 @app.post("/api/maintenance/reset")
 def maintenance_reset():

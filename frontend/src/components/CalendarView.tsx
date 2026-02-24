@@ -17,6 +17,7 @@ interface CalendarEvent {
     id: string;
     title: string;
     date: string;
+    end_date?: string;
     time: string;
     end_time?: string;
     type: "exam" | "deadline" | "meeting" | "personal";
@@ -26,6 +27,8 @@ interface CalendarEvent {
     link?: string;
     accounts?: string[];
     source?: string;
+    category?: string;
+    done?: boolean;
     tasks: Task[];
 }
 
@@ -53,13 +56,14 @@ function getFirstDayOfMonth(year: number, month: number) {
 function guessEventType(title: string): "exam" | "deadline" | "meeting" | "personal" {
     const lower = title.toLowerCase();
     if (lower.includes("exam") || lower.includes("intra") || lower.includes("final") || lower.includes("quiz") || lower.includes("test")) return "exam";
-    if (lower.includes("remise") || lower.includes("deadline") || lower.includes("date limite") || lower.includes("tp")) return "deadline";
+    if (lower.includes("remise") || lower.includes("deadline") || lower.includes("date limite") || lower.includes("tp") || lower.includes("devoir") || lower.includes("doit être rendu")) return "deadline";
     if (lower.includes("réunion") || lower.includes("meeting") || lower.includes("rencontre") || lower.includes("équipe")) return "meeting";
     return "personal";
 }
 
 function parseUnifiedEvent(event: any): CalendarEvent {
     const startDate = event.start.split("T")[0];
+    const endDate = event.end ? event.end.split("T")[0] : startDate;
     const startTime = event.all_day ? "Journée" : new Date(event.start).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
     const endTime = event.all_day ? "" : new Date(event.end).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
     const type = guessEventType(event.title);
@@ -68,6 +72,7 @@ function parseUnifiedEvent(event: any): CalendarEvent {
         id: event.id,
         title: event.title,
         date: startDate,
+        end_date: endDate !== startDate ? endDate : undefined,
         time: startTime,
         end_time: endTime,
         type,
@@ -77,6 +82,8 @@ function parseUnifiedEvent(event: any): CalendarEvent {
         link: event.link,
         accounts: event.accounts,
         source: event.source,
+        category: event.category,
+        done: false,
         tasks: event.tasks || []
     };
 }
@@ -89,6 +96,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [googleAccounts, setGoogleAccounts] = useState<string[]>([]);
     const [microsoftAccounts, setMicrosoftAccounts] = useState<string[]>([]);
+    const [moodleUrls, setMoodleUrls] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAccountsDropdown, setShowAccountsDropdown] = useState(false);
 
@@ -114,16 +122,33 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                 if ((data.accounts || []).length > 0) hasAny = true;
             }
         } catch { }
+        try {
+            const res = await fetch(`${API_URL}/api/settings/moodle`);
+            if (res.ok) {
+                const data = await res.json();
+                const urls = data.urls || (data.url ? [data.url] : []);
+                setMoodleUrls(urls);
+                if (urls.length > 0) hasAny = true;
+            }
+        } catch { }
         return hasAny;
     }, []);
 
-    // Récupérer les événements
+    // Récupérer les événements + statuts de soumission
     const fetchEvents = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/calendar/events?days=30`);
-            if (!res.ok) return;
-            const data = await res.json();
-            const parsed = (data.events || []).map(parseUnifiedEvent);
+            const [eventsRes, statusRes] = await Promise.all([
+                fetch(`${API_URL}/api/calendar/events?days=30`),
+                fetch(`${API_URL}/api/calendar/event-status`)
+            ]);
+            if (!eventsRes.ok) return;
+            const data = await eventsRes.json();
+            const statusData = statusRes.ok ? await statusRes.json() : {};
+            const parsed = (data.events || []).map((e: any) => {
+                const evt = parseUnifiedEvent(e);
+                evt.done = !!statusData[evt.id];
+                return evt;
+            });
             setEvents(parsed);
         } catch {
             console.error("Erreur récupération événements");
@@ -212,11 +237,22 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
 
         try {
             await fetch(`${API_URL}/api/tasks/${taskId}/toggle`, { method: "PATCH" });
-            // Notifier les autres composants (TaskList) du changement
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
             console.error("Erreur toggle tâche:", error);
-            fetchEvents(); // Rollback if error
+            fetchEvents();
+        }
+    };
+
+    const toggleEventDone = async (eventId: string) => {
+        setEvents(prev => prev.map(evt =>
+            evt.id === eventId ? { ...evt, done: !evt.done } : evt
+        ));
+        try {
+            await fetch(`${API_URL}/api/calendar/events/${encodeURIComponent(eventId)}/toggle`, { method: "PATCH" });
+        } catch (error) {
+            console.error("Erreur toggle event:", error);
+            fetchEvents();
         }
     };
 
@@ -233,7 +269,11 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
     const formatDate = (day: number) =>
         `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-    const getEventsForDate = (dateStr: string) => events.filter((e) => e.date === dateStr);
+    const getEventsForDate = (dateStr: string) => events.filter((e) => {
+        if (e.date === dateStr) return true;
+        if (e.end_date && dateStr >= e.date && dateStr <= e.end_date) return true;
+        return false;
+    });
 
     const isToday = (day: number) =>
         day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
@@ -242,7 +282,14 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
         .filter((e) => {
             const eventDate = new Date(e.date);
             const diff = (eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-            return diff >= -1 && diff <= 14;
+            if (diff >= -1 && diff <= 14) return true;
+            // Include multi-day events that span into the visible range
+            if (e.end_date) {
+                const endDate = new Date(e.end_date);
+                const todayStr = today.toISOString().split("T")[0];
+                if (todayStr >= e.date && todayStr <= e.end_date) return true;
+            }
+            return false;
         })
         .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -259,14 +306,14 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                 <div className="nf-card__header">
                     <span className="nf-card__title">📅 {MONTHS_FR[currentMonth]} {currentYear}</span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        {(googleAccounts.length + microsoftAccounts.length) > 0 ? (
+                        {(googleAccounts.length + microsoftAccounts.length + moodleUrls.length) > 0 ? (
                             <div style={{ position: "relative" }}>
                                 <span
                                     className="nf-card__badge nf-card__badge--success"
                                     style={{ cursor: "pointer", userSelect: "none" }}
                                     onClick={() => setShowAccountsDropdown(!showAccountsDropdown)}
                                 >
-                                    ✅ {googleAccounts.length + microsoftAccounts.length} compte{(googleAccounts.length + microsoftAccounts.length) > 1 ? "s" : ""} connecté{(googleAccounts.length + microsoftAccounts.length) > 1 ? "s" : ""}
+                                    ✅ {googleAccounts.length + microsoftAccounts.length + moodleUrls.length} compte{(googleAccounts.length + microsoftAccounts.length + moodleUrls.length) > 1 ? "s" : ""} connecté{(googleAccounts.length + microsoftAccounts.length + moodleUrls.length) > 1 ? "s" : ""}
                                 </span>
                                 {showAccountsDropdown && (
                                     <div className="nf-card nf-animate-in" style={{
@@ -292,7 +339,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                                     borderBottom: "1px solid var(--nf-border-dim)",
                                                     fontSize: "12px"
                                                 }}>
-                                                    <span style={{ fontSize: "16px" }}>🔵</span>
+                                                    <span style={{ width: "16px", height: "16px", display: "inline-flex" }}><svg viewBox="0 0 24 24" width="16" height="16"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" /><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" /><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" /><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" /></svg></span>
                                                     <span style={{ color: "var(--nf-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
                                                 </li>
                                             ))}
@@ -305,10 +352,32 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                                     borderBottom: "1px solid var(--nf-border-dim)",
                                                     fontSize: "12px"
                                                 }}>
-                                                    <span style={{ fontSize: "16px" }}>🟦</span>
+                                                    <span style={{ width: "16px", height: "16px", display: "inline-flex" }}><svg viewBox="0 0 24 24" width="16" height="16"><rect x="1" y="1" width="10" height="10" fill="#F25022" /><rect x="13" y="1" width="10" height="10" fill="#7FBA00" /><rect x="1" y="13" width="10" height="10" fill="#00A4EF" /><rect x="13" y="13" width="10" height="10" fill="#FFB900" /></svg></span>
                                                     <span style={{ color: "var(--nf-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</span>
                                                 </li>
                                             ))}
+                                            {moodleUrls.map((mUrl, i) => {
+                                                let label = "Moodle";
+                                                try {
+                                                    const host = new URL(mUrl).hostname;
+                                                    const parts = host.split(".");
+                                                    if (parts.length >= 2) label = parts[parts.length - 2];
+                                                    label = label.charAt(0).toUpperCase() + label.slice(1);
+                                                } catch { }
+                                                return (
+                                                    <li key={i} style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: "8px",
+                                                        padding: "6px 0",
+                                                        borderBottom: "1px solid var(--nf-border-dim)",
+                                                        fontSize: "12px"
+                                                    }}>
+                                                        <span style={{ width: "16px", height: "16px", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "3px", background: "#f98012", color: "#fff", fontSize: "11px", fontWeight: 700 }}>M</span>
+                                                        <span style={{ color: "var(--nf-text)" }}>Moodle — {label}</span>
+                                                    </li>
+                                                );
+                                            })}
                                         </ul>
                                         <button
                                             className="nf-btn nf-btn--ghost"
@@ -468,7 +537,10 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                     <React.Fragment key={evt.id}>
                                         <div
                                             className="nf-task"
-                                            style={{ cursor: evt.link ? "pointer" : "default" }}
+                                            style={{
+                                                cursor: evt.link ? "pointer" : "default",
+                                                opacity: evt.done ? 0.5 : 1,
+                                            }}
                                             onClick={() => evt.link && window.open(evt.link, "_blank")}
                                         >
                                             <div style={{
@@ -479,18 +551,56 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                                 background: EVENT_COLORS[evt.type]?.text || "var(--nf-text-muted)",
                                             }} />
                                             <div className="nf-task__content">
-                                                <div className="nf-task__title">{evt.title}</div>
+                                                <div className="nf-task__title" style={{
+                                                    textDecoration: evt.done ? "line-through" : "none",
+                                                }}>{evt.title}</div>
                                                 <div className="nf-task__meta">
-                                                    {evt.time}{evt.end_time ? ` → ${evt.end_time}` : ""}
+                                                    {evt.end_date ? (
+                                                        <>
+                                                            {new Date(evt.date + "T00:00").toLocaleDateString("fr-CA", { day: "numeric", month: "short" })}
+                                                            {evt.time !== "Journée" ? ` ${evt.time}` : ""}
+                                                            {" → "}
+                                                            {new Date(evt.end_date + "T00:00").toLocaleDateString("fr-CA", { day: "numeric", month: "short" })}
+                                                            {evt.end_time && evt.end_time !== evt.time ? ` ${evt.end_time}` : ""}
+                                                        </>
+                                                    ) : (
+                                                        <>{evt.time}{evt.end_time && evt.end_time !== evt.time ? ` → ${evt.end_time}` : ""}</>
+                                                    )}
                                                     {evt.location ? ` · 📍 ${evt.location}` : ""}
                                                 </div>
+                                                {evt.category && evt.category !== "Événements de site" && (
+                                                    <div style={{ fontSize: "11px", color: "var(--nf-accent)", marginTop: "2px" }}>
+                                                        📚 {evt.category}
+                                                    </div>
+                                                )}
                                                 {evt.accounts && (
                                                     <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "4px" }}>
                                                         👤 {evt.accounts.join(" · ")}
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className={`nf-task__priority nf-task__priority--${evt.priority}`} />
+                                            {evt.source?.includes("moodle") && evt.title.toLowerCase().includes("doit être rendu") && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleEventDone(evt.id); }}
+                                                    style={{
+                                                        padding: "4px 10px",
+                                                        fontSize: "11px",
+                                                        fontWeight: 600,
+                                                        borderRadius: "6px",
+                                                        border: "none",
+                                                        cursor: "pointer",
+                                                        whiteSpace: "nowrap",
+                                                        background: evt.done ? "rgba(34, 197, 94, 0.2)" : "rgba(124, 92, 252, 0.15)",
+                                                        color: evt.done ? "var(--nf-success)" : "var(--nf-accent)",
+                                                        transition: "all 0.2s ease",
+                                                    }}
+                                                >
+                                                    {evt.done ? "Remis ✓" : "Marquer remis"}
+                                                </button>
+                                            )}
+                                            {!evt.source?.includes("moodle") && (
+                                                <div className={`nf-task__priority nf-task__priority--${evt.priority}`} />
+                                            )}
                                         </div>
 
                                         {evt.tasks && evt.tasks.length > 0 && (

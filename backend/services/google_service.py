@@ -6,7 +6,7 @@ Gère l'authentification OAuth2, Google Calendar et Google Drive pour plusieurs 
 
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict
 
 from google.oauth2.credentials import Credentials
@@ -200,7 +200,7 @@ def get_upcoming_events(days: int = 30, max_results: int = 250) -> List[Dict]:
                                     dt = datetime.fromisoformat(start)
                                 
                                 # Convertir en UTC
-                                dt_utc = dt.astimezone(datetime.timezone.utc)
+                                dt_utc = dt.astimezone(timezone.utc)
                                 clean_start = dt_utc.strftime("%Y-%m-%dT%H:%M:%S")
                             except Exception:
                                 # Fallback au slice si erreur de parsing (très robuste)

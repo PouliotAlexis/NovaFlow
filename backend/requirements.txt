@@ -20,3 +20,9 @@ msal
 
 
 
+
+feedparser
+python-dateutil
+bs4
+
+icalendar
