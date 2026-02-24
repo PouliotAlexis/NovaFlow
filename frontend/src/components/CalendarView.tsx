@@ -63,7 +63,16 @@ function guessEventType(title: string): "exam" | "deadline" | "meeting" | "perso
 
 function parseUnifiedEvent(event: any): CalendarEvent {
     const startDate = event.start.split("T")[0];
-    const endDate = event.end ? event.end.split("T")[0] : startDate;
+    let endDate = event.end ? event.end.split("T")[0] : startDate;
+
+    // For all-day events, the 'end' date is typically the start of the next day (exclusive).
+    // We adjust it back by one day so a single all-day event doesn't show as a multi-day event.
+    if (event.all_day && event.end && endDate !== startDate) {
+        const d = new Date(event.end);
+        d.setDate(d.getDate() - 1);
+        endDate = d.toISOString().split("T")[0];
+    }
+
     const startTime = event.all_day ? "Journée" : new Date(event.start).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
     const endTime = event.all_day ? "" : new Date(event.end).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
     const type = guessEventType(event.title);
