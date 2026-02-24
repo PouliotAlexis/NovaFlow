@@ -3,7 +3,7 @@ from difflib import SequenceMatcher
 from services.google_service import get_upcoming_events
 from services.microsoft_calendar import get_outlook_events
 from services.moodle_rss_service import get_moodle_events
-from services.moodle_extension_service import get_moodle_extension_events
+from services.moodle_extension_service import get_moodle_extension_events, get_moodle_extension_courses
 from services.task_manager import TaskManager
 import os
 import json
@@ -89,6 +89,22 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
         moodle_ext_events = get_moodle_extension_events()
     except Exception as e:
         print(f"Erreur Moodle Extension: {e}")
+
+    # Créer un dictionnaire parfait pour mapper les codes de cours (ex: "PHQ202") vers leur nom complet
+    course_code_to_name = {}
+    try:
+        ext_courses = get_moodle_extension_courses()
+        for course in ext_courses:
+            shortname = course.get("shortname", "")
+            fullname = course.get("fullname", "")
+            if shortname and fullname:
+                # Stocker le shortname exact (ex: "PHQ334-AB")
+                course_code_to_name[shortname] = fullname
+                # Stocker aussi le code de base pour la robustesse (ex: "PHQ334")
+                base_code = shortname.split('-')[0]
+                course_code_to_name[base_code] = fullname
+    except Exception as e:
+        print(f"Erreur chargement des cours Moodle Extension: {e}")
 
     # 5. Récupérer toutes les tâches NovaFlow
     tm = TaskManager.instance()
@@ -179,6 +195,15 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
         start = m_event.get("start", "")
         dk = _dedup_key(title, start)
 
+        # Essayer d'enrichir la catégorie de l'événement Moodle (iCal) avec le nom complet de l'extension
+        current_cat = m_event.get("category", "")
+        if current_cat:
+            # Chercher si un code de cours connu est dans la catégorie iCal (ex: "PHQ202" dans "Automne 2024-PHQ202")
+            for code, full_name in course_code_to_name.items():
+                if code in current_cat or code in title:
+                    m_event["category"] = full_name
+                    break
+
         if dk in dedup_index:
             existing = dedup_index[dk]
             if "moodle" not in existing["source"]:
@@ -186,6 +211,9 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
             for acct in m_event.get("accounts", []):
                 if acct not in existing["accounts"]:
                     existing["accounts"].append(acct)
+            # Mettre à jour la catégorie si on a trouvé un meilleur nom
+            if m_event.get("category") and (not existing.get("category") or len(m_event.get("category")) > len(existing.get("category"))):
+                existing["category"] = m_event.get("category")
         else:
             unified_event = m_event.copy()
             unified_event["tasks"] = tasks_by_event.get(event_id, [])

@@ -380,6 +380,7 @@ class MoodleExtensionSync(BaseModel):
     source: str
     timestamp: str
     events: list[Dict[str, Any]]
+    courses: Optional[list[Dict[str, Any]]] = []
 
 @app.post("/api/moodle/sync")
 def sync_moodle_events(payload: MoodleExtensionSync):

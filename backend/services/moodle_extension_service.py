@@ -4,6 +4,7 @@ from datetime import datetime
 
 # Où sauvegarder les événements Moodle envoyés par l'extension
 MOODLE_EXT_EVENTS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "moodle_ext_events.json")
+MOODLE_EXT_COURSES_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "moodle_ext_courses.json")
 
 def _ensure_data_dir():
     os.makedirs(os.path.dirname(MOODLE_EXT_EVENTS_FILE), exist_ok=True)
@@ -23,7 +24,25 @@ def _save_ext_events(events):
     with open(MOODLE_EXT_EVENTS_FILE, "w", encoding="utf-8") as f:
         json.dump(events, f, indent=2, ensure_ascii=False)
 
+def _save_ext_courses(courses):
+    _ensure_data_dir()
+    with open(MOODLE_EXT_COURSES_FILE, "w", encoding="utf-8") as f:
+        json.dump(courses, f, indent=2, ensure_ascii=False)
+
+def _load_ext_courses():
+    if os.path.exists(MOODLE_EXT_COURSES_FILE):
+        try:
+            with open(MOODLE_EXT_COURSES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
 def process_extension_payload(payload: dict) -> dict:
+    courses = payload.get("courses", [])
+    if courses:
+        _save_ext_courses(courses)
+
     events = payload.get("events", [])
     if not events:
         return {"status": "success", "message": "Aucun événement", "inserted": 0}
@@ -95,3 +114,7 @@ def process_extension_payload(payload: dict) -> dict:
 def get_moodle_extension_events() -> list:
     """Fonction appelée par calendar_aggregator pour récupérer les événements."""
     return _load_ext_events()
+
+def get_moodle_extension_courses() -> list:
+    """Fonction appelée par calendar_aggregator pour récupérer le dictionnaire parfait de cours."""
+    return _load_ext_courses()
