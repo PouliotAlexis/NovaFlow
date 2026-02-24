@@ -1,0 +1,32 @@
+{
+    "manifest_version": 3,
+    "name": "NovaFlow Moodle Sync",
+    "version": "1.0",
+    "description": "Extrait les données (chronologie, événements) de ton Moodle et les envoie automatiquement à ton NovaFlow local.",
+    "permissions": [
+        "storage",
+        "activeTab"
+    ],
+    "host_permissions": [
+        "*://*/*",
+        "http://localhost:8000/*"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "NovaFlow Moodle Sync"
+    }
+}

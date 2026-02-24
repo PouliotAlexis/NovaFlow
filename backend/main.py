@@ -373,6 +373,19 @@ def delete_moodle_url(url: str):
     _save_moodle_urls(urls)
     return {"status": "success", "urls": urls}
 
+# === Extension Moodle ===
+from typing import Any, Dict
+
+class MoodleExtensionSync(BaseModel):
+    source: str
+    timestamp: str
+    events: list[Dict[str, Any]]
+
+@app.post("/api/moodle/sync")
+def sync_moodle_events(payload: MoodleExtensionSync):
+    from services.moodle_extension_service import process_extension_payload
+    return process_extension_payload(payload.model_dump())
+
 @app.post("/api/settings/moodle/test")
 def test_moodle_url():
     """Teste toutes les URLs Moodle configurées."""

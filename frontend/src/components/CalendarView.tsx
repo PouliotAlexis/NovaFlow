@@ -575,9 +575,9 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                                     ) : (
                                                         <>{evt.time}{evt.end_time && evt.end_time !== evt.time ? ` → ${evt.end_time}` : ""}</>
                                                     )}
-                                                    {evt.location ? ` · 📍 ${evt.location}` : ""}
+                                                    {evt.location && !evt.source?.includes("moodle") ? ` · 📍 ${evt.location}` : ""}
                                                 </div>
-                                                {evt.category && evt.category !== "Événements de site" && (
+                                                {evt.category && evt.category !== "Événements de site" && evt.category !== "Général" && (
                                                     <div style={{ fontSize: "11px", color: "var(--nf-accent)", marginTop: "2px" }}>
                                                         📚 {evt.category}
                                                     </div>
@@ -706,12 +706,12 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                                     <>{evt.time}{evt.end_time && evt.end_time !== evt.time ? ` → ${evt.end_time}` : ""}</>
                                                 )}
                                             </div>
-                                            {evt.location && (
+                                            {evt.location && !evt.source?.includes("moodle") && (
                                                 <div style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginTop: "2px" }}>
                                                     📍 {evt.location}
                                                 </div>
                                             )}
-                                            {evt.category && evt.category !== "Événements de site" && (
+                                            {evt.category && evt.category !== "Événements de site" && evt.category !== "Général" && (
                                                 <div style={{ fontSize: "11px", color: "var(--nf-accent)", marginTop: "2px" }}>
                                                     📚 {evt.category}
                                                 </div>

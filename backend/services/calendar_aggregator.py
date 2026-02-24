@@ -3,6 +3,7 @@ from difflib import SequenceMatcher
 from services.google_service import get_upcoming_events
 from services.microsoft_calendar import get_outlook_events
 from services.moodle_rss_service import get_moodle_events
+from services.moodle_extension_service import get_moodle_extension_events
 from services.task_manager import TaskManager
 import os
 import json
@@ -82,11 +83,18 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
         except Exception as e:
             print(f"Erreur récupération Moodle: {e}")
 
-    # 4. Récupérer toutes les tâches NovaFlow
+    # 4. Récupérer les événements de l'Extension Naviguateur Moodle
+    moodle_ext_events = []
+    try:
+        moodle_ext_events = get_moodle_extension_events()
+    except Exception as e:
+        print(f"Erreur Moodle Extension: {e}")
+
+    # 5. Récupérer toutes les tâches NovaFlow
     tm = TaskManager.instance()
     all_tasks = tm.get_all_tasks()
     
-    # 4. Organiser les tâches par parent_event_id pour un accès rapide
+    # 6. Organiser les tâches par parent_event_id pour un accès rapide
     tasks_by_event = {}
     for task in all_tasks:
         parent_id = task.get("parent_event_id")
@@ -184,7 +192,30 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
             dedup_index[dk] = unified_event
             unified_events.append(unified_event)
 
-    # 8. Trier par date de début
+    # 8. Ajouter les événements de l'Extension Moodle
+    for ext_evt in moodle_ext_events:
+        event_id = ext_evt["id"]
+        title = ext_evt.get("title", "Sans titre")
+        start = ext_evt.get("start", "")
+        dk = _dedup_key(title, start)
+
+        if dk in dedup_index:
+            existing = dedup_index[dk]
+            if "extension" not in str(existing.get("source")):
+                existing["source"] = f"{existing.get('source', '')}+moodle_extension"
+            for acct in ext_evt.get("accounts", []):
+                if acct not in existing.get("accounts", []):
+                    existing["accounts"].append(acct)
+            # Favorise le lien de l'extension car il est direct vers le devoir
+            if ext_evt.get("link"):
+                existing["link"] = ext_evt.get("link")
+        else:
+            unified_event = ext_evt.copy()
+            unified_event["tasks"] = tasks_by_event.get(event_id, [])
+            dedup_index[dk] = unified_event
+            unified_events.append(unified_event)
+
+    # 9. Trier par date de début
     unified_events.sort(key=lambda x: x["start"] or "")
     
     return unified_events
