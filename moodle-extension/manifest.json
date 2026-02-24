@@ -5,7 +5,8 @@
     "description": "Extrait les données (chronologie, événements) de ton Moodle et les envoie automatiquement à ton NovaFlow local.",
     "permissions": [
         "storage",
-        "activeTab"
+        "activeTab",
+        "alarms"
     ],
     "host_permissions": [
         "*://*/*",

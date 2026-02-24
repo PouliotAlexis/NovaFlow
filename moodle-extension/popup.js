@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusBox = document.getElementById('statusBox');
 
     // Charger l'état depuis le background storage
-    chrome.storage.local.get(['lastSyncTime', 'lastSyncCount', 'syncStatus', 'queuedEvents'], (data) => {
+    chrome.storage.local.get(['lastSyncTime', 'lastSyncCount', 'syncStatus', 'moodleSesskey'], (data) => {
         if (data.lastSyncTime) {
             syncDateEl.textContent = data.lastSyncTime;
         }
@@ -18,25 +18,30 @@ document.addEventListener('DOMContentLoaded', () => {
             syncStateEl.textContent = 'Succès';
             statusBox.className = 'status status-success';
         } else if (data.syncStatus === 'failed') {
-            const queueCount = data.queuedEvents ? data.queuedEvents.length : 0;
-            syncStateEl.textContent = `Serveur introuvable (${queueCount} en cache)`;
+            syncStateEl.textContent = `Serveur distant injoignable`;
+            statusBox.className = 'status status-failed';
+        }
+
+        // Si l'utilisateur n'a jamais ouvert Moodle, on lui indique
+        if (!data.moodleSesskey) {
+            syncStateEl.textContent = "Aucune session Moodle trouvée";
             statusBox.className = 'status status-failed';
         }
     });
 
     document.getElementById('btnRetry').addEventListener('click', () => {
-        chrome.storage.local.get(['queuedEvents'], (data) => {
-            if (data.queuedEvents && data.queuedEvents.length > 0) {
+        chrome.storage.local.get(['moodleSesskey'], (data) => {
+            if (data.moodleSesskey) {
                 // Envoyer un message au background pour forcer l'essai
-                chrome.runtime.sendMessage({
-                    action: "SYNC_MOODLE_EVENTS",
-                    data: data.queuedEvents
-                });
+                chrome.runtime.sendMessage({ action: "FORCE_BACKGROUND_SYNC" });
 
-                syncStateEl.textContent = 'Nouvel essai...';
+                syncStateEl.textContent = 'Synchronisation en cours...';
                 statusBox.className = 'status status-pending';
+
+                // Rafraichir l'interface après 2 secondes pour voir le résultat
+                setTimeout(() => window.location.reload(), 2000);
             } else {
-                alert("Aucun événement local en cache ! Ouvre d'abord ton onglet Moodle.");
+                alert("Impossible de synchroniser : Ouvre d'abord un onglet Moodle pour capturer ta session !");
             }
         });
     });
