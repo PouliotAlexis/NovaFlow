@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from datetime import datetime
 
 # Où sauvegarder les événements Moodle envoyés par l'extension
@@ -38,14 +39,64 @@ def _load_ext_courses():
             pass
     return []
 
+def process_moodle_files(downloaded_files: list):
+    """
+    Checks if the files sent by the extension exist in the Downloads folder
+    and moves them to the permanent NovaFlow_Courses directory.
+    """
+    if not downloaded_files:
+        return 0
+        
+    from core.config import settings
+    
+    downloads_dir = os.path.expanduser("~/Downloads")
+    target_base = settings.MOODLE_DOWNLOADS_DESTINATION
+    
+    moved_count = 0
+    
+    for relative_path in downloaded_files:
+        # relative_path is something like "NovaFlow_Moodle/CourseA/Section1/File.pdf"
+        # We only want to process files originating from NovaFlow_Moodle
+        if not relative_path.startswith("NovaFlow_Moodle"):
+            continue
+            
+        source_path = os.path.join(downloads_dir, relative_path)
+        
+        # Check if the file is fully downloaded
+        if os.path.exists(source_path):
+            # Also check if it's currently being downloaded (Chrome uses .crdownload)
+            if os.path.exists(source_path + ".crdownload"):
+                continue # Skip for now, will get picked up next sync
+                
+            # Determine target path
+            # Remove "NovaFlow_Moodle/" from the start to avoid redundant nesting
+            clean_rel_path = relative_path.replace("NovaFlow_Moodle/", "", 1)
+            target_path = os.path.join(target_base, clean_rel_path)
+            
+            # Ensure target directory exists
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            
+            try:
+                # Move the file (overwrites if it exists in dest)
+                shutil.move(source_path, target_path)
+                moved_count += 1
+                print(f"✅ Moved Moodle file: {target_path}")
+            except Exception as e:
+                print(f"❌ Failed to move Moodle file {source_path}: {e}")
+                
+    return moved_count
+
 def process_extension_payload(payload: dict) -> dict:
     courses = payload.get("courses", [])
     if courses:
         _save_ext_courses(courses)
+        
+    downloaded_files = payload.get("downloaded_files", [])
+    files_moved = process_moodle_files(downloaded_files)
 
     events = payload.get("events", [])
-    if not events:
-        return {"status": "success", "message": "Aucun événement", "inserted": 0}
+    if not events and not downloaded_files:
+        return {"status": "success", "message": "Aucune donnée (events/fichiers)", "inserted": 0, "files_moved": 0}
     
     # Charger les événements existants
     existing_events = _load_ext_events()
@@ -108,7 +159,8 @@ def process_extension_payload(payload: dict) -> dict:
         "status": "success", 
         "message": f"Synchronisation réussie", 
         "inserted": inserted, 
-        "updated": updated
+        "updated": updated,
+        "files_moved": files_moved
     }
 
 def get_moodle_extension_events() -> list:

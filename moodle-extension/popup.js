@@ -1,11 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
     const syncDateEl = document.getElementById('syncDate');
     const syncCountEl = document.getElementById('syncCount');
+    const fileCountEl = document.getElementById('fileCount');
     const syncStateEl = document.getElementById('syncState');
     const statusBox = document.getElementById('statusBox');
 
     // Charger l'état depuis le background storage
-    chrome.storage.local.get(['lastSyncTime', 'lastSyncCount', 'syncStatus', 'moodleSesskey'], (data) => {
+    chrome.storage.local.get(['lastSyncTime', 'lastSyncCount', 'syncStatus', 'moodleSesskey', 'downloadedMoodleFiles'], (data) => {
         if (data.lastSyncTime) {
             syncDateEl.textContent = data.lastSyncTime;
         }
@@ -13,6 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.lastSyncCount !== undefined) {
             syncCountEl.textContent = data.lastSyncCount;
         }
+
+        if (data.downloadedMoodleFiles) {
+            fileCountEl.textContent = Object.keys(data.downloadedMoodleFiles).length;
+        }
+
 
         if (data.syncStatus === 'success') {
             syncStateEl.textContent = 'Succès';

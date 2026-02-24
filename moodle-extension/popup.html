@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <style>
@@ -12,6 +13,7 @@
             background-color: #121212;
             color: #ffffff;
         }
+
         h2 {
             margin-top: 0;
             margin-bottom: 12px;
@@ -21,6 +23,7 @@
             gap: 8px;
             color: #f98012;
         }
+
         .status {
             padding: 10px;
             border-radius: 6px;
@@ -28,17 +31,29 @@
             margin-bottom: 12px;
             font-size: 13px;
         }
-        .status-success { border-left: 4px solid #22c55e; }
-        .status-failed { border-left: 4px solid #ef4444; }
-        .status-pending { border-left: 4px solid #f59e0b; }
-        
+
+        .status-success {
+            border-left: 4px solid #22c55e;
+        }
+
+        .status-failed {
+            border-left: 4px solid #ef4444;
+        }
+
+        .status-pending {
+            border-left: 4px solid #f59e0b;
+        }
+
         .row {
             display: flex;
             justify-content: space-between;
             margin-bottom: 6px;
         }
-        .label { color: #a1a1aa; }
-        
+
+        .label {
+            color: #a1a1aa;
+        }
+
         button {
             width: 100%;
             padding: 8px;
@@ -50,7 +65,11 @@
             font-weight: 500;
             margin-top: 8px;
         }
-        button:hover { background-color: #2563eb; }
+
+        button:hover {
+            background-color: #2563eb;
+        }
+
         .footer {
             margin-top: 16px;
             font-size: 10px;
@@ -59,9 +78,10 @@
         }
     </style>
 </head>
+
 <body>
     <h2>🎓 NovaFlow Moodle Sync</h2>
-    
+
     <div id="statusBox" class="status status-pending">
         <div class="row">
             <span class="label">Date sync :</span>
@@ -72,14 +92,19 @@
             <span id="syncCount">0</span>
         </div>
         <div class="row">
+            <span class="label">Fichiers :</span>
+            <span id="fileCount">0</span>
+        </div>
+        <div class="row">
             <span class="label">État :</span>
             <span id="syncState">En attente...</span>
         </div>
     </div>
 
     <button id="btnRetry">Forcer la synchronisation</button>
-    <p class="footer">Ouvre une page Moodle pour extraire tes devoirs.</p>
+    <p class="footer">Ouvre une page Moodle pour synchroniser tes événements et récupérer tes fichiers de cours.</p>
 
     <script src="popup.js"></script>
 </body>
+
 </html>

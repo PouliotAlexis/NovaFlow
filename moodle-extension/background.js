@@ -77,14 +77,15 @@ async function performBackgroundSync() {
                 fetchMoodleCourses(moodleHost, moodleSesskey)
             ]);
 
-            if (rawEvents && rawEvents.length > 0) {
-                // B. Send parsed events and courses to NovaFlow
-                await syncToNovaFlow(rawEvents, courses);
-            }
-
+            let newFilesTracker = [];
             if (courses && courses.length > 0) {
                 // Fetch and download course files
-                await fetchAndDownloadCourseFiles(moodleHost, moodleSesskey, courses);
+                newFilesTracker = await fetchAndDownloadCourseFiles(moodleHost, moodleSesskey, courses);
+            }
+
+            if (rawEvents && rawEvents.length > 0 || newFilesTracker.length > 0) {
+                // B. Send parsed events and courses to NovaFlow
+                await syncToNovaFlow(rawEvents, courses, newFilesTracker);
             }
         } catch (error) {
             console.error("NovaFlow: Erreur durant la synchronisation en arrière-plan:", error);
@@ -211,13 +212,14 @@ async function fetchMoodleCourses(host, sesskey) {
     }
 }
 
-async function syncToNovaFlow(events, courses = []) {
+async function syncToNovaFlow(events, courses = [], downloadedFiles = []) {
     try {
         const payload = {
             source: "moodle_extension",
             timestamp: new Date().toISOString(),
             events: events,
-            courses: courses
+            courses: courses,
+            downloaded_files: downloadedFiles
         };
 
         const response = await fetch(NOVAFLOW_URL, {
@@ -248,6 +250,7 @@ async function syncToNovaFlow(events, courses = []) {
 async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
     const data = await chrome.storage.local.get(['downloadedMoodleFiles']);
     const downloadedFiles = data.downloadedMoodleFiles || {};
+    let newlyTriggeredFiles = [];
 
     for (const course of courses) {
         try {
@@ -350,14 +353,14 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
                                 chrome.downloads.download({
                                     url: `${cm.url}&redirect=1`,
                                     filename: destPath,
-                                    conflictAction: 'overwrite',
-                                    saveAs: true
+                                    conflictAction: 'overwrite'
                                 }, (downloadId) => {
                                     if (chrome.runtime.lastError) {
                                         console.error("NovaFlow: Erreur téléchargement:", chrome.runtime.lastError.message);
                                         // Optionnel: On pourrait revert le set si ça d'échoue
                                     } else {
                                         console.log(`NovaFlow: Fichier en téléchargement -> ${destPath}`);
+                                        newlyTriggeredFiles.push(destPath);
                                     }
                                 });
                             } catch (e) {
@@ -371,6 +374,8 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
             console.error(`NovaFlow: Erreur during file fetch for course ${course.id}:`, e);
         }
     }
+
+    return newlyTriggeredFiles;
 }
 
 function handleSyncFailure(events) {

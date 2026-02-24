@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     MICROSOFT_TENANT_ID: str = "common"
     MICROSOFT_REDIRECT_URI: str = "http://localhost:8000/api/auth/microsoft/callback"
     
+    # Moodle Downloads
+    MOODLE_DOWNLOADS_DESTINATION: str = os.path.expanduser("~/Documents/NovaFlow_Courses")
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

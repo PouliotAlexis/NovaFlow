@@ -381,6 +381,7 @@ class MoodleExtensionSync(BaseModel):
     timestamp: str
     events: list[Dict[str, Any]]
     courses: Optional[list[Dict[str, Any]]] = []
+    downloaded_files: Optional[list[str]] = []
 
 @app.post("/api/moodle/sync")
 def sync_moodle_events(payload: MoodleExtensionSync):
