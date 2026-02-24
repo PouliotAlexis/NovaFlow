@@ -350,7 +350,8 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
                                 chrome.downloads.download({
                                     url: `${cm.url}&redirect=1`,
                                     filename: destPath,
-                                    conflictAction: 'overwrite'
+                                    conflictAction: 'overwrite',
+                                    saveAs: true
                                 }, (downloadId) => {
                                     if (chrome.runtime.lastError) {
                                         console.error("NovaFlow: Erreur téléchargement:", chrome.runtime.lastError.message);
