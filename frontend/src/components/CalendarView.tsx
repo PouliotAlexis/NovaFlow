@@ -694,11 +694,30 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                         <div className="nf-task__content">
                                             <div className="nf-task__title">{evt.title}</div>
                                             <div className="nf-task__meta">
-                                                {evt.time}
-                                                {evt.location ? ` · 📍 ${evt.location}` : ""}
+                                                {evt.end_date ? (
+                                                    <>
+                                                        {new Date(evt.date + "T00:00").toLocaleDateString("fr-CA", { day: "numeric", month: "short" })}
+                                                        {evt.time !== "Journée" ? ` ${evt.time}` : ""}
+                                                        {" → "}
+                                                        {new Date(evt.end_date + "T00:00").toLocaleDateString("fr-CA", { day: "numeric", month: "short" })}
+                                                        {evt.end_time && evt.end_time !== evt.time ? ` ${evt.end_time}` : ""}
+                                                    </>
+                                                ) : (
+                                                    <>{evt.time}{evt.end_time && evt.end_time !== evt.time ? ` → ${evt.end_time}` : ""}</>
+                                                )}
                                             </div>
+                                            {evt.location && (
+                                                <div style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginTop: "2px" }}>
+                                                    📍 {evt.location}
+                                                </div>
+                                            )}
+                                            {evt.category && evt.category !== "Événements de site" && (
+                                                <div style={{ fontSize: "11px", color: "var(--nf-accent)", marginTop: "2px" }}>
+                                                    📚 {evt.category}
+                                                </div>
+                                            )}
                                             {evt.accounts && (
-                                                <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "2px" }}>
+                                                <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "4px" }}>
                                                     👤 {evt.accounts.map(email => email.split("@")[0]).join(" · ")}
                                                 </div>
                                             )}
