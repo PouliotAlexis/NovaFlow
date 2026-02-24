@@ -8,6 +8,8 @@ const NOVAFLOW_URL = "http://localhost:8000/api/moodle/sync";
 const ALARM_NAME = "moodleBackgroundSync";
 const SYNC_PERIOD_MINUTES = 60; // Sync every hour
 
+let isSyncing = false;
+
 // 1. Listen for session updates from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "UPDATE_MOODLE_SESSION") {
@@ -53,8 +55,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // 4. Core Logic: Fetch from Moodle API & Send to NovaFlow
 async function performBackgroundSync() {
-    chrome.storage.local.get(['moodleSesskey', 'moodleHost', 'moodleSourceUrl'], async (data) => {
-        const { moodleSesskey, moodleHost, moodleSourceUrl } = data;
+    if (isSyncing) {
+        console.log("NovaFlow: Synchronisation déjà en cours, ignorée.");
+        return;
+    }
+    isSyncing = true;
+
+    try {
+        const ObjectData = await chrome.storage.local.get(['moodleSesskey', 'moodleHost', 'moodleSourceUrl']);
+        const { moodleSesskey, moodleHost, moodleSourceUrl } = ObjectData;
 
         if (!moodleSesskey || !moodleHost) {
             console.log("NovaFlow: Impossible de synchroniser en arrière-plan. Aucune sesskey enregistrée.");
@@ -80,7 +89,9 @@ async function performBackgroundSync() {
         } catch (error) {
             console.error("NovaFlow: Erreur durant la synchronisation en arrière-plan:", error);
         }
-    });
+    } finally {
+        isSyncing = false;
+    }
 }
 
 async function fetchMoodleEvents(host, sesskey, sourceUrl) {
@@ -286,7 +297,7 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
                             let safeFileName = (cm.name || 'Fichier').replace(/[/\\?\\[\\]%*:|"<>]/g, '-').trim();
 
                             try {
-                                const headRes = await fetch(`${cm.url}&redirect=1`, { method: 'HEAD', credentials: 'omit' });
+                                const headRes = await fetch(`${cm.url}&redirect=1`, { method: 'HEAD' });
                                 let finalUrl = headRes.url;
                                 let extension = '';
 
