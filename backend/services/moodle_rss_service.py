@@ -97,6 +97,13 @@ def get_moodle_events(url: str, days: int = 30) -> list:
                         except Exception:
                             category = str(raw_cats)
 
+                    import urllib.parse
+                    parsed_url = urllib.parse.urlparse(url)
+                    host = parsed_url.hostname or ""
+                    parts = host.split(".")
+                    org = parts[-2].capitalize() if len(parts) >= 2 else "Moodle"
+                    account_label = f"Moodle — {org}"
+
                     events.append({
                         "id": uid,
                         "title": title,
@@ -107,7 +114,7 @@ def get_moodle_events(url: str, days: int = 30) -> list:
                         "all_day": is_all_day,
                         "link": link,
                         "category": category,
-                        "accounts": ["Moodle"],
+                        "accounts": [account_label],
                         "source": "moodle"
                     })
         else:
@@ -131,6 +138,13 @@ def get_moodle_events(url: str, days: int = 30) -> list:
                 
                 uid = entry.get('id', entry.get('link', f"moodle_{start.timestamp()}"))
 
+                import urllib.parse
+                parsed_url = urllib.parse.urlparse(url)
+                host = parsed_url.hostname or ""
+                parts = host.split(".")
+                org = parts[-2].capitalize() if len(parts) >= 2 else "Moodle"
+                account_label = f"Moodle — {org}"
+
                 events.append({
                     "id": uid,
                     "title": entry.get('title', 'Sans titre'),
@@ -141,7 +155,7 @@ def get_moodle_events(url: str, days: int = 30) -> list:
                     "all_day": False,
                     "link": entry.get('link', ''),
                     "category": "",
-                    "accounts": ["Moodle"],
+                    "accounts": [account_label],
                     "source": "moodle"
                 })
                 
