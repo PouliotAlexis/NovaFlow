@@ -9,7 +9,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-14+-black.svg?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-18+-61DAFB.svg?logo=react&logoColor=black)](https://reactjs.org/)
 [![Ollama](https://img.shields.io/badge/AI-Ollama-white.svg?logo=ollama&logoColor=black)](https://ollama.ai/)
-[![WakaTime](https://wakatime.com/badge/github/PouliotAlexis/AlexIs.svg?style=flat)](https://wakatime.com/badge/github/PouliotAlexis/AlexIs)
+[![wakatime](https://wakatime.com/badge/github/PouliotAlexis/NovaFlow.svg?style=flat)](https://wakatime.com/badge/github/PouliotAlexis/NovaFlow)
 [![License](https://img.shields.io/badge/License-Privée-red.svg)]()
 
 *« Intelligence Centrale, Confidentialité Totale. »*
