@@ -1,0 +1,14 @@
+{
+  "sesskey": "TGDmhQxBuX",
+  "assignData": [
+    {
+      "error": true,
+      "exception": {
+        "message": "Le service web n\u2019est pas disponible (il n\u2019existe pas ou n\u2019est pas activ\u00e9).",
+        "errorcode": "servicenotavailable",
+        "link": "https://moodle.usherbrooke.ca/my/courses.php",
+        "moreinfourl": "http://docs.moodle.org/405/fr/error/webservice/servicenotavailable"
+      }
+    }
+  ]
+}

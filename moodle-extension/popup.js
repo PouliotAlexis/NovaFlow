@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btnRetry.textContent = 'Synchronisation...';
         } else {
             btnRetry.disabled = false;
-            btnRetry.textContent = 'Forcer la synchronisation';
+            btnRetry.textContent = 'Lancer un tracking Moodle maintenant';
 
             if (data.syncStatus === 'success') {
                 syncStateEl.textContent = 'Succès';

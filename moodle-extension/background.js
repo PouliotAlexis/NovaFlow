@@ -298,8 +298,10 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
     const courseResults = await Promise.all(courseStatesPromises);
     const validCourseResults = courseResults.filter(r => r !== null);
 
-    // 2. Extraire la liste de tous les fichiers à vérifier
+    // 2. Extraire la liste de tous les fichiers à vérifier et identifier les pages de devoirs
     const allFileTasks = [];
+    const assignmentTasks = []; // Pour parser le HTML des devoirs
+
     for (const { course, courseFormatData } of validCourseResults) {
         const sections = courseFormatData.section || [];
         const cmList = courseFormatData.cm || [];
@@ -311,23 +313,70 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
             for (const cmId of cmIds) {
                 const cm = modulesById[cmId];
                 if (cm && cm.module === 'resource' && cm.url) {
-                    const fileKey = cm.id; // L'ID du module ressource
+                    const fileKey = cm.id;
                     if (!downloadedFiles[fileKey]) {
                         allFileTasks.push({ course, section, cm, fileKey });
                     }
+                } else if (cm && cm.module === 'assign' && cm.url) {
+                    assignmentTasks.push({ course, section, cm });
                 }
             }
         }
     }
 
-    console.log(`NovaFlow: ${allFileTasks.length} nouveaux fichiers potentiels détectés.`);
+    // 2.b Parser le HTML de chaque devoir pour y dénicher les pièces jointes cachées
+    if (assignmentTasks.length > 0) {
+        console.log(`NovaFlow: Analyse de ${assignmentTasks.length} pages de devoirs pour extraire les pièces jointes...`);
+        const assignPromises = assignmentTasks.map(async ({ course, section, cm }) => {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const res = await fetch(cm.url, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                const html = await res.text();
+                // Regex plus inclusive pour capturer TOUTES les pièces jointes ou fichiers de la description du devoir (n'importe quel index)
+                const regex = /href="(https?:\/\/[^\/]+\/pluginfile\.php\/[^\/]+\/mod_assign\/(?:introattachment|intro)\/[^"]+)"/g;
+                let match;
+                let index = 0;
+                while ((match = regex.exec(html)) !== null) {
+                    let directUrl = match[1];
+                    // Décoder les entités HTML, ex: &amp; -> &
+                    directUrl = directUrl.replace(/&amp;/g, '&');
+
+                    const fileNameObj = new URL(directUrl);
+                    let baseName = fileNameObj.pathname.split('/').pop();
+                    try { baseName = decodeURIComponent(baseName); } catch (e) { }
+
+                    const fileKey = `${cm.id}_assign_${index}`;
+                    const pseudoCm = {
+                        id: fileKey,
+                        module: 'assign_attachment',
+                        url: directUrl,
+                        name: cm.name ? `${cm.name} (${baseName})` : baseName
+                    };
+
+                    if (!downloadedFiles[fileKey]) {
+                        allFileTasks.push({ course, section, cm: pseudoCm, fileKey });
+                    }
+                    index++;
+                }
+            } catch (err) {
+                console.warn(`NovaFlow: Impossible de parser le devoir ${cm.id}`, err);
+            }
+        });
+        await Promise.all(assignPromises);
+    }
+
+    console.log(`NovaFlow: ${allFileTasks.length} fichiers potentiels détectés (incluant ${assignmentTasks.length} devoirs scannés).`);
 
     // 3. Traiter les fichiers avec une limite de confluence
     const processFile = async ({ course, section, cm, fileKey }) => {
         try {
-            const safeCourseName = (course.shortname || course.fullname || `Course_${course.id}`).replace(/[/\\?%*:|"<>]/g, '-').trim();
-            const safeSectionName = (section.title || `Section_${section.section}`).replace(/[/\\?%*:|"<>]/g, '-').trim();
-            let safeFileName = (cm.name || 'Fichier').replace(/[/\\?\\[\\]%*:|"<>]/g, '-').trim();
+            const forbiddenChars = /[<>:"/\\|?*\x00-\x1F]/g;
+            const safeCourseName = (course.shortname || course.fullname || `Course_${course.id}`).replace(forbiddenChars, '-').trim();
+            const safeSectionName = (section.title || `Section_${section.section}`).replace(forbiddenChars, '-').trim();
+            let safeFileName = (cm.name || 'Fichier').replace(forbiddenChars, '-').trim();
 
             let headRes;
             try {
@@ -390,6 +439,8 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
             }
 
             extension = extension.toLowerCase();
+            extension = extension.replace(/[<>:"/\\|?*\x00-\x1F\uFF1A]/g, '');
+
             if (extension && safeFileName.toLowerCase().endsWith(extension)) {
                 safeFileName = safeFileName.slice(0, -extension.length).trim();
             }
