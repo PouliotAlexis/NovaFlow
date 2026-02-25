@@ -7,6 +7,7 @@
 const NOVAFLOW_URL = "http://localhost:8000/api/moodle/sync";
 const ALARM_NAME = "moodleBackgroundSync";
 const SYNC_PERIOD_MINUTES = 60; // Sync every hour
+const CONCURRENCY_LIMIT = 5; // Nombre maximum de requêtes simultanées pour les fichiers
 
 let isSyncing = false;
 
@@ -55,11 +56,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // 4. Core Logic: Fetch from Moodle API & Send to NovaFlow
 async function performBackgroundSync() {
-    if (isSyncing) {
-        console.log("NovaFlow: Synchronisation déjà en cours, ignorée.");
+    const statusData = await chrome.storage.local.get(['isSyncing']);
+    if (statusData.isSyncing) {
+        console.log("NovaFlow: Synchronisation déjà en cours (état stocké), ignorée.");
         return;
     }
+
     isSyncing = true;
+    await chrome.storage.local.set({ isSyncing: true });
 
     try {
         const ObjectData = await chrome.storage.local.get(['moodleSesskey', 'moodleHost', 'moodleSourceUrl']);
@@ -92,6 +96,7 @@ async function performBackgroundSync() {
         }
     } finally {
         isSyncing = false;
+        await chrome.storage.local.set({ isSyncing: false });
     }
 }
 
@@ -250,16 +255,18 @@ async function syncToNovaFlow(events, courses = [], downloadedFiles = []) {
 async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
     const data = await chrome.storage.local.get(['downloadedMoodleFiles']);
     const downloadedFiles = data.downloadedMoodleFiles || {};
-    let newlyTriggeredFiles = [];
+    let newlyTriggeredFilesCount = 0;
+    let newlyTriggeredPaths = [];
 
-    for (const course of courses) {
+    console.log(`NovaFlow: Début de l'extraction des fichiers pour ${courses.length} cours.`);
+
+    const fetchCourseState = async (course) => {
         try {
             const payload = [{
                 index: 0,
                 methodname: 'core_courseformat_get_state',
                 args: { courseid: course.id }
             }];
-
             const apiUrl = `${host}/lib/ajax/service.php?sesskey=${sesskey}&info=core_courseformat_get_state`;
 
             const response = await fetch(apiUrl, {
@@ -268,114 +275,172 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
                 body: JSON.stringify(payload)
             });
 
-            if (!response.ok) continue;
-
+            if (!response.ok) return null;
             const responseData = await response.json();
-            if (responseData[0]?.error || !responseData[0]?.data) continue;
+            if (responseData[0]?.error || !responseData[0]?.data) return null;
 
             let courseFormatData;
             try {
                 courseFormatData = JSON.parse(responseData[0].data);
             } catch (e) {
-                console.warn("NovaFlow: Erreur de parsing JSON pour le format du cours", e);
-                continue;
+                console.warn("NovaFlow: Erreur parsing JSON cours", e);
+                return null;
             }
+            return { course, courseFormatData };
+        } catch (e) {
+            console.warn(`NovaFlow: Erreur état cours ${course.id}:`, e);
+            return null;
+        }
+    };
 
-            const sections = courseFormatData.section || [];
-            const cmList = courseFormatData.cm || [];
+    // 1. Récupérer les états de tous les cours en parallèle
+    const courseStatesPromises = courses.map(fetchCourseState);
+    const courseResults = await Promise.all(courseStatesPromises);
+    const validCourseResults = courseResults.filter(r => r !== null);
 
-            const modulesById = {};
-            cmList.forEach(cm => { modulesById[cm.id] = cm; });
+    // 2. Extraire la liste de tous les fichiers à vérifier
+    const allFileTasks = [];
+    for (const { course, courseFormatData } of validCourseResults) {
+        const sections = courseFormatData.section || [];
+        const cmList = courseFormatData.cm || [];
+        const modulesById = {};
+        cmList.forEach(cm => { modulesById[cm.id] = cm; });
 
-            for (const section of sections) {
-                const cmIds = section.cmlist || [];
-                for (const cmId of cmIds) {
-                    const cm = modulesById[cmId];
-                    if (cm && cm.module === 'resource' && cm.url) {
-                        const fileKey = cm.id; // Unique identifier
-
-                        if (!downloadedFiles[fileKey]) {
-                            const safeCourseName = (course.shortname || course.fullname || `Course_${course.id}`).replace(/[/\\?%*:|"<>]/g, '-').trim();
-                            const safeSectionName = (section.title || `Section_${section.section}`).replace(/[/\\?%*:|"<>]/g, '-').trim();
-                            let safeFileName = (cm.name || 'Fichier').replace(/[/\\?\\[\\]%*:|"<>]/g, '-').trim();
-
-                            try {
-                                const headRes = await fetch(`${cm.url}&redirect=1`, { method: 'HEAD' });
-                                let finalUrl = headRes.url;
-                                let extension = '';
-
-                                const contentDisposition = headRes.headers.get('Content-Disposition');
-                                if (contentDisposition) {
-                                    const matchStar = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-                                    const match = contentDisposition.match(/filename="?([^";]+)"?/i);
-                                    let extractedName = '';
-                                    if (matchStar) extractedName = decodeURIComponent(matchStar[1]);
-                                    else if (match) extractedName = match[1];
-
-                                    if (extractedName.includes('.')) {
-                                        extension = '.' + extractedName.split('.').pop();
-                                    }
-                                }
-
-                                if (!extension) {
-                                    const urlObj = new URL(finalUrl);
-                                    const pathSegments = urlObj.pathname.split('/');
-                                    const lastSegment = decodeURIComponent(pathSegments[pathSegments.length - 1]);
-                                    if (lastSegment.includes('.')) {
-                                        extension = '.' + lastSegment.split('.').pop();
-                                    }
-                                }
-
-                                if (!extension) {
-                                    const contentType = headRes.headers.get('Content-Type') || '';
-                                    if (contentType.includes('application/pdf')) extension = '.pdf';
-                                    else if (contentType.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document')) extension = '.docx';
-                                    else if (contentType.includes('application/msword')) extension = '.doc';
-                                    else if (contentType.includes('application/vnd.ms-excel')) extension = '.xls';
-                                    else if (contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) extension = '.xlsx';
-                                    else if (contentType.includes('application/vnd.ms-powerpoint')) extension = '.ppt';
-                                    else if (contentType.includes('application/vnd.openxmlformats-officedocument.presentationml.presentation')) extension = '.pptx';
-                                    else if (contentType.includes('application/zip')) extension = '.zip';
-                                    else if (contentType.includes('text/plain')) extension = '.txt';
-                                }
-
-                                extension = extension.toLowerCase();
-                                if (extension && safeFileName.toLowerCase().endsWith(extension)) {
-                                    safeFileName = safeFileName.slice(0, -extension.length).trim();
-                                }
-
-                                const destPath = `NovaFlow_Moodle/${safeCourseName}/${safeSectionName}/${safeFileName}${extension}`;
-
-                                // Mark as downloaded immediately to prevent race conditions causing duplicate downloads
-                                downloadedFiles[fileKey] = true;
-                                chrome.storage.local.set({ downloadedMoodleFiles: downloadedFiles });
-
-                                chrome.downloads.download({
-                                    url: `${cm.url}&redirect=1`,
-                                    filename: destPath,
-                                    conflictAction: 'overwrite'
-                                }, (downloadId) => {
-                                    if (chrome.runtime.lastError) {
-                                        console.error("NovaFlow: Erreur téléchargement:", chrome.runtime.lastError.message);
-                                        // Optionnel: On pourrait revert le set si ça d'échoue
-                                    } else {
-                                        console.log(`NovaFlow: Fichier en téléchargement -> ${destPath}`);
-                                        newlyTriggeredFiles.push(destPath);
-                                    }
-                                });
-                            } catch (e) {
-                                console.log("NovaFlow: Erreur resolve URL module", fileKey, e);
-                            }
-                        }
+        for (const section of sections) {
+            const cmIds = section.cmlist || [];
+            for (const cmId of cmIds) {
+                const cm = modulesById[cmId];
+                if (cm && cm.module === 'resource' && cm.url) {
+                    const fileKey = cm.id; // L'ID du module ressource
+                    if (!downloadedFiles[fileKey]) {
+                        allFileTasks.push({ course, section, cm, fileKey });
                     }
                 }
             }
-        } catch (e) {
-            console.error(`NovaFlow: Erreur during file fetch for course ${course.id}:`, e);
         }
     }
 
-    return newlyTriggeredFiles;
+    console.log(`NovaFlow: ${allFileTasks.length} nouveaux fichiers potentiels détectés.`);
+
+    // 3. Traiter les fichiers avec une limite de confluence
+    const processFile = async ({ course, section, cm, fileKey }) => {
+        try {
+            const safeCourseName = (course.shortname || course.fullname || `Course_${course.id}`).replace(/[/\\?%*:|"<>]/g, '-').trim();
+            const safeSectionName = (section.title || `Section_${section.section}`).replace(/[/\\?%*:|"<>]/g, '-').trim();
+            let safeFileName = (cm.name || 'Fichier').replace(/[/\\?\\[\\]%*:|"<>]/g, '-').trim();
+
+            let headRes;
+            try {
+                // Moodle a parfois des URL invalides générant une erreur fatale dans fetch
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 secondes max pour les requêtes HEAD
+                headRes = await fetch(`${cm.url}&redirect=1`, { method: 'HEAD', signal: controller.signal });
+                clearTimeout(timeoutId);
+            } catch (err) {
+                console.warn(`NovaFlow: Fetch HEAD échoué ou expiré pour ${safeFileName}:`, err);
+                return null;
+            }
+
+            let finalUrl = headRes.url;
+            let extension = '';
+
+            const contentDisposition = headRes.headers.get('Content-Disposition');
+            if (contentDisposition) {
+                const matchStar = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+                const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+                let extractedName = '';
+                if (matchStar) extractedName = decodeURIComponent(matchStar[1]);
+                else if (match) extractedName = match[1];
+
+                if (extractedName.includes('.')) {
+                    extension = '.' + extractedName.split('.').pop();
+                }
+            }
+
+            if (!extension) {
+                try {
+                    const urlObj = new URL(finalUrl);
+                    const pathSegments = urlObj.pathname.split('/');
+                    const lastSegment = decodeURIComponent(pathSegments[pathSegments.length - 1]);
+                    if (lastSegment.includes('.')) {
+                        extension = '.' + lastSegment.split('.').pop();
+                    }
+                } catch (e) { }
+            }
+
+            if (!extension) {
+                const contentType = headRes.headers.get('Content-Type') || '';
+                const mimeMap = {
+                    'application/pdf': '.pdf',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+                    'application/msword': '.doc',
+                    'application/vnd.ms-excel': '.xls',
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+                    'application/vnd.ms-powerpoint': '.ppt',
+                    'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+                    'application/zip': '.zip',
+                    'text/plain': '.txt'
+                };
+                for (const [mime, ext] of Object.entries(mimeMap)) {
+                    if (contentType.includes(mime)) {
+                        extension = ext;
+                        break;
+                    }
+                }
+            }
+
+            extension = extension.toLowerCase();
+            if (extension && safeFileName.toLowerCase().endsWith(extension)) {
+                safeFileName = safeFileName.slice(0, -extension.length).trim();
+            }
+
+            const destPath = `NovaFlow_Moodle/${safeCourseName}/${safeSectionName}/${safeFileName}${extension}`;
+
+            return new Promise((resolve) => {
+                // Timeout au cas où chrome.downloads se coince silencieusement au lancement
+                let downloadTimeout = setTimeout(() => {
+                    console.warn(`NovaFlow: Timeout lors de l'appel initial à chrome.downloads pour ${safeFileName}`);
+                    resolve(null);
+                }, 5000);
+
+                chrome.downloads.download({
+                    url: `${cm.url}&redirect=1`,
+                    filename: destPath,
+                    conflictAction: 'overwrite',
+                    saveAs: false
+                }, (downloadId) => {
+                    clearTimeout(downloadTimeout);
+                    if (chrome.runtime.lastError || !downloadId) {
+                        console.error(`NovaFlow: Erreur download ${safeFileName}:`, chrome.runtime.lastError?.message);
+                        resolve(null);
+                    } else {
+                        console.log(`NovaFlow: Téléchargement lancé id=${downloadId} -> ${destPath}`);
+                        downloadedFiles[fileKey] = true;
+                        newlyTriggeredFilesCount++;
+                        newlyTriggeredPaths.push(destPath);
+                        resolve(destPath);
+                    }
+                });
+            });
+        } catch (e) {
+            console.warn("NovaFlow: Erreur inattendue traitement fichier", fileKey, e);
+            return null;
+        }
+    };
+
+    // Exécution par lots (batches) pour respecter CONCURRENCY_LIMIT
+    for (let i = 0; i < allFileTasks.length; i += CONCURRENCY_LIMIT) {
+        const batch = allFileTasks.slice(i, i + CONCURRENCY_LIMIT);
+        console.log(`NovaFlow: Démarrage lot de fichiers ${i} à ${i + batch.length} sur ${allFileTasks.length} total.`);
+        await Promise.all(batch.map(processFile));
+
+        // Sauvegarder l'état régulièrement après chaque lot
+        await chrome.storage.local.set({ downloadedMoodleFiles: downloadedFiles });
+        console.log(`NovaFlow: Progression extraction: lot terminé (${Math.min(i + CONCURRENCY_LIMIT, allFileTasks.length)}/${allFileTasks.length})`);
+    }
+
+    console.log(`NovaFlow: Extraction terminée. ${newlyTriggeredFilesCount} fichiers ajoutés.`);
+    return newlyTriggeredPaths;
 }
 
 function handleSyncFailure(events) {
@@ -395,6 +460,13 @@ function updateBadgeStatus(text, color) {
     }, 5000);
 }
 
-// On startup, setup alarm just in case
-chrome.runtime.onStartup.addListener(setupAlarm);
-chrome.runtime.onInstalled.addListener(setupAlarm);
+// On startup, setup alarm and reset syncing state in case of crash
+chrome.runtime.onStartup.addListener(() => {
+    chrome.storage.local.set({ isSyncing: false });
+    setupAlarm();
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.storage.local.set({ isSyncing: false });
+    setupAlarm();
+});
