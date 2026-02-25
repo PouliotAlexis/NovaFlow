@@ -1,6 +1,8 @@
 import json
 import os
 import shutil
+import threading
+import time
 from datetime import datetime
 
 # Où sauvegarder les événements Moodle envoyés par l'extension
@@ -39,24 +41,76 @@ def _load_ext_courses():
             pass
     return []
 
+def _scan_for_existing_moodle_files():
+    """Scanne le dossier Téléchargements pour trouver des fichiers Moodle non encore traités."""
+    downloads_dir = os.path.expanduser("~/Downloads")
+    moodle_root = os.path.join(downloads_dir, "NovaFlow_Moodle")
+    
+    found_files = []
+    if not os.path.exists(moodle_root):
+        return found_files
+        
+    for root, dirs, files in os.walk(moodle_root):
+        for file in files:
+            if file.endswith(".crdownload"):
+                continue
+            full_path = os.path.join(root, file)
+            # Obtenir le chemin relatif à Downloads (ex: NovaFlow_Moodle/Course/File.pdf)
+            rel_path = os.path.relpath(full_path, downloads_dir).replace("\\", "/")
+            found_files.append(rel_path)
+    return found_files
+
 def process_moodle_files(downloaded_files: list):
     """
     Checks if the files sent by the extension exist in the Downloads folder
     and moves them to the permanent NovaFlow_Courses directory.
     """
-    if not downloaded_files:
+    downloads_dir = os.path.expanduser("~/Downloads")
+    moodle_root = os.path.join(downloads_dir, "NovaFlow_Moodle")
+    
+    # 1. Vérification stricte : y a-t-il des téléchargements en cours (.crdownload) ?
+    # Si oui, on refuse de traiter quoi que ce soit pour cette session.
+    # Ainsi, Google Drive ne s'activera qu'une fois TOUT Moodle fini.
+    is_downloading = False
+    if os.path.exists(moodle_root):
+        for root, dirs, files in os.walk(moodle_root):
+            for file in files:
+                if file.endswith(".crdownload"):
+                    is_downloading = True
+                    break
+            if is_downloading:
+                break
+                
+    if is_downloading:
+        print("⏳ Téléchargement Chrome encore en cours (.crdownload détecté). Mise en attente du traitement Moodle.")
+        
+        # Relance automatique en arrière-plan après 15 secondes
+        def retry_task():
+            time.sleep(15)
+            print("🔄 Relance automatique du traitement des fichiers Moodle...")
+            process_moodle_files(downloaded_files)
+            
+        threading.Thread(target=retry_task, daemon=True).start()
+        return 0
+
+    # 2. Si aucun téléchargement en cours, on peut déplacer
+    # Proactive scan to catch files not in the current payload
+    existing_files = _scan_for_existing_moodle_files()
+    
+    # Combine lists and remove duplicates
+    all_to_process = list(set(downloaded_files + existing_files))
+    
+    if not all_to_process:
         return 0
         
     from core.config import settings
-    
-    downloads_dir = os.path.expanduser("~/Downloads")
     target_base = settings.MOODLE_DOWNLOADS_DESTINATION
     
     moved_count = 0
+    files_to_sync = []
     
-    for relative_path in downloaded_files:
+    for relative_path in all_to_process:
         # relative_path is something like "NovaFlow_Moodle/CourseA/Section1/File.pdf"
-        # We only want to process files originating from NovaFlow_Moodle
         if not relative_path.startswith("NovaFlow_Moodle"):
             continue
             
@@ -64,26 +118,32 @@ def process_moodle_files(downloaded_files: list):
         
         # Check if the file is fully downloaded
         if os.path.exists(source_path):
-            # Also check if it's currently being downloaded (Chrome uses .crdownload)
-            if os.path.exists(source_path + ".crdownload"):
-                continue # Skip for now, will get picked up next sync
-                
-            # Determine target path
-            # Remove "NovaFlow_Moodle/" from the start to avoid redundant nesting
             clean_rel_path = relative_path.replace("NovaFlow_Moodle/", "", 1)
             target_path = os.path.join(target_base, clean_rel_path)
             
-            # Ensure target directory exists
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
             
             try:
-                # Move the file (overwrites if it exists in dest)
+                # Move the file
                 shutil.move(source_path, target_path)
                 moved_count += 1
+                files_to_sync.append((target_path, clean_rel_path))
                 print(f"✅ Moved Moodle file: {target_path}")
             except Exception as e:
                 print(f"❌ Failed to move Moodle file {source_path}: {e}")
                 
+    # --- Trigger Google Drive Sync in ONE Batch Thread ---
+    if files_to_sync:
+        try:
+            from services.google_service import upload_files_batch_to_drive
+            threading.Thread(
+                target=upload_files_batch_to_drive,
+                args=(files_to_sync,),
+                daemon=True
+            ).start()
+        except Exception as e:
+            print(f"⚠️ Failed to start Drive Batch Sync thread: {e}")
+
     return moved_count
 
 def process_extension_payload(payload: dict) -> dict:
