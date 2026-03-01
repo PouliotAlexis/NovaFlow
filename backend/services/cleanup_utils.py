@@ -10,7 +10,10 @@ def reset_all_data():
         "notifications.json": [],
         "processed_items.json": {"documents": [], "events": {}},
         "events.json": {},
-        "event_metadata.json": {} 
+        "event_metadata.json": {},
+        "moodle_ext_events.json": [],
+        "moodle_ext_courses.json": [],
+        "moodle_ext_downloaded_keys.json": []
     }
     
     results = {}

@@ -119,6 +119,12 @@ def read_root():
         "ai_mode": settings.AI_MODE,
     }
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Route fantôme pour éviter les erreurs 404 du navigateur."""
+    from fastapi import Response
+    return Response(status_code=204)
+
 
 @app.get("/health", response_model=HealthCheck)
 def health_check():
@@ -382,6 +388,12 @@ class MoodleExtensionSync(BaseModel):
     events: list[Dict[str, Any]]
     courses: Optional[list[Dict[str, Any]]] = []
     downloaded_files: Optional[list[str]] = []
+    downloaded_file_keys: Optional[list[str]] = []
+
+@app.get("/api/moodle/sync/state")
+def get_moodle_sync_state_endpoint():
+    from services.moodle_extension_service import get_moodle_sync_state
+    return get_moodle_sync_state()
 
 @app.post("/api/moodle/sync")
 def sync_moodle_events(payload: MoodleExtensionSync):

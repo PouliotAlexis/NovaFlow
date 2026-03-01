@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncStateEl = document.getElementById('syncState');
     const statusBox = document.getElementById('statusBox');
     const btnRetry = document.getElementById('btnRetry');
+    const btnClear = document.getElementById('btnClear');
 
     function updateUI(data) {
         if (data.lastSyncTime) {
@@ -25,9 +26,11 @@ document.addEventListener('DOMContentLoaded', () => {
             statusBox.className = 'status status-pending';
             btnRetry.disabled = true;
             btnRetry.textContent = 'Synchronisation...';
+            btnClear.disabled = true;
         } else {
             btnRetry.disabled = false;
             btnRetry.textContent = 'Lancer un tracking Moodle maintenant';
+            btnClear.disabled = false;
 
             if (data.syncStatus === 'success') {
                 syncStateEl.textContent = 'Succès';
@@ -67,5 +70,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("Impossible de synchroniser : Ouvre d'abord un onglet Moodle pour capturer ta session !");
             }
         });
+    });
+
+    btnClear.addEventListener('click', () => {
+        if (confirm("Es-tu sûr de vouloir vider le cache de l'extension ? Toute la mémoire des fichiers téléchargés et événements envoyés sera effacée.")) {
+            chrome.runtime.sendMessage({ action: "CLEAR_CACHE" }, (response) => {
+                alert("Cache vidé avec succès ! Actualise ta page Moodle et relance le tracking.");
+            });
+        }
     });
 });

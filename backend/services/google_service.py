@@ -254,7 +254,8 @@ def get_today_events() -> List[Dict]:
 
 def _ensure_folder(service, folder_name: str, parent_id: str = None) -> str:
     """Trouve ou crée un dossier dans Google Drive. Retourne l'ID."""
-    query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    escaped_folder_name = folder_name.replace("'", "\\'")
+    query = f"name = '{escaped_folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
     else:
@@ -314,7 +315,8 @@ def upload_file_to_drive(file_path: str, drive_rel_path: str):
                 current_parent = _ensure_folder(service, folder_name, current_parent)
                 
             # 2. Vérifier si le fichier existe déjà pour le mettre à jour ou le créer
-            query = f"name = '{file_name}' and '{current_parent}' in parents and trashed = false"
+            escaped_file_name = file_name.replace("'", "\\'")
+            query = f"name = '{escaped_file_name}' and '{current_parent}' in parents and trashed = false"
             results = service.files().list(q=query, spaces='drive', fields='files(id)').execute()
             files = results.get('files', [])
             
@@ -372,32 +374,36 @@ def upload_files_batch_to_drive(files_to_upload: List[tuple]):
             root_moodle_id = get_cached_folder("NovaFlow_Moodle")
             
             for file_path, drive_rel_path in files_to_upload:
-                if not os.path.exists(file_path):
-                    continue
+                try:
+                    if not os.path.exists(file_path):
+                        continue
+                        
+                    path_parts = drive_rel_path.split("/")
+                    file_name = path_parts[-1]
+                    folders = path_parts[:-1]
                     
-                path_parts = drive_rel_path.split("/")
-                file_name = path_parts[-1]
-                folders = path_parts[:-1]
-                
-                current_parent = root_moodle_id
-                for folder_name in folders:
-                    current_parent = get_cached_folder(folder_name, current_parent)
+                    current_parent = root_moodle_id
+                    for folder_name in folders:
+                        current_parent = get_cached_folder(folder_name, current_parent)
+                        
+                    # Vérifier si le fichier existe
+                    escaped_file_name = file_name.replace("'", "\\'")
+                    query = f"name = '{escaped_file_name}' and '{current_parent}' in parents and trashed = false"
+                    results = service.files().list(q=query, spaces='drive', fields='files(id)').execute()
+                    files = results.get('files', [])
                     
-                # Vérifier si le fichier existe
-                query = f"name = '{file_name}' and '{current_parent}' in parents and trashed = false"
-                results = service.files().list(q=query, spaces='drive', fields='files(id)').execute()
-                files = results.get('files', [])
-                
-                media = MediaFileUpload(file_path, resumable=True)
-                
-                if files:
-                    file_id = files[0]['id']
-                    service.files().update(fileId=file_id, media_body=media).execute()
-                    print(f"✅ Drive Sync: Fichier mis à jour: {drive_rel_path}")
-                else:
-                    file_metadata = {'name': file_name, 'parents': [current_parent]}
-                    service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-                    print(f"✅ Drive Sync: Fichier uploadé: {drive_rel_path}")
+                    media = MediaFileUpload(file_path, resumable=True)
+                    
+                    if files:
+                        file_id = files[0]['id']
+                        service.files().update(fileId=file_id, media_body=media).execute()
+                        print(f"✅ Drive Sync: Fichier mis à jour: {drive_rel_path}")
+                    else:
+                        file_metadata = {'name': file_name, 'parents': [current_parent]}
+                        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+                        print(f"✅ Drive Sync: Fichier uploadé: {drive_rel_path}")
+                except Exception as inner_e:
+                    print(f"❌ Drive Sync Batch Error pour le fichier {drive_rel_path}: {inner_e}")
                     
     except Exception as e:
         print(f"❌ Drive Sync Batch Error pour {email}: {e}")

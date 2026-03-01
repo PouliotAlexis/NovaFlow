@@ -5,6 +5,7 @@
  */
 
 const NOVAFLOW_URL = "http://localhost:8000/api/moodle/sync";
+const NOVAFLOW_SYNC_STATE_URL = "http://localhost:8000/api/moodle/sync/state";
 const ALARM_NAME = "moodleBackgroundSync";
 const SYNC_PERIOD_MINUTES = 60; // Sync every hour
 const CONCURRENCY_LIMIT = 5; // Nombre maximum de requêtes simultanées pour les fichiers
@@ -31,8 +32,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     } else if (request.action === "FORCE_BACKGROUND_SYNC") {
         console.log("NovaFlow: Synchronisation forcée depuis le popup.");
         performBackgroundSync();
+    } else if (request.action === "CLEAR_CACHE") {
+        console.log("NovaFlow: Effacement du cache demandé par le popup.");
+        chrome.storage.local.clear(() => {
+            console.log("NovaFlow: Cache vidé.");
+            chrome.storage.local.set({ isSyncing: false, lastFingerprint: null }, () => {
+                if (sendResponse) sendResponse({ success: true });
+            });
+        });
+        return true; // Keep the message channel open for sendResponse
     }
 });
+
+// Simple hash function for JSON objects
+async function generateFingerprint(dataObj) {
+    const jsonStr = JSON.stringify(dataObj);
+    const encoder = new TextEncoder();
+    const data = encoder.encode(jsonStr);
+    const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
 
 // 2. Setup periodic alarm
 function setupAlarm() {
@@ -54,6 +75,28 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 });
 
+async function fetchServerSyncState() {
+    try {
+        const response = await fetch(NOVAFLOW_SYNC_STATE_URL);
+        if (response.ok) {
+            const data = await response.json();
+            const serverFilesDict = {};
+            if (data.synced_files) {
+                data.synced_files.forEach(key => serverFilesDict[key] = true);
+            }
+            await chrome.storage.local.set({
+                serverSyncedEvents: data.synced_events || [],
+                serverSyncedFiles: serverFilesDict
+            });
+            console.log("NovaFlow: État de synchronisation du serveur récupéré et mis en cache.");
+            return true;
+        }
+    } catch (e) {
+        console.warn("NovaFlow: Mode hors-ligne - Serveur injoignable pour fetchServerSyncState()");
+    }
+    return false;
+}
+
 // 4. Core Logic: Fetch from Moodle API & Send to NovaFlow
 async function performBackgroundSync() {
     const statusData = await chrome.storage.local.get(['isSyncing']);
@@ -74,22 +117,87 @@ async function performBackgroundSync() {
             return;
         }
 
+        // 1. Fetch from Moodle API directly using Chrome's background cookie jar
         try {
-            // A. Fetch from Moodle API directly using Chrome's background cookie jar
             const [rawEvents, courses] = await Promise.all([
                 fetchMoodleEvents(moodleHost, moodleSesskey, moodleSourceUrl),
                 fetchMoodleCourses(moodleHost, moodleSesskey)
             ]);
 
-            let newFilesTracker = [];
-            if (courses && courses.length > 0) {
-                // Fetch and download course files
-                newFilesTracker = await fetchAndDownloadCourseFiles(moodleHost, moodleSesskey, courses);
+            // 2. Calculer le Fingerprint local pour la synchronisation différentielle
+            const currentFingerprintData = { events: rawEvents, courses: courses };
+            const currentFingerprint = await generateFingerprint(currentFingerprintData);
+
+            const storage = await chrome.storage.local.get(['pendingSyncEvents', 'pendingSyncFiles', 'pendingSyncPaths', 'serverSyncedEvents', 'lastFingerprint']);
+            let pendingEvents = storage.pendingSyncEvents || [];
+            let pendingFiles = storage.pendingSyncFiles || [];
+            let pendingPaths = storage.pendingSyncPaths || [];
+            const serverEvents = storage.serverSyncedEvents || [];
+
+            const hasPending = pendingEvents.length > 0 || pendingFiles.length > 0 || pendingPaths.length > 0;
+
+            if (storage.lastFingerprint === currentFingerprint && !hasPending) {
+                console.log("NovaFlow: 💤 Local Fingerprint match. Aucun changement détecté sur Moodle. Synchronisation ignorée.");
+                return; // On arrête tout, Moodle n'a pas bougé et rien n'est en attente
             }
 
-            if (rawEvents && rawEvents.length > 0 || newFilesTracker.length > 0) {
-                // B. Send parsed events and courses to NovaFlow
-                await syncToNovaFlow(rawEvents, courses, newFilesTracker);
+            if (storage.lastFingerprint !== currentFingerprint) {
+                console.log("NovaFlow: 🔄 Changement détecté sur Moodle (Fingerprint différent). Démarrage de la mise à jour...");
+            } else {
+                console.log("NovaFlow: ⏳ Moodle n'a pas bougé, mais des éléments sont en file d'attente. Tentative de synchronisation...");
+            }
+
+            // 3. Mettre à jour notre vérité avec le serveur (avant de traiter les nouveautés)
+            await fetchServerSyncState();
+
+            let newFilesTrackerPaths = [];
+            let newFileKeys = [];
+
+            // Seulement scanner les nouveaux fichiers si Moodle a bougé (Fingerprint changé)
+            if (storage.lastFingerprint !== currentFingerprint && courses && courses.length > 0) {
+                // Fetch and download course files
+                const fileResult = await fetchAndDownloadCourseFiles(moodleHost, moodleSesskey, courses);
+                if (fileResult) {
+                    newFilesTrackerPaths = fileResult.paths || [];
+                    newFileKeys = fileResult.keys || [];
+                }
+            }
+
+            // B. Add new items to pending queues
+            // Filter events: On garde ceux qui ne sont pas DÉJÀ connus du serveur
+            const newEventsToSend = rawEvents.filter(ev => !serverEvents.includes(ev.id));
+
+            // Merge with pending (deduplicate)
+            const eventMap = new Map();
+            [...pendingEvents, ...newEventsToSend].forEach(ev => eventMap.set(ev.id, ev));
+            pendingEvents = Array.from(eventMap.values());
+
+            pendingFiles = [...new Set([...pendingFiles, ...newFileKeys])];
+            pendingPaths = [...new Set([...pendingPaths, ...newFilesTrackerPaths])];
+
+            if (pendingEvents.length > 0 || pendingFiles.length > 0 || pendingPaths.length > 0 || courses.length > 0) {
+                // C. Sync to NovaFlow (Flush pending)
+                const success = await syncToNovaFlow(pendingEvents, courses, pendingPaths, pendingFiles);
+                if (success) {
+                    // Vide la file d'attente et met à jour le fingerprint pour ne pas reboucler inutilement
+                    await chrome.storage.local.set({
+                        pendingSyncEvents: [],
+                        pendingSyncFiles: [],
+                        pendingSyncPaths: [],
+                        lastFingerprint: currentFingerprint
+                    });
+                } else {
+                    // Update la file d'attente pour la prochaine fois (on ne met pas à jour le fingerprint car on veut réessayer la connexion)
+                    await chrome.storage.local.set({
+                        pendingSyncEvents: pendingEvents,
+                        pendingSyncFiles: pendingFiles,
+                        pendingSyncPaths: pendingPaths,
+                        lastFingerprint: currentFingerprint // On met quand même à jour le fingerprint de lecture Moodle, car les données Moodle sont bien lues et en file d'attente
+                    });
+                }
+            } else {
+                // Pas de tâche en attente, mais on a fait un cycle complet on met à jour le fingerprint
+                await chrome.storage.local.set({ lastFingerprint: currentFingerprint });
             }
         } catch (error) {
             console.error("NovaFlow: Erreur durant la synchronisation en arrière-plan:", error);
@@ -217,14 +325,15 @@ async function fetchMoodleCourses(host, sesskey) {
     }
 }
 
-async function syncToNovaFlow(events, courses = [], downloadedFiles = []) {
+async function syncToNovaFlow(events, courses = [], downloadedPaths = [], downloadedKeys = []) {
     try {
         const payload = {
             source: "moodle_extension",
             timestamp: new Date().toISOString(),
             events: events,
             courses: courses,
-            downloaded_files: downloadedFiles
+            downloaded_files: downloadedPaths,
+            downloaded_file_keys: downloadedKeys
         };
 
         const response = await fetch(NOVAFLOW_URL, {
@@ -236,29 +345,45 @@ async function syncToNovaFlow(events, courses = [], downloadedFiles = []) {
         if (response.ok) {
             console.log(`NovaFlow: Synchronisation réussie de ${events.length} événements.`);
             updateBadgeStatus("OK", "#22c55e"); // Vert
+
+            // Update local server states immediately
+            await fetchServerSyncState();
+
             chrome.storage.local.set({
                 lastSyncTime: new Date().toLocaleString(),
                 lastSyncCount: events.length,
                 syncStatus: "success"
             });
+            return true;
         } else {
             console.warn("NovaFlow: Le serveur a retourné une erreur :", response.status);
             handleSyncFailure(events);
+            return false;
         }
 
     } catch (error) {
         console.warn("NovaFlow: Impossible de joindre le serveur. Serveur fermé ?");
         handleSyncFailure(events);
+        return false;
     }
 }
 
 async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
-    const data = await chrome.storage.local.get(['downloadedMoodleFiles']);
+    const data = await chrome.storage.local.get(['downloadedMoodleFiles', 'serverSyncedFiles', 'pendingSyncFiles']);
     const downloadedFiles = data.downloadedMoodleFiles || {};
+    const serverSyncedFiles = data.serverSyncedFiles || {};
+    const pendingSyncFiles = data.pendingSyncFiles || [];
+
     let newlyTriggeredFilesCount = 0;
     let newlyTriggeredPaths = [];
+    let newlyTriggeredKeys = [];
 
     console.log(`NovaFlow: Début de l'extraction des fichiers pour ${courses.length} cours.`);
+
+    // Check if already processed
+    const isFileKnown = (fileKey) => {
+        return downloadedFiles[fileKey] || serverSyncedFiles[fileKey] || pendingSyncFiles.includes(fileKey);
+    };
 
     const fetchCourseState = async (course) => {
         try {
@@ -314,7 +439,7 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
                 const cm = modulesById[cmId];
                 if (cm && cm.module === 'resource' && cm.url) {
                     const fileKey = cm.id;
-                    if (!downloadedFiles[fileKey]) {
+                    if (!isFileKnown(fileKey)) {
                         allFileTasks.push({ course, section, cm, fileKey });
                     }
                 } else if (cm && cm.module === 'assign' && cm.url) {
@@ -356,7 +481,7 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
                         name: cm.name ? `${cm.name} (${baseName})` : baseName
                     };
 
-                    if (!downloadedFiles[fileKey]) {
+                    if (!isFileKnown(fileKey)) {
                         allFileTasks.push({ course, section, cm: pseudoCm, fileKey });
                     }
                     index++;
@@ -469,6 +594,7 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
                         downloadedFiles[fileKey] = true;
                         newlyTriggeredFilesCount++;
                         newlyTriggeredPaths.push(destPath);
+                        newlyTriggeredKeys.push(fileKey);
                         resolve(destPath);
                     }
                 });
@@ -491,7 +617,7 @@ async function fetchAndDownloadCourseFiles(host, sesskey, courses) {
     }
 
     console.log(`NovaFlow: Extraction terminée. ${newlyTriggeredFilesCount} fichiers ajoutés.`);
-    return newlyTriggeredPaths;
+    return { paths: newlyTriggeredPaths, keys: newlyTriggeredKeys };
 }
 
 function handleSyncFailure(events) {

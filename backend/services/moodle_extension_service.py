@@ -8,6 +8,7 @@ from datetime import datetime
 # Où sauvegarder les événements Moodle envoyés par l'extension
 MOODLE_EXT_EVENTS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "moodle_ext_events.json")
 MOODLE_EXT_COURSES_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "moodle_ext_courses.json")
+MOODLE_EXT_DOWNLOADED_KEYS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "moodle_ext_downloaded_keys.json")
 
 def _ensure_data_dir():
     os.makedirs(os.path.dirname(MOODLE_EXT_EVENTS_FILE), exist_ok=True)
@@ -31,6 +32,21 @@ def _save_ext_courses(courses):
     _ensure_data_dir()
     with open(MOODLE_EXT_COURSES_FILE, "w", encoding="utf-8") as f:
         json.dump(courses, f, indent=2, ensure_ascii=False)
+
+def _load_ext_downloaded_keys():
+    _ensure_data_dir()
+    if os.path.exists(MOODLE_EXT_DOWNLOADED_KEYS_FILE):
+        try:
+            with open(MOODLE_EXT_DOWNLOADED_KEYS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def _save_ext_downloaded_keys(keys):
+    _ensure_data_dir()
+    with open(MOODLE_EXT_DOWNLOADED_KEYS_FILE, "w", encoding="utf-8") as f:
+        json.dump(keys, f, indent=2, ensure_ascii=False)
 
 def _load_ext_courses():
     if os.path.exists(MOODLE_EXT_COURSES_FILE):
@@ -154,8 +170,14 @@ def process_extension_payload(payload: dict) -> dict:
     downloaded_files = payload.get("downloaded_files", [])
     files_moved = process_moodle_files(downloaded_files)
 
+    downloaded_file_keys = payload.get("downloaded_file_keys", [])
+    if downloaded_file_keys:
+        existing_keys = set(_load_ext_downloaded_keys())
+        existing_keys.update(downloaded_file_keys)
+        _save_ext_downloaded_keys(list(existing_keys))
+
     events = payload.get("events", [])
-    if not events and not downloaded_files:
+    if not events and not downloaded_files and not downloaded_file_keys:
         return {"status": "success", "message": "Aucune donnée (events/fichiers)", "inserted": 0, "files_moved": 0}
     
     # Charger les événements existants
@@ -230,3 +252,14 @@ def get_moodle_extension_events() -> list:
 def get_moodle_extension_courses() -> list:
     """Fonction appelée par calendar_aggregator pour récupérer le dictionnaire parfait de cours."""
     return _load_ext_courses()
+
+def get_moodle_sync_state() -> dict:
+    """Retourne l'état de synchronisation actuel pour l'extension."""
+    events = _load_ext_events()
+    event_ids = [e["id"] for e in events]
+    file_keys = _load_ext_downloaded_keys()
+    
+    return {
+        "synced_events": event_ids,
+        "synced_files": file_keys
+    }
