@@ -68,9 +68,10 @@ def get_todo_tasks(limit: int = 50) -> list:
                 elif item.get("importance") == "low":
                     priority = "low"
                 
-                # Mapping statut
-                is_done = item.get("status") == "completed"
-                
+                # Mapping date d'échéance (dueDateTime est un objet {dateTime, timeZone})
+                due_date_obj = item.get("dueDateTime")
+                due_date = due_date_obj.get("dateTime") if due_date_obj else None
+
                 task_dict = {
                     "id": item["id"],  # On garde l'ID Microsoft (sera utilisé comme external_id)
                     "title": item.get("title") or "Sans titre",
@@ -81,7 +82,8 @@ def get_todo_tasks(limit: int = 50) -> list:
                     "created_at": item.get("createdDateTime", datetime.now(timezone.utc).isoformat()),
                     "source": "microsoft_todo",
                     "link": item.get("webLink", ""),
-                    "description": item.get("body", {}).get("content", "")
+                    "description": item.get("body", {}).get("content", ""),
+                    "due_date": due_date
                 }
                 
                 all_tasks.append(task_dict)

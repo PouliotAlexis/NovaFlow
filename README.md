@@ -47,8 +47,9 @@ La fin absolue de la fragmentation de vos emplois du temps.
 
 ### ✅ Gestion de Tâches Autopilotée
 Oubliez la saisie manuelle.
+- **Synchronisation Multi-Sources** : Intégration transparente de **Google Tasks** et **Microsoft To Do**.
 - **Création Automatique IA** : Analyse sémantique des descriptions d'événements pour en extraire des livrables (Tasks).
-- **Association Parent/Enfant** : Chaque tâche est raccordée à sa source (Événement → Devoirs).
+- **Association Parent/Enfant Intelligente** : L'IA analyse les nouvelles tâches externes pour les lier automatiquement à leurs événements correspondants (cours, rendez-vous) ou créer de nouveaux événements si nécessaire.
 - **Fusion Contextuelle** : L'IA regroupe les tâches similaires pour éviter les doublons inutiles (analyse sémantique, pas juste lettre par lettre).
 - **Synchronisation Bidirectionnelle** : Toute modification dans *Task List* se répercute instantanément sur votre *Calendar*.
 

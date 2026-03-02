@@ -5,6 +5,7 @@ from services.microsoft_calendar import get_outlook_events
 from services.moodle_rss_service import get_moodle_events
 from services.moodle_extension_service import get_moodle_extension_events, get_moodle_extension_courses
 from services.task_manager import TaskManager
+from services.event_manager import EventManager
 import os
 import json
 
@@ -90,6 +91,19 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
     except Exception as e:
         print(f"Erreur Moodle Extension: {e}")
 
+    # 4.5 Récupérer les événements locaux (AI, etc.)
+    local_nf_events = []
+    try:
+        em = EventManager.instance()
+        # On ne prend que les events locaux/AI qui ne sont pas déjà des miroirs de Google/Outlook
+        # (ceux-ci sont déjà gérés via les API respectives et le lien parent_event_id)
+        all_em_events = em.get_all_events()
+        for e in all_em_events:
+            if e.source not in ("google_calendar", "outlook_calendar", "moodle"):
+                local_nf_events.append(e.to_dict())
+    except Exception as e:
+        print(f"Erreur Events Locaux: {e}")
+
     # Créer un dictionnaire parfait pour mapper les codes de cours (ex: "PHQ202") vers leur nom complet
     course_code_to_name = {}
     try:
@@ -108,16 +122,31 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
 
     # 5. Récupérer toutes les tâches NovaFlow
     tm = TaskManager.instance()
+    em = EventManager.instance()
     all_tasks = tm.get_all_tasks()
     
     # 6. Organiser les tâches par parent_event_id pour un accès rapide
+    # On supporte l'ID externe (préféré) ET l'ID interne (fallback pour robustesse)
     tasks_by_event = {}
     for task in all_tasks:
         parent_id = task.get("parent_event_id")
         if parent_id:
+            # 1. Essai direct (ID externe ou ID déjà correct)
             if parent_id not in tasks_by_event:
                 tasks_by_event[parent_id] = []
             tasks_by_event[parent_id].append(task)
+            
+            # 2. Fallback: Si parent_id est un UUID interne, mapper aussi vers l'ID externe
+            # de l'événement pour que l'agrégateur puisse le trouver
+            if "-" in parent_id and len(parent_id) > 20: # Probablement un UUID NovaFlow
+                evt = em.get_event(parent_id)
+                if evt and evt.external_id:
+                    ext_id = evt.external_id
+                    if ext_id not in tasks_by_event:
+                        tasks_by_event[ext_id] = []
+                    # Éviter les doublons si l'ID externe était déjà dans la liste
+                    if task not in tasks_by_event[ext_id]:
+                        tasks_by_event[ext_id].append(task)
 
     # 5. Indexer les événements Google (prioritaires) par clé de dédup
     dedup_index: Dict[str, Dict[str, Any]] = {}
@@ -243,7 +272,21 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
             dedup_index[dk] = unified_event
             unified_events.append(unified_event)
 
-    # 9. Trier par date de début
+    # 9. Ajouter les événements locaux NovaFlow
+    for l_evt in local_nf_events:
+        event_id = l_evt["id"]
+        title = l_evt.get("title", "Sans titre")
+        start = l_evt.get("start", "")
+        dk = _dedup_key(title, start)
+
+        if dk not in dedup_index:
+            unified_event = l_evt.copy()
+            unified_event["source"] = l_evt.get("source", "local")
+            unified_event["tasks"] = tasks_by_event.get(event_id, [])
+            dedup_index[dk] = unified_event
+            unified_events.append(unified_event)
+
+    # 10. Trier par date de début
     unified_events.sort(key=lambda x: x["start"] or "")
     
     return unified_events

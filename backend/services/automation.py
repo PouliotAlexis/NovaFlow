@@ -70,6 +70,12 @@ async def cancel_job(job_id: str):
 
 async def start_job(name: str, coro):
     """Lance une coroutine en tant que job tracké."""
+    # Pre-check to prevent duplicate jobs
+    existing_jobs = get_active_jobs()
+    if any(job["name"] == name for job in existing_jobs):
+        log_auto(f"⚠️ Le job '{name}' est déjà en cours, annulation du nouveau lancement.")
+        return None
+
     job_id = str(uuid.uuid4())
     
     # Si on passe une fonction (ex: analyze_all_calendars), on l'exécute pour avoir la coroutine
@@ -495,7 +501,7 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30, source
                 log_auto(f"❌ Erreur analyse IA : {e}")
 
 
-# === Microsoft To Do Sync ===
+# === Microsoft To Do et Google Tasks Sync ===
 
 async def sync_microsoft_todo_tasks():
     """
@@ -507,55 +513,240 @@ async def sync_microsoft_todo_tasks():
     from fastapi.concurrency import run_in_threadpool
     
     try:
-        # Exécuter l'appel bloquant requests dans un thread
         tasks = await run_in_threadpool(get_todo_tasks)
-        
         if not tasks:
             log_auto("ℹ️ Aucune tâche To Do ou aucun compte connecté.")
             return
 
         count_new = 0
         count_updated = 0
+        newly_added_tasks = []
+        tm = TaskManager.instance()
+        all_local_tasks = tm.get_all_tasks()
         
         for t_data in tasks:
-            # data from get_todo_tasks: 
-            # {id, title, priority, meta, done, parent_event_id, created_at, source, link, description}
+            existing = next((t for t in all_local_tasks if t.get("external_id") == t_data["id"] and t.get("source") == "microsoft_todo"), None)
             
-            # 1. Tenter d'ajouter (dédoublonnage via external_id dans add_task)
-            # Note: add_task retourne le dict de la tâche (nouvelle ou existante)
-            task_result = task_manager.add_task(
+            task_result = tm.add_task(
                 title=t_data["title"],
                 priority=t_data["priority"],
                 meta=t_data["meta"],
                 parent_event_id=None,
                 external_id=t_data["id"],
-                source="microsoft_todo"
+                source="microsoft_todo",
+                due_date=t_data.get("due_date")
             )
             
-            # 2. Vérifier si on doit mettre à jour le statut 'done'
-            # (Si la tâche existait déjà mais que son statut local diffère du remote)
-            # Ici t_data['done'] vient de Microsoft. 
-            # task_result['done'] est la valeur locale.
-            
-            # Simple sync: Remote wins for status
             if task_result["done"] != t_data["done"]:
-                task_manager.update_task(task_result["id"], {"done": t_data["done"]})
+                tm.update_task(task_result["id"], {"done": t_data["done"]})
                 count_updated += 1
             
-            # On pourrait aussi sync le titre si changé, mais attention aux écrasements locaux.
-            # Pour l'instant on sync juste le statut.
-            
-            # Si la tâche a été créée (on check si created_at est très récent ou si on avait pas cet ID avant)
-            # Mais add_task ne dit pas explicitement "created".
-            # On suppose que c'est un flux continu.
-            
-        log_auto(f"✅ Sync To Do terminée : {len(tasks)} tâches scannées ({count_updated} màj statut).")
+            if not existing:
+                newly_added_tasks.append(task_result)
+                count_new += 1
+                
+        log_auto(f"✅ Sync To Do terminée : {len(tasks)} tâches scannées ({count_updated} màj, {count_new} ajouts).")
         
+        if newly_added_tasks:
+            log_auto(f"🤖 Lancement de l'analyse IA sur {len(newly_added_tasks)} nouvelles tâches To Do.")
+            await analyze_and_link_tasks(newly_added_tasks)
+            
     except Exception as e:
         log_auto(f"❌ Erreur Sync Microsoft To Do : {e}")
 
+async def sync_google_tasks():
+    """
+    Tâche de fond : Synchronise les tâches Google Tasks.
+    """
+    log_auto("🔄 Sync Google Tasks : Démarrage...")
+    from services.google_service import get_google_tasks
+    from fastapi.concurrency import run_in_threadpool
+    
+    try:
+        tasks = await run_in_threadpool(get_google_tasks)
+        if not tasks:
+            log_auto("ℹ️ Aucune tâche Google Tasks ou aucun compte connecté.")
+            return
 
+        count_new = 0
+        count_updated = 0
+        newly_added_tasks = []
+        tm = TaskManager.instance()
+        all_local_tasks = tm.get_all_tasks()
+        
+        for t_data in tasks:
+            existing = next((t for t in all_local_tasks if t.get("external_id") == t_data["id"] and t.get("source") == "google_tasks"), None)
+            
+            task_result = tm.add_task(
+                title=t_data["title"],
+                priority=t_data["priority"],
+                meta=t_data["meta"],
+                parent_event_id=None,
+                external_id=t_data["id"],
+                source="google_tasks",
+                due_date=t_data.get("due_date")
+            )
+            
+            if task_result["done"] != t_data["done"]:
+                tm.update_task(task_result["id"], {"done": t_data["done"]})
+                count_updated += 1
+                
+            if not existing:
+                newly_added_tasks.append(task_result)
+                count_new += 1
+                
+        log_auto(f"✅ Sync Google Tasks terminée : {len(tasks)} tâches scannées ({count_updated} màj, {count_new} ajouts).")
+        
+        if newly_added_tasks:
+            log_auto(f"🤖 Lancement de l'analyse IA sur {len(newly_added_tasks)} nouvelles tâches Google.")
+            await analyze_and_link_tasks(newly_added_tasks)
+            
+    except Exception as e:
+        log_auto(f"❌ Erreur Sync Google Tasks : {e}")
 
+async def analyze_and_link_tasks(new_tasks: list):
+    """
+    Analyse de nouvelles tâches séquentiellement (Une par une) via l'IA locale.
+    Privilégie la stabilité et la précision du contexte.
+    """
+    if not new_tasks: return
+        
+    evt_manager = EventManager.instance()
+    task_manager = TaskManager.instance()
+    
+    # On importe get_unified_events pour avoir TOUS les events (Moodle, Outlook, Google)
+    from services.calendar_aggregator import get_unified_events
+    import asyncio
+    from fastapi.concurrency import run_in_threadpool
+    
+    try:
+        # On regarde jusqu'à 60 jours en avance pour les devoirs lointains
+        all_events = await run_in_threadpool(get_unified_events, days=60)
+    except Exception as e:
+        log_auto(f"Erreur chargement events unifiés pour l'IA: {e}")
+        all_events = []
+    
+    import datetime
+    now = datetime.datetime.now()
+    today_date_str = now.strftime("%Y-%m-%d")
+    now_iso = now.isoformat()
+    
+    # Filtre de date et Tri
+    def get_event_start(e: dict) -> str:
+        s = e.get("start", "")
+        # Handle dict format from Google Calendar (e.g. {'dateTime': '...', 'date': '...'})
+        if isinstance(s, dict):
+            return s.get("dateTime") or s.get("date", "")
+        return s or ""
+
+    valid_events_raw = [e for e in all_events if get_event_start(e) and get_event_start(e)[:10] >= today_date_str]
+    valid_events = sorted(valid_events_raw, key=lambda x: get_event_start(x))[:40]
+
+    # Utiliser un mapping avec des IDs simples pour éviter les hallucinations de l'IA sur des IDs complexes
+    # Pour l'assignation finale, on a besoin de l'ID event_manager, ou à défaut l'ID externe.
+    event_mapping = {}
+    for i, e in enumerate(valid_events):
+        idx = str(i+1)
+        ext_id = e.get("id")
+        source = e.get("source", "google")
+        # Map source name back to EventManager source convention
+        em_source = "outlook_calendar" if source == "outlook" else source
+        if em_source == "google": 
+            em_source = "google_calendar"
+            
+        # Chercher s'il existe déjà dans EventManager
+        nf_evt = evt_manager.get_event_by_external_id(ext_id, em_source)
+        
+        event_mapping[idx] = {
+            "title": e.get("title", "Sans titre"),
+            "start": get_event_start(e),
+            "external_id": ext_id,
+            "nf_event": nf_evt  # Peut être None (ex: Moodle)
+        }
+
+    events_text = "\n".join([
+        f"- ID: {idx} | Titre: '{e['title']}' | Date: {e['start']}" 
+        for idx, e in event_mapping.items()
+    ])
+
+    log_auto(f"🚀 Analyse séquentielle de {len(new_tasks)} tâches avec l'IA...")
+    log_auto(f"ℹ️ Events envoyés à l'IA pour contexte:\n{events_text}")
+
+    for i, task in enumerate(new_tasks):
+        task_id = task.get("id")
+        title = task.get("title", "Sans titre")
+        desc = task.get("description", "")
+        due = task.get("due_date")
+        
+        prompt = (
+            f"Tâche à analyser : '{title}'\nDescription: {desc}\nÉchéance: {due}\n\n"
+            f"Événements existants au calendrier :\n{events_text}\n\n"
+            f"--- RÈGLES ET EXEMPLES DE CLASSIFICATION ---\n"
+            f"1. ACTION 'link' -> TOUTE tâche qui peut être liée, de près ou de loin, à un événement de la liste DOIT être liée. Sois EXTRÊMEMENT PERMISSIF pour lier. Par exemple, 'Acheter des skis' DOIT être 'link' avec 'Ski Bromont'. 'Devoir 2' DOIT être 'link' avec un événement de cours pertinent. Cherche des synonymes ou des thèmes communs.\n"
+            f"2. ACTION 'none' -> Si la tâche n'a absolument AUCUN lien thématique avec la liste d'événements, retourne 'none' (ex: 'Faire du ménage').\n"
+            f"3. ACTION 'create' -> INTERDIT DE CRÉER DE NOUVEAUX ÉVÉNEMENTS ('create') sauf s'il s'agit explicitement d'un nouveau rendez-vous clair dans le temps (ex: 'Rendez-vous dentiste le 14 mars à 10h'). On préfère largement 'link' ou 'none'.\n"
+            f"----------------------------------\n\n"
+            f"En suivant cette logique, quelle est l'action la plus intelligente pour la tâche actuelle ?\n"
+            f"Réponds STRICTEMENT et UNIQUEMENT en JSON avec ce format exact :\n"
+            f"{{\n"
+            f"  \"reasoning\": \"Explication courte de ton choix\",\n"
+            f"  \"action\": \"none|link|create\",\n"
+            f"  \"event_id\": \"ID_ICI (utiliser UNIQUEMENT le chiffre donné, ex: '1', '2')\",\n"
+            f"  \"title\": \"Titre du nouvel événement (si create)\",\n"
+            f"  \"date\": \"Date iso (si create)\"\n"
+            f"}}"
+        )
+
+        try:
+            from services.ai_engine import chat as ai_chat
+            log_auto(f"⏳ [{i+1}/{len(new_tasks)}] Analyse de '{title}'...")
+            raw = await ai_chat(prompt, system_prompt="Tu es un assistant expert et logique. Réponds uniquement avec un seul objet JSON valide.")
+            
+            if "</think>" in raw:
+                raw = raw.split("</think>")[-1].strip()
+            
+            clean = raw.replace("```json", "").replace("```", "").strip()
+            if "{" in clean:
+                clean = clean[clean.find("{"):clean.rfind("}")+1]
+                
+            res = json.loads(clean)
+            action = res.get("action")
+            reasoning = res.get("reasoning", "Pas d'explication")
+            event_id = None
+            
+            log_auto(f"🧠 IA Reasoning: {reasoning}")
+            
+            if action == "link":
+                mapped_id = str(res.get("event_id", ""))
+                # Validation stricte en Python : vérifie si l'ID inventé est réel
+                if mapped_id in event_mapping:
+                    event_data = event_mapping[mapped_id]
+                    nf_evt = event_data["nf_event"]
+                    # S'il n'y a pas d'événement NovaFlow (ex: Moodle pur), on doit le créer d'abord pour avoir un parent interne ?
+                    # TaskManager gère parent_event_id. On peut stocker l'external_id de Moodle comme parent. L'aggrégateur s'en occupe
+                    event_id = nf_evt.id if nf_evt else event_data["external_id"]
+                else:
+                    action = "none" # Fallback si l'IA hallucine un ID
+                    log_auto(f"⚠️  Hallucination ID détectée pour '{title}': {mapped_id}. Rejeté.")
+
+            if action == "link":
+                if event_id:
+                    # Encaisser le linkage. Si c'est un external_id (ex: Moodle), TaskManager supporte le stockage string long.
+                    task_manager.link_task_to_event(task_id, event_id)
+                    linked_title = event_mapping[mapped_id]['title']
+                    log_auto(f"✅ Linked: '{title}' -> Événement [{mapped_id}] '{linked_title}'")
+            elif action == "create":
+                new_title = res.get("title") or title
+                new_date = res.get("date") or due or now_iso
+                import uuid
+                new_evt = evt_manager.create_event(str(uuid.uuid4()), "ai_task", new_title, new_date, now_iso, "")
+                task_manager.link_task_to_event(task_id, new_evt.id)
+                log_auto(f"✅ Created: '{title}' -> Nouvel événement '{new_title}' le {new_date}")
+            else:
+                log_auto(f"ℹ️ Orphan: '{title}'")
+                
+        except Exception as e:
+            log_auto(f"❌ Error for '{title}': {e} - Raw: {raw[:100] if 'raw' in locals() else 'N/A'}")
 
 async def analyze_all_calendars(days: int = 30):
     """Analyse les événements de toutes les sources (Google + Outlook + To Do)."""
@@ -563,6 +754,7 @@ async def analyze_all_calendars(days: int = 30):
     from services.google_service import is_any_connected as google_is_connected
     if google_is_connected():
         await analyze_calendar_for_tasks(events=None, days=days, source="google_calendar")
+        await sync_google_tasks()
     
     # 2. Outlook (si connecté)
     from services.microsoft_auth import MicrosoftAuthService
@@ -570,5 +762,5 @@ async def analyze_all_calendars(days: int = 30):
         await analyze_calendar_for_tasks(events=None, days=days, source="outlook_calendar")
 
     # 3. Microsoft To Do (si connecté)
-    # La fonction gère elle-même la vérification des comptes
     await sync_microsoft_todo_tasks()
+

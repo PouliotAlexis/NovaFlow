@@ -27,10 +27,11 @@ CREDENTIALS_DIR = os.path.join(
 TOKENS_DIR = os.path.join(CREDENTIALS_DIR, "tokens")
 CLIENT_SECRET_FILE = os.path.join(CREDENTIALS_DIR, "google_client_secret.json")
 
-# Scopes étendus : Calendar, Drive, et Profil pour identifier le compte
+# Scopes étendus : Calendar, Drive, Profil, et Tasks
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/tasks.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "openid"
 ]
@@ -408,4 +409,58 @@ def upload_files_batch_to_drive(files_to_upload: List[tuple]):
     except Exception as e:
         print(f"❌ Drive Sync Batch Error pour {email}: {e}")
 
+# === Tasks API ===
+
+def get_google_tasks(limit: int = 50) -> List[Dict]:
+    """Récupère les tâches non complétées depuis Google Tasks pour tous les comptes connectés."""
+    emails = list_connected_accounts()
+    all_tasks = []
+    
+    for email in emails:
+        creds = _get_credentials_for_email(email)
+        if not creds:
+            continue
+            
+        try:
+            service = build("tasks", "v1", credentials=creds)
+            
+            # 1. Lister toutes les tasklists
+            lists_result = service.tasklists().list().execute()
+            task_lists = lists_result.get("items", [])
+            
+            for task_list in task_lists:
+                list_id = task_list["id"]
+                list_title = task_list.get("title", 'Sans titre')
+                
+                # 2. Récupérer les tâches (non complétées)
+                tasks_result = service.tasks().list(
+                    tasklist=list_id,
+                    maxResults=limit,
+                    showCompleted=False,
+                    showHidden=False
+                ).execute()
+                
+                items = tasks_result.get("items", [])
+                for item in items:
+                    # Mappage vers le format NovaFlowTask
+                    due_date = item.get("due")
+                    task_dict = {
+                        "id": item["id"], # external_id
+                        "title": item.get("title") or "Sans titre",
+                        "priority": "medium", # Google Tasks n'a pas de priorité standard facile
+                        "meta": f"Google Tasks",
+                        "done": item.get("status") == "completed",
+                        "parent_event_id": None,
+                        "created_at": item.get("updated", datetime.utcnow().isoformat()),
+                        "source": "google_tasks",
+                        "link": item.get("webViewLink", ""),
+                        "description": item.get("notes", ""),
+                        "due_date": due_date
+                    }
+                    all_tasks.append(task_dict)
+                    
+        except Exception as e:
+            print(f"❌ Exception lors de la récupération des Google Tasks pour {email}: {e}")
+            
+    return all_tasks
 

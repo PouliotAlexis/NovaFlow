@@ -20,7 +20,7 @@ def _ensure_data_dir():
 class NovaFlowTask:
     def __init__(self, id: str, title: str, priority: str = "medium", meta: str = "NovaFlow", 
                  done: bool = False, parent_event_id: Optional[str] = None, created_at: Optional[str] = None,
-                 external_id: Optional[str] = None, source: Optional[str] = "local"):
+                 external_id: Optional[str] = None, source: Optional[str] = "local", due_date: Optional[str] = None):
         self.id = id
         self.title = title
         self.priority = priority
@@ -30,6 +30,7 @@ class NovaFlowTask:
         self.created_at = created_at or datetime.now().isoformat()
         self.external_id = external_id
         self.source = source
+        self.due_date = due_date
 
     def mark_done(self):
         self.done = True
@@ -48,6 +49,7 @@ class NovaFlowTask:
         if "parent_event_id" in updates: self.parent_event_id = updates["parent_event_id"]
         if "external_id" in updates: self.external_id = updates["external_id"]
         if "source" in updates: self.source = updates["source"]
+        if "due_date" in updates: self.due_date = updates["due_date"]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -59,7 +61,8 @@ class NovaFlowTask:
             "parent_event_id": self.parent_event_id,
             "created_at": self.created_at,
             "external_id": self.external_id,
-            "source": self.source
+            "source": self.source,
+            "due_date": self.due_date
         }
 
     @classmethod
@@ -73,7 +76,8 @@ class NovaFlowTask:
             parent_event_id=data.get("parent_event_id"),
             created_at=data.get("created_at"),
             external_id=data.get("external_id"),
-            source=data.get("source", "local")
+            source=data.get("source", "local"),
+            due_date=data.get("due_date")
         )
 
 class TaskManager:
@@ -118,7 +122,7 @@ class TaskManager:
 
     def add_task(self, title: str, priority: str = "medium", meta: str = "NovaFlow", 
                  parent_event_id: Optional[str] = None, external_id: Optional[str] = None, 
-                 source: Optional[str] = "local") -> Dict[str, Any]:
+                 source: Optional[str] = "local", due_date: Optional[str] = None) -> Dict[str, Any]:
         # Dedup check
         for t in self._tasks:
             # Si on a un external_id, c'est le facteur de dédoublonnage principal
@@ -130,7 +134,7 @@ class TaskManager:
                 return t.to_dict()
         
         new_task = NovaFlowTask(str(uuid.uuid4()), title, priority, meta, False, parent_event_id, 
-                                external_id=external_id, source=source)
+                                external_id=external_id, source=source, due_date=due_date)
         self._tasks.insert(0, new_task)
         self._save_tasks()
         return new_task.to_dict()
@@ -177,8 +181,8 @@ _manager = TaskManager.instance()
 def get_tasks() -> List[Dict[str, Any]]:
     return _manager.get_all_tasks()
 
-def add_task(title: str, priority: str = "medium", meta: str = "NovaFlow", parent_event_id: Optional[str] = None) -> Dict[str, Any]:
-    return _manager.add_task(title, priority, meta, parent_event_id)
+def add_task(title: str, priority: str = "medium", meta: str = "NovaFlow", parent_event_id: Optional[str] = None, due_date: Optional[str] = None) -> Dict[str, Any]:
+    return _manager.add_task(title, priority, meta, parent_event_id, due_date=due_date)
 
 def update_task(task_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return _manager.update_task(task_id, updates)

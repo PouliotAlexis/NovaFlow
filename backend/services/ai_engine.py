@@ -56,7 +56,7 @@ async def chat_local(prompt: str, system_prompt: str = "", context: str = "") ->
         {"role": "user", "content": prompt},
     ]
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=600.0) as client:
         response = await client.post(
             f"{settings.OLLAMA_HOST}/api/chat",
             json={
