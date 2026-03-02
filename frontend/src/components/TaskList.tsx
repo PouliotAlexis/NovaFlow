@@ -40,11 +40,18 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
 
     useEffect(() => {
         fetchTasks();
+
+        // Polling : rafraîchir les tâches toutes les 60s
+        const pollInterval = setInterval(() => {
+            fetchTasks();
+        }, 60_000);
+
         const onTaskChanged = () => fetchTasks();
         const onAutomationDone = () => fetchTasks();
         window.addEventListener("novaflow-task-changed", onTaskChanged);
         window.addEventListener("novaflow-automation-done", onAutomationDone);
         return () => {
+            clearInterval(pollInterval);
             window.removeEventListener("novaflow-task-changed", onTaskChanged);
             window.removeEventListener("novaflow-automation-done", onAutomationDone);
         };

@@ -134,6 +134,9 @@ PROCESSED_DATA_FILE = os.path.join(
     "processed_items.json"
 )
 
+# Timestamp pour le throttling de la synchronisation périodique (Tasks, etc.)
+_last_auto_sync_time = datetime.datetime.min
+
 def _load_processed_items() -> dict:
     """Charge l'historique des items traités."""
     if not os.path.exists(PROCESSED_DATA_FILE):
@@ -260,6 +263,16 @@ def has_new_events(events: list) -> bool:
     except Exception as e:
         log_auto(f"ERROR inside has_new_events: {e}")
         return True  # Default to True on error to be safe
+
+def should_trigger_periodic_sync() -> bool:
+    """Vérifie si une synchronisation périodique (Tasks, etc.) est due (toutes les 2 min)."""
+    global _last_auto_sync_time
+    now = datetime.datetime.now()
+    if (now - _last_auto_sync_time).total_seconds() > 120:
+        _last_auto_sync_time = now
+        log_auto("🕒 Synchronisation périodique des tâches déclenchée (Timeout).")
+        return True
+    return False
 
 
 async def analyze_document_for_tasks(doc_id: str, file_name: str):

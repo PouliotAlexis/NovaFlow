@@ -562,8 +562,18 @@ async def cancel_automation_job(job_id: str):
 # === Endpoints Tâches ===
 
 @app.get("/api/tasks")
-def get_all_tasks():
+async def get_all_tasks():
     """Récupère toutes les tâches."""
+    # ⚡ AUTOMATION — Déclencher l'analyse périodique (Tasks) si nécessaire
+    try:
+        from services.automation import should_trigger_periodic_sync, analyze_all_calendars, get_active_jobs, start_job
+        existing_jobs = get_active_jobs()
+        is_running = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
+        if not is_running and should_trigger_periodic_sync():
+             await start_job("Analyse Calendrier", analyze_all_calendars(days=30))
+    except Exception as e:
+        print(f"Erreur déclenchement sync depuis tasks api: {e}")
+        
     return task_manager.get_all_tasks()
 
 @app.post("/api/tasks")
@@ -679,7 +689,10 @@ async def calendar_events(days: int = 30):
     try:
         existing_jobs = get_active_jobs()
         is_running = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
-        if not is_running and has_new_events(events):
+        
+        from services.automation import should_trigger_periodic_sync
+        
+        if not is_running and (has_new_events(events) or should_trigger_periodic_sync()):
              await start_job("Analyse Calendrier", analyze_all_calendars(days=30))
     except Exception as e:
         print(f"Erreur déclenchement automation calendrier: {e}")
