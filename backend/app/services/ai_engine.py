@@ -13,15 +13,15 @@ from app.core.config import settings
 
 def _build_system_prompt(system_prompt: str, context: str = "") -> str:
     """Construit le system prompt avec injection de contexte RAG si disponible."""
-    base = system_prompt or "Tu es NovaFlow, un assistant personnel intelligent. Réponds en français."
+    base = system_prompt or "Tu es NovaFlow, un assistant personnel intelligent. Réponds TOUJOURS en utilisant un formatage Markdown riche (listes, gras, tableaux si pertinent). Utilise des sauts de ligne clairs entre tes paragraphes et tes points de liste."
     
     if context:
         return (
             f"{base}\n\n"
             "## Outils Disponibles\n"
             "Tu peux effectuer des actions sur le système en utilisant des commandes spécifiques.\n"
-            "- Pour ajouter une tâche à la liste : écris strictement `[TASK: Titre de la tâche]`.\n"
-            "  Exemple : 'Entendu, je le note. [TASK: Acheter du pain]'\n\n"
+            "- Pour ajouter une tâche à la liste : écris strictement `[TASK: Titre de la tâche]` sur une nouvelle ligne.\n"
+            "  Exemple : 'Entendu, je le note.\n[TASK: Acheter du pain]'\n\n"
             "## Contexte documentaire\n"
             "Voici des extraits pertinents des documents de l'utilisateur. "
             "Utilise ces informations pour répondre de manière précise et contextualisée. "
@@ -34,8 +34,8 @@ def _build_system_prompt(system_prompt: str, context: str = "") -> str:
             f"{base}\n\n"
             "## Outils Disponibles\n"
             "Tu peux effectuer des actions sur le système en utilisant des commandes spécifiques.\n"
-            "- Pour ajouter une tâche à la liste : écris strictement `[TASK: Titre de la tâche]`.\n"
-            "  Exemple : 'Entendu, je le note. [TASK: Acheter du pain]'\n"
+            "- Pour ajouter une tâche à la liste : écris strictement `[TASK: Titre de la tâche]` sur une nouvelle ligne.\n"
+            "  Exemple : 'Entendu, je le note.\n[TASK: Acheter du pain]'\n"
         )
     return base
 

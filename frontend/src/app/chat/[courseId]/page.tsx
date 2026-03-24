@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import { useChat, Message } from "ai/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { ArrowLeft, Send, BookOpen, Paperclip } from "lucide-react";
 import Link from "next/link";
 
@@ -47,8 +49,14 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
           )}
           {messages.map((m: Message) => (
             <div key={m.id} className={`nf-chat__message nf-chat__message--${m.role}`}>
-              <div className="nf-chat__message-content">
-                {m.content}
+              <div className={`nf-chat__message-content ${m.role === 'assistant' ? 'nf-markdown' : ''}`}>
+                {m.role === 'assistant' ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {m.content}
+                  </ReactMarkdown>
+                ) : (
+                  m.content
+                )}
               </div>
             </div>
           ))}

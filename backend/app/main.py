@@ -296,7 +296,7 @@ async def chat_stream_endpoint(request: ChatRequest):
             processed = desanitize(processed, san_map)
 
         task_pattern = r"\[TASK:\s*(.*?)\]"
-        tasks_to_create = re.findall(task_pattern, processed)
+        tasks_to_create = re.findall(task_pattern, processed, re.IGNORECASE)
         for task_title in tasks_to_create:
             print(f"✨ AI Stream Action: Creating task '{task_title}'")
             task_manager.add_task(title=task_title, priority="medium", meta="AI Generated")

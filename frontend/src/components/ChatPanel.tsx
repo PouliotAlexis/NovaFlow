@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MessageSquare, Zap, User, Trash2, Loader2, AlertCircle, Send } from "lucide-react";
@@ -111,10 +111,11 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                     try {
                         const data = JSON.parse(line.slice(6));
                         if (data.type === "token") {
+                            const cleanedToken = data.content;
                             setMessages((prev) =>
                                 prev.map((msg) =>
                                     msg.id === aiMsgId
-                                        ? { ...msg, content: msg.content + data.content }
+                                        ? { ...msg, content: msg.content + cleanedToken }
                                         : msg
                                 )
                             );
@@ -124,17 +125,9 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                                     msg.id === aiMsgId ? { ...msg, content: data.response } : msg
                                 )
                             );
-                        } else if (data.type === "error") {
-                            setMessages((prev) =>
-                                prev.map((msg) =>
-                                    msg.id === aiMsgId
-                                        ? { ...msg, content: `Error: ${data.message}` }
-                                        : msg
-                                )
-                            );
                         }
-                    } catch {
-                        // ignore malformed SSE lines
+                    } catch (err) {
+                        console.error("SSE Parse Error:", err, line);
                     }
                 }
             }
@@ -194,14 +187,21 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                             }}>
                                 {msg.role === "ai" ? <Zap size={14} color="white" /> : <User size={14} />}
                             </div>
-                            <div style={{
+                            <div className={`nf-chat__bubble nf-chat__bubble--${msg.role} ${msg.role === "ai" ? "nf-markdown" : ""}`} style={{
                                 padding: "6px 10px", borderRadius: "10px",
                                 fontSize: "11px", lineHeight: 1.4, maxWidth: "80%",
                                 background: msg.role === "ai" ? "var(--nf-bg-card)" : "var(--nf-accent)",
                                 color: msg.role === "user" ? "white" : "var(--nf-text)",
                                 border: msg.role === "ai" ? "1px solid var(--nf-border)" : "none",
+                                overflowY: "auto", maxHeight: "150px"
                             }}>
-                                {msg.content.length > 100 ? msg.content.slice(0, 100) + "..." : msg.content}
+                                {msg.role === "ai" ? (
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                        {msg.content.length > 300 ? msg.content.slice(0, 300) + "..." : msg.content}
+                                    </ReactMarkdown>
+                                ) : (
+                                    msg.content
+                                )}
                             </div>
                         </div>
                     ))}
