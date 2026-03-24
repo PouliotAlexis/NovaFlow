@@ -24,9 +24,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface ChatPanelProps {
     compact?: boolean;
+    courseId?: string;
 }
 
-export default function ChatPanel({ compact = false }: ChatPanelProps) {
+export default function ChatPanel({ compact = false, courseId }: ChatPanelProps) {
     const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -89,6 +90,7 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                     message: userMsg.content,
                     system_prompt:
                         "Tu es NovaFlow, un assistant personnel intelligent. Réponds de manière concise et utile en français.",
+                    course_id: courseId,
                 }),
             });
 

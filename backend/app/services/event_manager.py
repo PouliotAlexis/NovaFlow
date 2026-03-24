@@ -11,6 +11,7 @@ import os
 import uuid
 import datetime
 from typing import List, Dict, Optional, Any
+from app.core.config import settings
 
 from app.services.task_manager import TaskManager
 
@@ -194,6 +195,89 @@ class EventManager:
             return count
         return 0
 
+    def find_course_id_by_text(self, text: str) -> Optional[str]:
+        """Tente de trouver un ID de cours mentionné dans un texte (via code ou nom)."""
+        if not text:
+            return None
+        
+        # 1. Chercher un code de cours (ex: PHQ334, IFT-1000)
+        import re
+        code_match = re.search(r'([A-Za-z]{3,4}-?\d{3,4})', text)
+        if not code_match:
+            return None
+        
+        target_code = code_match.group(1).upper()
+        
+        # 2. Charger les cours connus (Extension Moodle)
+        from app.services.moodle_extension_service import _load_ext_courses
+        try:
+            courses = _load_ext_courses()
+            for c in courses:
+                shortname = (c.get("shortname") or "").upper()
+                fullname = (c.get("fullname") or "").upper()
+                if target_code in shortname or target_code in fullname:
+                    return str(c.get("id"))
+        except Exception:
+            pass
+            
+        # 3. Charger les cours via le dossier downloads
+        try:
+            moodle_downloads = settings.MOODLE_DOWNLOADS_DESTINATION
+            if os.path.exists(moodle_downloads):
+                for cid in os.listdir(moodle_downloads):
+                    info_path = os.path.join(moodle_downloads, cid, "course_info.json")
+                    if os.path.exists(info_path):
+                        with open(info_path, "r", encoding="utf-8") as f:
+                            info = json.load(f)
+                            name = (info.get("fullname") or info.get("name") or "").upper()
+                            if target_code in name:
+                                return cid
+        except Exception:
+            pass
+            
+        return None
+
+    def get_or_create_course_event(self, course_id: str) -> Optional[str]:
+        """Trouve ou crée un événement pivot pour associer les tâches d'un cours."""
+        if not course_id:
+            return None
+        
+        ext_id = f"moodle_course_{course_id}"
+        
+        # 1. Vérifier si l'événement existe déjà
+        existing = self.get_event_by_external_id(ext_id, "moodle_ai") or self.get_event_by_external_id(ext_id, "moodle")
+        if existing:
+            return existing.id
+        
+        # 2. Sinon, essayer de trouver le nom du cours
+        course_name = f"Cours {course_id}"
+        try:
+            # Tenter de lire le dossier de téléchargement Moodle
+            moodle_dir = os.path.join(settings.MOODLE_DOWNLOADS_DESTINATION, str(course_id))
+            info_path = os.path.join(moodle_dir, "course_info.json")
+            if os.path.exists(info_path):
+                with open(info_path, "r", encoding="utf-8") as f:
+                    info = json.load(f)
+                    course_name = info.get("fullname") or info.get("name") or course_name
+        except Exception as e:
+            print(f"⚠️ Erreur récupération nom du cours {course_id}: {e}")
+
+        # 3. Créer l'événement pivot
+        now_iso = datetime.datetime.now().isoformat()
+        new_event = self.create_event(
+            external_id=ext_id,
+            source="moodle_ai",
+            title=course_name,
+            start=now_iso,
+            updated=now_iso,
+            desc_hash="ai_pivot_event"
+        )
+        # On ajoute une catégorie pour le filtrage frontend
+        self.update_event(new_event.id, {"category": course_name})
+        
+        print(f"📌 Pivot event created: {new_event.id} ({course_name}) with source 'moodle_ai'")
+        return new_event.id
+
 # --- Module Wrapper Functions ---
 
 _manager = EventManager.instance()
@@ -227,3 +311,9 @@ def remove_task_from_event(event_id: str, task_id: str) -> bool:
 
 def clear_event_tasks(event_id: str) -> int:
     return _manager.clear_event_tasks(event_id)
+
+def get_or_create_course_event(course_id: str) -> Optional[str]:
+    return _manager.get_or_create_course_event(course_id)
+
+def find_course_id_by_text(text: str) -> Optional[str]:
+    return _manager.find_course_id_by_text(text)

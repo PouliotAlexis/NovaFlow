@@ -40,6 +40,7 @@ from app.services.calendar_sync.google import (
 )
 from app.services.calendar_sync.microsoft_auth import MicrosoftAuthService
 from app.services.task_manager import TaskManager, NovaFlowTask
+from app.services.event_manager import EventManager
 import re
 from app.services.automation import (
     analyze_document_for_tasks, 
@@ -91,6 +92,7 @@ class ChatRequest(BaseModel):
     mode: Optional[str] = None  # "local" ou "cloud", None = config par défaut
     sensitive_entities: Optional[List[str]] = None  # Entités à censurer manuellement
     use_rag: Optional[bool] = True  # Utiliser la recherche documentaire
+    course_id: Optional[str] = None  # ID du cours pour association auto des tâches
 
 
 class TaskRequest(BaseModel):
@@ -202,13 +204,40 @@ async def chat_endpoint(request: ChatRequest):
         # Post-process : Détection de commandes (Tool Calling)
         # Format attendu : [TASK: Titre de la tâche]
         task_pattern = r"\[TASK:\s*(.*?)\]"
-        tasks_to_create = re.findall(task_pattern, ai_response)
         
-        for task_title in tasks_to_create:
-            print(f"✨ AI Action: Creating task '{task_title}'")
-            task_manager.add_task(title=task_title, priority="medium", meta="AI Generated")
-            # Remplacer la commande par une confirmation visible
-            ai_response = ai_response.replace(f"[TASK: {task_title}]", f"✅ Tâche '{task_title}' ajoutée.")
+        # Détection du cours si non fourni explicitement
+        course_id = request.course_id
+        if not course_id:
+            course_id = EventManager.instance().find_course_id_by_text(prompt) or \
+                        EventManager.instance().find_course_id_by_text(ai_response)
+        
+        parent_id = None
+        if course_id:
+            parent_id = EventManager.instance().get_or_create_course_event(course_id)
+
+        # Remplacement robuste via regex
+        def create_and_confirm_task(match):
+            task_title = match.group(1).strip()
+            print(f"✨ AI Action: Creating task '{task_title}' (Course: {course_id})")
+            
+            # Créer la tâche
+            task_manager.add_task(
+                title=task_title, 
+                priority="medium", 
+                meta=f"AI Generated ({course_id or 'Global'})",
+                parent_event_id=parent_id
+            )
+            
+            # Envoyer une notification pour feedback immédiat
+            notif_manager.add_notification(
+                title="Nouvelle tâche",
+                content=f"L'IA a créé la tâche : {task_title}" + (f" (Cours: {course_id})" if course_id else ""),
+                type="success"
+            )
+            
+            return f"✅ Tâche '{task_title}' ajoutée."
+
+        ai_response = re.sub(task_pattern, create_and_confirm_task, ai_response, flags=re.IGNORECASE)
 
         # Sauvegarder la réponse IA dans l'historique
         save_chat_message("ai", ai_response)
@@ -296,11 +325,40 @@ async def chat_stream_endpoint(request: ChatRequest):
             processed = desanitize(processed, san_map)
 
         task_pattern = r"\[TASK:\s*(.*?)\]"
-        tasks_to_create = re.findall(task_pattern, processed, re.IGNORECASE)
-        for task_title in tasks_to_create:
-            print(f"✨ AI Stream Action: Creating task '{task_title}'")
-            task_manager.add_task(title=task_title, priority="medium", meta="AI Generated")
-            processed = processed.replace(f"[TASK: {task_title}]", f"✅ Tâche '{task_title}' ajoutée.")
+        
+        # Détection du cours si non fourni
+        course_id = request.course_id
+        if not course_id:
+            course_id = EventManager.instance().find_course_id_by_text(prompt) or \
+                        EventManager.instance().find_course_id_by_text(processed)
+
+        parent_id = None
+        if course_id:
+            parent_id = EventManager.instance().get_or_create_course_event(course_id)
+
+        # Remplacement robuste via regex
+        def create_and_confirm_task_stream(match):
+            task_title = match.group(1).strip()
+            print(f"✨ AI Stream Action: Creating task '{task_title}' (Course: {course_id})")
+            
+            # Créer la tâche
+            task_manager.add_task(
+                title=task_title, 
+                priority="medium", 
+                meta=f"AI Generated ({course_id or 'Global'})",
+                parent_event_id=parent_id
+            )
+            
+            # Envoyer une notification pour feedback immédiat
+            notif_manager.add_notification(
+                title="Nouvelle tâche",
+                content=f"L'IA a créé la tâche : {task_title}" + (f" (Cours: {course_id})" if course_id else ""),
+                type="success"
+            )
+            
+            return f"✅ Tâche '{task_title}' ajoutée."
+
+        processed = re.sub(task_pattern, create_and_confirm_task_stream, processed, flags=re.IGNORECASE)
 
         save_chat_message("ai", processed)
 
