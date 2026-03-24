@@ -101,7 +101,10 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
         # (ceux-ci sont déjà gérés via les API respectives et le lien parent_event_id)
         all_em_events = em.get_all_events()
         for e in all_em_events:
-            if e.source not in ("google_calendar", "outlook_calendar", "moodle"):
+            # On exclut les sources distantes car elles sont récupérées via leurs API respectives
+            # SAUF si c'est un événement pivot de cours (moodle_course_...) créé par l'IA de NovaFlow
+            is_pivot = e.external_id and e.external_id.startswith("moodle_course_")
+            if e.source not in ("google_calendar", "outlook_calendar", "moodle") or is_pivot:
                 local_nf_events.append(e.to_dict())
     except Exception as e:
         print(f"Erreur Events Locaux: {e}")
