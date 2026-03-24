@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { BarChart3 } from "lucide-react";
 
 export default function DailySummary() {
     const [stats, setStats] = useState({ total: 0, completed: 0, tasks: 0, ticks: 0 });
 
     const fetchStats = useCallback(async () => {
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
             const res = await fetch(`${API_URL}/api/tasks`);
             if (res.ok) {
                 const tasks = await res.json();
@@ -36,7 +37,10 @@ export default function DailySummary() {
     return (
         <div className="nf-card nf-card--glow nf-animate-in">
             <div className="nf-card__header">
-                <span className="nf-card__title">📊 Daily Summary</span>
+                <span className="nf-card__title">
+                    <BarChart3 size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-accent)' }} />
+                    Daily Summary
+                </span>
             </div>
             <div className="nf-daily-summary">
                 <div className="nf-daily-summary__circle">

@@ -1,6 +1,15 @@
 "use client";
 
-import React from "react";
+import { 
+    Home, 
+    GraduationCap, 
+    CheckCircle, 
+    Calendar, 
+    FileText, 
+    MessageSquare, 
+    Target, 
+    Settings 
+} from "lucide-react";
 
 interface SidebarProps {
     activeView: string;
@@ -8,12 +17,13 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-    { id: "dashboard", icon: "🏠", label: "Dashboard" },
-    { id: "tasks", icon: "✅", label: "Tasks" },
-    { id: "calendar", icon: "📅", label: "Calendar" },
-    { id: "documents", icon: "📁", label: "Documents" },
-    { id: "chat", icon: "💬", label: "Chat" },
-    { id: "focus", icon: "🎯", label: "Focus Mode" },
+    { id: "dashboard", icon: <Home size={20} />, label: "Dashboard" },
+    { id: "courses", icon: <GraduationCap size={20} />, label: "Cours" },
+    { id: "tasks", icon: <CheckCircle size={20} />, label: "Tasks" },
+    { id: "calendar", icon: <Calendar size={20} />, label: "Calendar" },
+    { id: "documents", icon: <FileText size={20} />, label: "Documents" },
+    { id: "chat", icon: <MessageSquare size={20} />, label: "Chat" },
+    { id: "focus", icon: <Target size={20} />, label: "Focus Mode" },
 ];
 
 export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
@@ -55,7 +65,7 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
                     className={`nf-sidebar__item ${activeView === "settings" ? "nf-sidebar__item--active" : ""}`}
                     onClick={() => onNavigate("settings")}
                 >
-                    <span className="nf-sidebar__icon">⚙️</span>
+                    <span className="nf-sidebar__icon"><Settings size={20} /></span>
                     Settings
                 </button>
             </div>

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "25715ea1-6491-4868-82ee-00621e8ab747",
+    "title": "Titre de la tâche",
+    "priority": "medium",
+    "meta": "AI Generated",
+    "done": true,
+    "parent_event_id": null,
+    "created_at": "2026-03-17T10:41:11.636486",
+    "external_id": null,
+    "source": "local",
+    "due_date": null,
+    "description": ""
+  }
+]

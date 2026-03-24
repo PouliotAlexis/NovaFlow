@@ -6,15 +6,20 @@ console.log("NovaFlow Moodle Extension content script loaded.");
 function captureSessionData() {
     try {
         console.log("NovaFlow: Recherche de la clé de session Moodle (sesskey)...");
-        const logoutLink = document.querySelector('a[href*="logout.php?sesskey="]');
-        if (!logoutLink) {
-            console.log("NovaFlow: sesskey introuvable. Utilisateur non connecté ou thème non standard.");
-            return;
+
+        // Méthode 1 : window.M.cfg.sesskey (disponible sur tous les thèmes, y compris SSO Microsoft)
+        let sesskey = window?.M?.cfg?.sesskey || null;
+
+        // Méthode 2 : lien logout dans le DOM (thèmes standard)
+        if (!sesskey) {
+            const logoutLink = document.querySelector('a[href*="logout.php?sesskey="]');
+            if (logoutLink) {
+                sesskey = new URL(logoutLink.href).searchParams.get('sesskey');
+            }
         }
 
-        const sesskey = new URL(logoutLink.href).searchParams.get('sesskey');
         if (!sesskey) {
-            console.log("NovaFlow: Impossible d'extraire la sesskey de l'URL.");
+            console.log("NovaFlow: sesskey introuvable. Utilisateur non connecté ou thème non standard.");
             return;
         }
 

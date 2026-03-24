@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 const AMBIENT_SOUNDS = [
     { id: "rain", label: "🌧️ Rain", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },

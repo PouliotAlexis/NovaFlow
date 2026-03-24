@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Activity } from 'lucide-react';
 
 type Job = {
     id: string;
@@ -16,7 +17,7 @@ export default function AutomationStatus() {
     const prevJobCount = useRef(0);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
     useEffect(() => {
         const fetchData = async () => {
@@ -98,15 +99,10 @@ export default function AutomationStatus() {
                     fontWeight: 500,
                 }}
             >
-                {isAnalysing && (
-                    <span style={{
-                        width: '5px',
-                        height: '5px',
-                        borderRadius: '50%',
-                        background: 'currentColor',
-                        display: 'inline-block',
-                        animation: 'pulse 1.5s infinite'
-                    }} />
+                {isAnalysing ? (
+                    <Activity size={12} className="nf-spin-slow" />
+                ) : (
+                    <Activity size={12} style={{ opacity: 0.5 }} />
                 )}
                 <span style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {jobs.length > 0 ? `${jobs.length} active process${jobs.length > 1 ? "es" : ""}` : lastMessage}

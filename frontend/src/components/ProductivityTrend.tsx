@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { TrendingUp } from "lucide-react";
 
 export default function ProductivityTrend() {
     // Placeholder - static SVG chart
@@ -24,7 +25,10 @@ export default function ProductivityTrend() {
     return (
         <div className="nf-card nf-card--glow nf-animate-in">
             <div className="nf-card__header">
-                <span className="nf-card__title">📈 Productivity Trend</span>
+                <span className="nf-card__title">
+                    <TrendingUp size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-accent)' }} />
+                    Productivity Trend
+                </span>
                 <span className="nf-productivity__badge">↑ +12% this week</span>
             </div>
             <div className="nf-productivity">

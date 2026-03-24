@@ -1,0 +1,586 @@
+﻿diff --git a/backend/services/ai_engine.py b/backend/services/ai_engine.py
+index 67a2f88..fce7fac 100644
+--- a/backend/services/ai_engine.py
++++ b/backend/services/ai_engine.py
+@@ -56,7 +56,7 @@ async def chat_local(prompt: str, system_prompt: str = "", context: str = "") ->
+         {"role": "user", "content": prompt},
+     ]
+ 
+-    async with httpx.AsyncClient(timeout=120.0) as client:
++    async with httpx.AsyncClient(timeout=600.0) as client:
+         response = await client.post(
+             f"{settings.OLLAMA_HOST}/api/chat",
+             json={
+diff --git a/backend/services/automation.py b/backend/services/automation.py
+index 5e74ff1..495f627 100644
+--- a/backend/services/automation.py
++++ b/backend/services/automation.py
+@@ -70,6 +70,12 @@ async def cancel_job(job_id: str):
+ 
+ async def start_job(name: str, coro):
+     """Lance une coroutine en tant que job track├⌐."""
++    # Pre-check to prevent duplicate jobs
++    existing_jobs = get_active_jobs()
++    if any(job["name"] == name for job in existing_jobs):
++        log_auto(f"ΓÜá∩╕Å Le job '{name}' est d├⌐j├á en cours, annulation du nouveau lancement.")
++        return None
++
+     job_id = str(uuid.uuid4())
+     
+     # Si on passe une fonction (ex: analyze_all_calendars), on l'ex├⌐cute pour avoir la coroutine
+@@ -495,7 +501,7 @@ async def analyze_calendar_for_tasks(events: list = None, days: int = 30, source
+                 log_auto(f"Γ¥î Erreur analyse IA : {e}")
+ 
+ 
+-# === Microsoft To Do Sync ===
++# === Microsoft To Do et Google Tasks Sync ===
+ 
+ async def sync_microsoft_todo_tasks():
+     """
+@@ -507,55 +513,240 @@ async def sync_microsoft_todo_tasks():
+     from fastapi.concurrency import run_in_threadpool
+     
+     try:
+-        # Ex├⌐cuter l'appel bloquant requests dans un thread
+         tasks = await run_in_threadpool(get_todo_tasks)
+-        
+         if not tasks:
+             log_auto("Γä╣∩╕Å Aucune t├óche To Do ou aucun compte connect├⌐.")
+             return
+ 
+         count_new = 0
+         count_updated = 0
++        newly_added_tasks = []
++        tm = TaskManager.instance()
++        all_local_tasks = tm.get_all_tasks()
+         
+         for t_data in tasks:
+-            # data from get_todo_tasks: 
+-            # {id, title, priority, meta, done, parent_event_id, created_at, source, link, description}
++            existing = next((t for t in all_local_tasks if t.get("external_id") == t_data["id"] and t.get("source") == "microsoft_todo"), None)
+             
+-            # 1. Tenter d'ajouter (d├⌐doublonnage via external_id dans add_task)
+-            # Note: add_task retourne le dict de la t├óche (nouvelle ou existante)
+-            task_result = task_manager.add_task(
++            task_result = tm.add_task(
+                 title=t_data["title"],
+                 priority=t_data["priority"],
+                 meta=t_data["meta"],
+                 parent_event_id=None,
+                 external_id=t_data["id"],
+-                source="microsoft_todo"
++                source="microsoft_todo",
++                due_date=t_data.get("due_date")
+             )
+             
+-            # 2. V├⌐rifier si on doit mettre ├á jour le statut 'done'
+-            # (Si la t├óche existait d├⌐j├á mais que son statut local diff├¿re du remote)
+-            # Ici t_data['done'] vient de Microsoft. 
+-            # task_result['done'] est la valeur locale.
+-            
+-            # Simple sync: Remote wins for status
+             if task_result["done"] != t_data["done"]:
+-                task_manager.update_task(task_result["id"], {"done": t_data["done"]})
++                tm.update_task(task_result["id"], {"done": t_data["done"]})
+                 count_updated += 1
+             
+-            # On pourrait aussi sync le titre si chang├⌐, mais attention aux ├⌐crasements locaux.
+-            # Pour l'instant on sync juste le statut.
++            if not existing:
++                newly_added_tasks.append(task_result)
++                count_new += 1
++                
++        log_auto(f"Γ£à Sync To Do termin├⌐e : {len(tasks)} t├óches scann├⌐es ({count_updated} m├áj, {count_new} ajouts).")
++        
++        if newly_added_tasks:
++            log_auto(f"≡ƒñû Lancement de l'analyse IA sur {len(newly_added_tasks)} nouvelles t├óches To Do.")
++            await analyze_and_link_tasks(newly_added_tasks)
++            
++    except Exception as e:
++        log_auto(f"Γ¥î Erreur Sync Microsoft To Do : {e}")
++
++async def sync_google_tasks():
++    """
++    T├óche de fond : Synchronise les t├óches Google Tasks.
++    """
++    log_auto("≡ƒöä Sync Google Tasks : D├⌐marrage...")
++    from services.google_service import get_google_tasks
++    from fastapi.concurrency import run_in_threadpool
++    
++    try:
++        tasks = await run_in_threadpool(get_google_tasks)
++        if not tasks:
++            log_auto("Γä╣∩╕Å Aucune t├óche Google Tasks ou aucun compte connect├⌐.")
++            return
++
++        count_new = 0
++        count_updated = 0
++        newly_added_tasks = []
++        tm = TaskManager.instance()
++        all_local_tasks = tm.get_all_tasks()
++        
++        for t_data in tasks:
++            existing = next((t for t in all_local_tasks if t.get("external_id") == t_data["id"] and t.get("source") == "google_tasks"), None)
++            
++            task_result = tm.add_task(
++                title=t_data["title"],
++                priority=t_data["priority"],
++                meta=t_data["meta"],
++                parent_event_id=None,
++                external_id=t_data["id"],
++                source="google_tasks",
++                due_date=t_data.get("due_date")
++            )
+             
+-            # Si la t├óche a ├⌐t├⌐ cr├⌐├⌐e (on check si created_at est tr├¿s r├⌐cent ou si on avait pas cet ID avant)
+-            # Mais add_task ne dit pas explicitement "created".
+-            # On suppose que c'est un flux continu.
++            if task_result["done"] != t_data["done"]:
++                tm.update_task(task_result["id"], {"done": t_data["done"]})
++                count_updated += 1
++                
++            if not existing:
++                newly_added_tasks.append(task_result)
++                count_new += 1
++                
++        log_auto(f"Γ£à Sync Google Tasks termin├⌐e : {len(tasks)} t├óches scann├⌐es ({count_updated} m├áj, {count_new} ajouts).")
++        
++        if newly_added_tasks:
++            log_auto(f"≡ƒñû Lancement de l'analyse IA sur {len(newly_added_tasks)} nouvelles t├óches Google.")
++            await analyze_and_link_tasks(newly_added_tasks)
+             
+-        log_auto(f"Γ£à Sync To Do termin├⌐e : {len(tasks)} t├óches scann├⌐es ({count_updated} m├áj statut).")
++    except Exception as e:
++        log_auto(f"Γ¥î Erreur Sync Google Tasks : {e}")
++
++async def analyze_and_link_tasks(new_tasks: list):
++    """
++    Analyse de nouvelles t├óches s├⌐quentiellement (Une par une) via l'IA locale.
++    Privil├⌐gie la stabilit├⌐ et la pr├⌐cision du contexte.
++    """
++    if not new_tasks: return
+         
++    evt_manager = EventManager.instance()
++    task_manager = TaskManager.instance()
++    
++    # On importe get_unified_events pour avoir TOUS les events (Moodle, Outlook, Google)
++    from services.calendar_aggregator import get_unified_events
++    import asyncio
++    from fastapi.concurrency import run_in_threadpool
++    
++    try:
++        # On regarde jusqu'├á 60 jours en avance pour les devoirs lointains
++        all_events = await run_in_threadpool(get_unified_events, days=60)
+     except Exception as e:
+-        log_auto(f"Γ¥î Erreur Sync Microsoft To Do : {e}")
++        log_auto(f"Erreur chargement events unifi├⌐s pour l'IA: {e}")
++        all_events = []
++    
++    import datetime
++    now = datetime.datetime.now()
++    today_date_str = now.strftime("%Y-%m-%d")
++    now_iso = now.isoformat()
++    
++    # Filtre de date et Tri
++    def get_event_start(e: dict) -> str:
++        s = e.get("start", "")
++        # Handle dict format from Google Calendar (e.g. {'dateTime': '...', 'date': '...'})
++        if isinstance(s, dict):
++            return s.get("dateTime") or s.get("date", "")
++        return s or ""
++
++    valid_events_raw = [e for e in all_events if get_event_start(e) and get_event_start(e)[:10] >= today_date_str]
++    valid_events = sorted(valid_events_raw, key=lambda x: get_event_start(x))[:40]
++
++    # Utiliser un mapping avec des IDs simples pour ├⌐viter les hallucinations de l'IA sur des IDs complexes
++    # Pour l'assignation finale, on a besoin de l'ID event_manager, ou ├á d├⌐faut l'ID externe.
++    event_mapping = {}
++    for i, e in enumerate(valid_events):
++        idx = str(i+1)
++        ext_id = e.get("id")
++        source = e.get("source", "google")
++        # Map source name back to EventManager source convention
++        em_source = "outlook_calendar" if source == "outlook" else source
++        if em_source == "google": 
++            em_source = "google_calendar"
++            
++        # Chercher s'il existe d├⌐j├á dans EventManager
++        nf_evt = evt_manager.get_event_by_external_id(ext_id, em_source)
++        
++        event_mapping[idx] = {
++            "title": e.get("title", "Sans titre"),
++            "start": get_event_start(e),
++            "external_id": ext_id,
++            "nf_event": nf_evt  # Peut ├¬tre None (ex: Moodle)
++        }
+ 
++    events_text = "\n".join([
++        f"- ID: {idx} | Titre: '{e['title']}' | Date: {e['start']}" 
++        for idx, e in event_mapping.items()
++    ])
+ 
++    log_auto(f"≡ƒÜÇ Analyse s├⌐quentielle de {len(new_tasks)} t├óches avec l'IA...")
++    log_auto(f"Γä╣∩╕Å Events envoy├⌐s ├á l'IA pour contexte:\n{events_text}")
++
++    for i, task in enumerate(new_tasks):
++        task_id = task.get("id")
++        title = task.get("title", "Sans titre")
++        desc = task.get("description", "")
++        due = task.get("due_date")
++        
++        prompt = (
++            f"T├óche ├á analyser : '{title}'\nDescription: {desc}\n├ëch├⌐ance: {due}\n\n"
++            f"├ëv├⌐nements existants au calendrier :\n{events_text}\n\n"
++            f"--- R├êGLES ET EXEMPLES DE CLASSIFICATION ---\n"
++            f"1. ACTION 'link' -> TOUTE t├óche qui peut ├¬tre li├⌐e, de pr├¿s ou de loin, ├á un ├⌐v├⌐nement de la liste DOIT ├¬tre li├⌐e. Sois EXTR├èMEMENT PERMISSIF pour lier. Par exemple, 'Acheter des skis' DOIT ├¬tre 'link' avec 'Ski Bromont'. 'Devoir 2' DOIT ├¬tre 'link' avec un ├⌐v├⌐nement de cours pertinent. Cherche des synonymes ou des th├¿mes communs.\n"
++            f"2. ACTION 'none' -> Si la t├óche n'a absolument AUCUN lien th├⌐matique avec la liste d'├⌐v├⌐nements, retourne 'none' (ex: 'Faire du m├⌐nage').\n"
++            f"3. ACTION 'create' -> INTERDIT DE CR├ëER DE NOUVEAUX ├ëV├ëNEMENTS ('create') sauf s'il s'agit explicitement d'un nouveau rendez-vous clair dans le temps (ex: 'Rendez-vous dentiste le 14 mars ├á 10h'). On pr├⌐f├¿re largement 'link' ou 'none'.\n"
++            f"----------------------------------\n\n"
++            f"En suivant cette logique, quelle est l'action la plus intelligente pour la t├óche actuelle ?\n"
++            f"R├⌐ponds STRICTEMENT et UNIQUEMENT en JSON avec ce format exact :\n"
++            f"{{\n"
++            f"  \"reasoning\": \"Explication courte de ton choix\",\n"
++            f"  \"action\": \"none|link|create\",\n"
++            f"  \"event_id\": \"ID_ICI (utiliser UNIQUEMENT le chiffre donn├⌐, ex: '1', '2')\",\n"
++            f"  \"title\": \"Titre du nouvel ├⌐v├⌐nement (si create)\",\n"
++            f"  \"date\": \"Date iso (si create)\"\n"
++            f"}}"
++        )
+ 
++        try:
++            from services.ai_engine import chat as ai_chat
++            log_auto(f"ΓÅ│ [{i+1}/{len(new_tasks)}] Analyse de '{title}'...")
++            raw = await ai_chat(prompt, system_prompt="Tu es un assistant expert et logique. R├⌐ponds uniquement avec un seul objet JSON valide.")
++            
++            if "</think>" in raw:
++                raw = raw.split("</think>")[-1].strip()
++            
++            clean = raw.replace("```json", "").replace("```", "").strip()
++            if "{" in clean:
++                clean = clean[clean.find("{"):clean.rfind("}")+1]
++                
++            res = json.loads(clean)
++            action = res.get("action")
++            reasoning = res.get("reasoning", "Pas d'explication")
++            event_id = None
++            
++            log_auto(f"≡ƒºá IA Reasoning: {reasoning}")
++            
++            if action == "link":
++                mapped_id = str(res.get("event_id", ""))
++                # Validation stricte en Python : v├⌐rifie si l'ID invent├⌐ est r├⌐el
++                if mapped_id in event_mapping:
++                    event_data = event_mapping[mapped_id]
++                    nf_evt = event_data["nf_event"]
++                    # S'il n'y a pas d'├⌐v├⌐nement NovaFlow (ex: Moodle pur), on doit le cr├⌐er d'abord pour avoir un parent interne ?
++                    # TaskManager g├¿re parent_event_id. On peut stocker l'external_id de Moodle comme parent. L'aggr├⌐gateur s'en occupe
++                    event_id = nf_evt.id if nf_evt else event_data["external_id"]
++                else:
++                    action = "none" # Fallback si l'IA hallucine un ID
++                    log_auto(f"ΓÜá∩╕Å  Hallucination ID d├⌐tect├⌐e pour '{title}': {mapped_id}. Rejet├⌐.")
++
++            if action == "link":
++                if event_id:
++                    # Encaisser le linkage. Si c'est un external_id (ex: Moodle), TaskManager supporte le stockage string long.
++                    task_manager.link_task_to_event(task_id, event_id)
++                    linked_title = event_mapping[mapped_id]['title']
++                    log_auto(f"Γ£à Linked: '{title}' -> ├ëv├⌐nement [{mapped_id}] '{linked_title}'")
++            elif action == "create":
++                new_title = res.get("title") or title
++                new_date = res.get("date") or due or now_iso
++                import uuid
++                new_evt = evt_manager.create_event(str(uuid.uuid4()), "ai_task", new_title, new_date, now_iso, "")
++                task_manager.link_task_to_event(task_id, new_evt.id)
++                log_auto(f"Γ£à Created: '{title}' -> Nouvel ├⌐v├⌐nement '{new_title}' le {new_date}")
++            else:
++                log_auto(f"Γä╣∩╕Å Orphan: '{title}'")
++                
++        except Exception as e:
++            log_auto(f"Γ¥î Error for '{title}': {e} - Raw: {raw[:100] if 'raw' in locals() else 'N/A'}")
+ 
+ async def analyze_all_calendars(days: int = 30):
+     """Analyse les ├⌐v├⌐nements de toutes les sources (Google + Outlook + To Do)."""
+@@ -563,6 +754,7 @@ async def analyze_all_calendars(days: int = 30):
+     from services.google_service import is_any_connected as google_is_connected
+     if google_is_connected():
+         await analyze_calendar_for_tasks(events=None, days=days, source="google_calendar")
++        await sync_google_tasks()
+     
+     # 2. Outlook (si connect├⌐)
+     from services.microsoft_auth import MicrosoftAuthService
+@@ -570,5 +762,5 @@ async def analyze_all_calendars(days: int = 30):
+         await analyze_calendar_for_tasks(events=None, days=days, source="outlook_calendar")
+ 
+     # 3. Microsoft To Do (si connect├⌐)
+-    # La fonction g├¿re elle-m├¬me la v├⌐rification des comptes
+     await sync_microsoft_todo_tasks()
++
+diff --git a/backend/services/calendar_aggregator.py b/backend/services/calendar_aggregator.py
+index 633eb68..06d0c84 100644
+--- a/backend/services/calendar_aggregator.py
++++ b/backend/services/calendar_aggregator.py
+@@ -5,6 +5,7 @@ from services.microsoft_calendar import get_outlook_events
+ from services.moodle_rss_service import get_moodle_events
+ from services.moodle_extension_service import get_moodle_extension_events, get_moodle_extension_courses
+ from services.task_manager import TaskManager
++from services.event_manager import EventManager
+ import os
+ import json
+ 
+@@ -90,6 +91,19 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
+     except Exception as e:
+         print(f"Erreur Moodle Extension: {e}")
+ 
++    # 4.5 R├⌐cup├⌐rer les ├⌐v├⌐nements locaux (AI, etc.)
++    local_nf_events = []
++    try:
++        em = EventManager.instance()
++        # On ne prend que les events locaux/AI qui ne sont pas d├⌐j├á des miroirs de Google/Outlook
++        # (ceux-ci sont d├⌐j├á g├⌐r├⌐s via les API respectives et le lien parent_event_id)
++        all_em_events = em.get_all_events()
++        for e in all_em_events:
++            if e.source not in ("google_calendar", "outlook_calendar", "moodle"):
++                local_nf_events.append(e.to_dict())
++    except Exception as e:
++        print(f"Erreur Events Locaux: {e}")
++
+     # Cr├⌐er un dictionnaire parfait pour mapper les codes de cours (ex: "PHQ202") vers leur nom complet
+     course_code_to_name = {}
+     try:
+@@ -108,16 +122,31 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
+ 
+     # 5. R├⌐cup├⌐rer toutes les t├óches NovaFlow
+     tm = TaskManager.instance()
++    em = EventManager.instance()
+     all_tasks = tm.get_all_tasks()
+     
+     # 6. Organiser les t├óches par parent_event_id pour un acc├¿s rapide
++    # On supporte l'ID externe (pr├⌐f├⌐r├⌐) ET l'ID interne (fallback pour robustesse)
+     tasks_by_event = {}
+     for task in all_tasks:
+         parent_id = task.get("parent_event_id")
+         if parent_id:
++            # 1. Essai direct (ID externe ou ID d├⌐j├á correct)
+             if parent_id not in tasks_by_event:
+                 tasks_by_event[parent_id] = []
+             tasks_by_event[parent_id].append(task)
++            
++            # 2. Fallback: Si parent_id est un UUID interne, mapper aussi vers l'ID externe
++            # de l'├⌐v├⌐nement pour que l'agr├⌐gateur puisse le trouver
++            if "-" in parent_id and len(parent_id) > 20: # Probablement un UUID NovaFlow
++                evt = em.get_event(parent_id)
++                if evt and evt.external_id:
++                    ext_id = evt.external_id
++                    if ext_id not in tasks_by_event:
++                        tasks_by_event[ext_id] = []
++                    # ├ëviter les doublons si l'ID externe ├⌐tait d├⌐j├á dans la liste
++                    if task not in tasks_by_event[ext_id]:
++                        tasks_by_event[ext_id].append(task)
+ 
+     # 5. Indexer les ├⌐v├⌐nements Google (prioritaires) par cl├⌐ de d├⌐dup
+     dedup_index: Dict[str, Dict[str, Any]] = {}
+@@ -243,7 +272,21 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
+             dedup_index[dk] = unified_event
+             unified_events.append(unified_event)
+ 
+-    # 9. Trier par date de d├⌐but
++    # 9. Ajouter les ├⌐v├⌐nements locaux NovaFlow
++    for l_evt in local_nf_events:
++        event_id = l_evt["id"]
++        title = l_evt.get("title", "Sans titre")
++        start = l_evt.get("start", "")
++        dk = _dedup_key(title, start)
++
++        if dk not in dedup_index:
++            unified_event = l_evt.copy()
++            unified_event["source"] = l_evt.get("source", "local")
++            unified_event["tasks"] = tasks_by_event.get(event_id, [])
++            dedup_index[dk] = unified_event
++            unified_events.append(unified_event)
++
++    # 10. Trier par date de d├⌐but
+     unified_events.sort(key=lambda x: x["start"] or "")
+     
+     return unified_events
+diff --git a/backend/services/google_service.py b/backend/services/google_service.py
+index 45ce1da..73231ce 100644
+--- a/backend/services/google_service.py
++++ b/backend/services/google_service.py
+@@ -27,10 +27,11 @@ CREDENTIALS_DIR = os.path.join(
+ TOKENS_DIR = os.path.join(CREDENTIALS_DIR, "tokens")
+ CLIENT_SECRET_FILE = os.path.join(CREDENTIALS_DIR, "google_client_secret.json")
+ 
+-# Scopes ├⌐tendus : Calendar, Drive, et Profil pour identifier le compte
++# Scopes ├⌐tendus : Calendar, Drive, Profil, et Tasks
+ SCOPES = [
+     "https://www.googleapis.com/auth/calendar.readonly",
+     "https://www.googleapis.com/auth/drive.file",
++    "https://www.googleapis.com/auth/tasks.readonly",
+     "https://www.googleapis.com/auth/userinfo.email",
+     "openid"
+ ]
+@@ -408,4 +409,58 @@ def upload_files_batch_to_drive(files_to_upload: List[tuple]):
+     except Exception as e:
+         print(f"Γ¥î Drive Sync Batch Error pour {email}: {e}")
+ 
++# === Tasks API ===
++
++def get_google_tasks(limit: int = 50) -> List[Dict]:
++    """R├⌐cup├¿re les t├óches non compl├⌐t├⌐es depuis Google Tasks pour tous les comptes connect├⌐s."""
++    emails = list_connected_accounts()
++    all_tasks = []
++    
++    for email in emails:
++        creds = _get_credentials_for_email(email)
++        if not creds:
++            continue
++            
++        try:
++            service = build("tasks", "v1", credentials=creds)
++            
++            # 1. Lister toutes les tasklists
++            lists_result = service.tasklists().list().execute()
++            task_lists = lists_result.get("items", [])
++            
++            for task_list in task_lists:
++                list_id = task_list["id"]
++                list_title = task_list.get("title", 'Sans titre')
++                
++                # 2. R├⌐cup├⌐rer les t├óches (non compl├⌐t├⌐es)
++                tasks_result = service.tasks().list(
++                    tasklist=list_id,
++                    maxResults=limit,
++                    showCompleted=False,
++                    showHidden=False
++                ).execute()
++                
++                items = tasks_result.get("items", [])
++                for item in items:
++                    # Mappage vers le format NovaFlowTask
++                    due_date = item.get("due")
++                    task_dict = {
++                        "id": item["id"], # external_id
++                        "title": item.get("title") or "Sans titre",
++                        "priority": "medium", # Google Tasks n'a pas de priorit├⌐ standard facile
++                        "meta": f"Google Tasks",
++                        "done": item.get("status") == "completed",
++                        "parent_event_id": None,
++                        "created_at": item.get("updated", datetime.utcnow().isoformat()),
++                        "source": "google_tasks",
++                        "link": item.get("webViewLink", ""),
++                        "description": item.get("notes", ""),
++                        "due_date": due_date
++                    }
++                    all_tasks.append(task_dict)
++                    
++        except Exception as e:
++            print(f"Γ¥î Exception lors de la r├⌐cup├⌐ration des Google Tasks pour {email}: {e}")
++            
++    return all_tasks
+ 
+diff --git a/backend/services/microsoft_todo.py b/backend/services/microsoft_todo.py
+index cf1ee65..0062fe2 100644
+--- a/backend/services/microsoft_todo.py
++++ b/backend/services/microsoft_todo.py
+@@ -68,9 +68,10 @@ def get_todo_tasks(limit: int = 50) -> list:
+                 elif item.get("importance") == "low":
+                     priority = "low"
+                 
+-                # Mapping statut
+-                is_done = item.get("status") == "completed"
+-                
++                # Mapping date d'├⌐ch├⌐ance (dueDateTime est un objet {dateTime, timeZone})
++                due_date_obj = item.get("dueDateTime")
++                due_date = due_date_obj.get("dateTime") if due_date_obj else None
++
+                 task_dict = {
+                     "id": item["id"],  # On garde l'ID Microsoft (sera utilis├⌐ comme external_id)
+                     "title": item.get("title") or "Sans titre",
+@@ -81,7 +82,8 @@ def get_todo_tasks(limit: int = 50) -> list:
+                     "created_at": item.get("createdDateTime", datetime.now(timezone.utc).isoformat()),
+                     "source": "microsoft_todo",
+                     "link": item.get("webLink", ""),
+-                    "description": item.get("body", {}).get("content", "")
++                    "description": item.get("body", {}).get("content", ""),
++                    "due_date": due_date
+                 }
+                 
+                 all_tasks.append(task_dict)
+diff --git a/backend/services/task_manager.py b/backend/services/task_manager.py
+index 4c48c5f..7e1169b 100644
+--- a/backend/services/task_manager.py
++++ b/backend/services/task_manager.py
+@@ -20,7 +20,7 @@ def _ensure_data_dir():
+ class NovaFlowTask:
+     def __init__(self, id: str, title: str, priority: str = "medium", meta: str = "NovaFlow", 
+                  done: bool = False, parent_event_id: Optional[str] = None, created_at: Optional[str] = None,
+-                 external_id: Optional[str] = None, source: Optional[str] = "local"):
++                 external_id: Optional[str] = None, source: Optional[str] = "local", due_date: Optional[str] = None):
+         self.id = id
+         self.title = title
+         self.priority = priority
+@@ -30,6 +30,7 @@ class NovaFlowTask:
+         self.created_at = created_at or datetime.now().isoformat()
+         self.external_id = external_id
+         self.source = source
++        self.due_date = due_date
+ 
+     def mark_done(self):
+         self.done = True
+@@ -48,6 +49,7 @@ class NovaFlowTask:
+         if "parent_event_id" in updates: self.parent_event_id = updates["parent_event_id"]
+         if "external_id" in updates: self.external_id = updates["external_id"]
+         if "source" in updates: self.source = updates["source"]
++        if "due_date" in updates: self.due_date = updates["due_date"]
+ 
+     def to_dict(self) -> Dict[str, Any]:
+         return {
+@@ -59,7 +61,8 @@ class NovaFlowTask:
+             "parent_event_id": self.parent_event_id,
+             "created_at": self.created_at,
+             "external_id": self.external_id,
+-            "source": self.source
++            "source": self.source,
++            "due_date": self.due_date
+         }
+ 
+     @classmethod
+@@ -73,7 +76,8 @@ class NovaFlowTask:
+             parent_event_id=data.get("parent_event_id"),
+             created_at=data.get("created_at"),
+             external_id=data.get("external_id"),
+-            source=data.get("source", "local")
++            source=data.get("source", "local"),
++            due_date=data.get("due_date")
+         )
+ 
+ class TaskManager:
+@@ -118,7 +122,7 @@ class TaskManager:
+ 
+     def add_task(self, title: str, priority: str = "medium", meta: str = "NovaFlow", 
+                  parent_event_id: Optional[str] = None, external_id: Optional[str] = None, 
+-                 source: Optional[str] = "local") -> Dict[str, Any]:
++                 source: Optional[str] = "local", due_date: Optional[str] = None) -> Dict[str, Any]:
+         # Dedup check
+         for t in self._tasks:
+             # Si on a un external_id, c'est le facteur de d├⌐doublonnage principal
+@@ -130,7 +134,7 @@ class TaskManager:
+                 return t.to_dict()
+         
+         new_task = NovaFlowTask(str(uuid.uuid4()), title, priority, meta, False, parent_event_id, 
+-                                external_id=external_id, source=source)
++                                external_id=external_id, source=source, due_date=due_date)
+         self._tasks.insert(0, new_task)
+         self._save_tasks()
+         return new_task.to_dict()
+@@ -177,8 +181,8 @@ _manager = TaskManager.instance()
+ def get_tasks() -> List[Dict[str, Any]]:
+     return _manager.get_all_tasks()
+ 
+-def add_task(title: str, priority: str = "medium", meta: str = "NovaFlow", parent_event_id: Optional[str] = None) -> Dict[str, Any]:
+-    return _manager.add_task(title, priority, meta, parent_event_id)
++def add_task(title: str, priority: str = "medium", meta: str = "NovaFlow", parent_event_id: Optional[str] = None, due_date: Optional[str] = None) -> Dict[str, Any]:
++    return _manager.add_task(title, priority, meta, parent_event_id, due_date=due_date)
+ 
+ def update_task(task_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+     return _manager.update_task(task_id, updates)

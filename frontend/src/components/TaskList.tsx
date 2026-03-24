@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { CheckCircle, Clock, Calendar, Edit2, Trash2, Sparkles, AlertCircle } from "lucide-react";
 
 const API_URL = typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
-    : "http://localhost:8000";
+    ? (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000")
+    : "http://127.0.0.1:8000";
 
 interface Task {
     id: string;
@@ -13,20 +14,186 @@ interface Task {
     priority?: string;
     source_event_start?: string;
     created_at?: string;
+    parent_event_id?: string;
+    description?: string;
+    due_date?: string;
 }
+
+interface NovaEvent {
+    id: string;
+    external_id: string;
+    title: string;
+    start: string;
+    source: string;
+}
+
+const EventSelector = ({ currentValue, options, onSelect }: { currentValue: string, options: NovaEvent[], onSelect: (val: string) => void }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const [dropdownDirection, setDropdownDirection] = useState<"down" | "up">("down");
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // Rendre le menu intelligent (affichage vers le haut si peu d'espace)
+    useEffect(() => {
+        if (isOpen && dropdownRef.current) {
+            const rect = dropdownRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const dropdownHeight = 310; // max-height 300px + padding/margin
+            if (spaceBelow < dropdownHeight && rect.top > dropdownHeight) {
+                setDropdownDirection("up");
+            } else {
+                setDropdownDirection("down");
+            }
+        }
+    }, [isOpen]);
+
+    const selectedEvent = options.find(o => o.id === currentValue || o.external_id === currentValue);
+
+    const filteredOptions = options.filter(o =>
+        o.title.toLowerCase().includes(search.toLowerCase()) ||
+        o.source.toLowerCase().includes(search.toLowerCase())
+    ).slice(0, 50);
+
+    const getSourceIcon = (source: string) => {
+        if (source.includes("google")) return "🌐";
+        if (source.includes("outlook")) return "✉️";
+        if (source.includes("moodle")) return "🎓";
+        if (source.includes("ai")) return "✨";
+        return "📅";
+    };
+
+    return (
+        <div ref={dropdownRef} style={{ position: "relative", width: "100%", maxWidth: "400px" }}>
+            <div
+                className="nf-input"
+                onClick={() => setIsOpen(!isOpen)}
+                style={{
+                    cursor: "pointer",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    minHeight: "38px"
+                }}
+            >
+                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {selectedEvent ? (
+                        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span>{getSourceIcon(selectedEvent.source)}</span>
+                            {selectedEvent.title}
+                        </span>
+                    ) : (
+                        <span style={{ color: "var(--nf-text-muted)" }}>-- Aucun événement (Standalone) --</span>
+                    )}
+                </div>
+                <span>{isOpen ? "▲" : "▼"}</span>
+            </div>
+
+            {isOpen && (
+                <div style={{
+                    position: "absolute",
+                    top: dropdownDirection === "down" ? "100%" : "auto",
+                    bottom: dropdownDirection === "up" ? "100%" : "auto",
+                    left: 0,
+                    right: 0,
+                    zIndex: 1000,
+                    marginTop: dropdownDirection === "down" ? "5px" : "0",
+                    marginBottom: dropdownDirection === "up" ? "5px" : "0",
+                    background: "var(--nf-bg-card-solid)",
+                    border: "1px solid var(--nf-border)",
+                    borderRadius: "var(--nf-radius-sm)",
+                    boxShadow: "var(--nf-shadow-lg)",
+                    backdropFilter: "blur(20px)",
+                    maxHeight: "300px",
+                    display: "flex",
+                    flexDirection: "column"
+                }}>
+                    <div style={{ padding: "8px", borderBottom: "1px solid var(--nf-border)" }}>
+                        <input
+                            type="text"
+                            className="nf-input"
+                            placeholder="Rechercher un événement..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                    <div style={{ overflowY: "auto", flex: 1 }}>
+                        <div
+                            style={{
+                                padding: "10px 12px",
+                                cursor: "pointer",
+                                fontSize: "13px",
+                                borderBottom: "1px solid var(--nf-border-dim)",
+                                color: currentValue === "" ? "var(--nf-accent)" : "inherit",
+                                background: currentValue === "" ? "var(--nf-bg-hover)" : "transparent"
+                            }}
+                            onClick={() => { onSelect(""); setIsOpen(false); }}
+                        >
+                            -- Aucun événement (Standalone) --
+                        </div>
+                        {filteredOptions.map(opt => (
+                            <div
+                                key={opt.id}
+                                style={{
+                                    padding: "10px 12px",
+                                    cursor: "pointer",
+                                    fontSize: "13px",
+                                    borderBottom: "1px solid var(--nf-border-dim)",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "2px",
+                                    background: (currentValue === opt.id || currentValue === opt.external_id) ? "var(--nf-bg-hover)" : "transparent",
+                                    transition: "background 0.2s"
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = "var(--nf-bg-hover)"}
+                                onMouseLeave={(e) => e.currentTarget.style.background = (currentValue === opt.id || currentValue === opt.external_id) ? "var(--nf-bg-hover)" : "transparent"}
+                                onClick={() => { onSelect(opt.id); setIsOpen(false); }}
+                            >
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 500 }}>
+                                    <span>{getSourceIcon(opt.source)}</span>
+                                    <span style={{ color: (currentValue === opt.id || currentValue === opt.external_id) ? "var(--nf-accent)" : "inherit" }}>
+                                        {opt.title}
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginLeft: "24px" }}>
+                                    {opt.source} {opt.start ? `• ${new Date(opt.start).toLocaleDateString()}` : ""}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface TaskListProps {
     compact?: boolean;
     onNavigate?: (view: string) => void;
+    courseName?: string;
+    noWrapper?: boolean;
 }
 
-export default function TaskList({ compact = false, onNavigate }: TaskListProps) {
+export default function TaskList({ compact = false, onNavigate, courseName, noWrapper = false }: TaskListProps) {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
+    const [localEvents, setLocalEvents] = useState<NovaEvent[]>([]);
+    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
     const fetchTasks = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/tasks`);
+            const res = await fetch(`${API_URL}/api/tasks`, { cache: 'no-store' });
             if (res.ok) {
                 const data = await res.json();
                 setTasks(data);
@@ -38,8 +205,21 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
         }
     }, []);
 
+    const fetchEvents = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/calendar/events/simple`, { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                setLocalEvents(data.events || []);
+            }
+        } catch (error) {
+            console.error("Erreur fetch events", error);
+        }
+    }, []);
+
     useEffect(() => {
         fetchTasks();
+        fetchEvents();
 
         // Polling : rafraîchir les tâches toutes les 60s
         const pollInterval = setInterval(() => {
@@ -71,9 +251,43 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
         try {
             await fetch(`${API_URL}/api/tasks/${taskId}`, { method: "DELETE" });
             await fetchTasks();
+            await fetchEvents();
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
             console.error("Erreur delete task", error);
+        }
+    };
+
+    const updateTaskParentEvent = async (taskId: string, newParentEventId: string) => {
+        try {
+            const endpoint = `${API_URL}/api/tasks/${taskId}`;
+            await fetch(endpoint, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ parent_event_id: newParentEventId || null })
+            });
+            await fetchTasks();
+            await fetchEvents();
+            window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
+        } catch (error) {
+            console.error("Erreur update task parent event", error);
+        }
+    };
+
+    const forceCreateEvent = async (taskId: string) => {
+        try {
+            const endpoint = `${API_URL}/api/tasks/${taskId}/force-create-event`;
+            const res = await fetch(endpoint, { method: "POST" });
+            if (res.ok) {
+                await fetchTasks();
+                await fetchEvents();
+                window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
+            } else {
+                const err = await res.json();
+                alert(`Erreur: ${err.detail}`);
+            }
+        } catch (error) {
+            console.error("Erreur force create event", error);
         }
     };
 
@@ -83,22 +297,55 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
     };
 
     const getDueDate = (task: Task): string => {
-        if (task.source_event_start) {
-            const date = new Date(task.source_event_start);
-            const now = new Date();
-            const diff = date.getTime() - now.getTime();
-            const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-            if (days === 0) return "Due Today";
-            if (days === 1) return "Due Tomorrow";
-            if (days < 0) return "Overdue";
-            return `Due in ${days} days`;
+        const dateString = task.due_date || task.source_event_start;
+        if (dateString) {
+            const isDateOnly = !dateString.includes("T") || dateString.endsWith("T00:00:00.000Z") || dateString.endsWith("T00:00:00Z");
+            // Force 12:00 local time to prevent timezone shifting (UTC midnight becoming 20:00 previous day in EDT)
+            const date = isDateOnly ? new Date(dateString.split("T")[0] + "T12:00:00") : new Date(dateString);
+
+            if (isDateOnly) {
+                return date.toLocaleDateString("fr-CA", { day: "numeric", month: "short" });
+            } else {
+                return date.toLocaleDateString("fr-CA", {
+                    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+                }).replace(",", "");
+            }
         }
         return "";
     };
 
     const activeTasks = tasks.filter(t => !t.done);
-    const displayTasks = compact ? activeTasks.slice(0, 5) : tasks;
-    const totalActive = activeTasks.length;
+    
+    // Filtrage par cours
+    let filteredTasks = tasks;
+    if (courseName) {
+        const target = courseName.toLowerCase();
+        const targetCode = target.match(/[a-z]{3,4}-?\d{3,4}/)?.[0];
+
+        filteredTasks = tasks.filter(t => {
+            if (!t.parent_event_id) return false;
+            const parentEvent = localEvents.find(e => e.id === t.parent_event_id || e.external_id === t.parent_event_id);
+            if (!parentEvent) return false;
+            
+            // Match direct via course_title du backend
+            if ((parentEvent as any).course_title === courseName) return true;
+
+            const title = parentEvent.title.toLowerCase();
+            const cat = ((parentEvent as any).category || "").toLowerCase();
+
+            // Match via code de cours
+            if (targetCode && (title.includes(targetCode) || cat.includes(targetCode))) return true;
+
+            // Match via sous-chaîne (catégorie dans le nom du cours)
+            if (cat && cat.length > 3 && target.includes(cat)) return true;
+
+            // Fallback
+            return title.includes(target) || cat.includes(target);
+        });
+    }
+
+    const displayTasks = compact ? (courseName ? filteredTasks : activeTasks.slice(0, 5)) : filteredTasks;
+    const totalActive = filteredTasks.filter(t => !t.done).length;
 
     if (loading) {
         return (
@@ -112,19 +359,24 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
 
     // Dashboard compact mode
     if (compact) {
-        return (
-            <div className="nf-card nf-card--glow nf-animate-in">
-                <div className="nf-card__header">
-                    <span className="nf-card__title">✅ Upcoming Tasks</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span className="nf-card__badge nf-card__badge--info">{totalActive} tasks</span>
-                        {onNavigate && (
-                            <button className="nf-card__link" onClick={() => onNavigate("tasks")}>
-                                View All
-                            </button>
-                        )}
+        const content = (
+            <>
+                {!noWrapper && (
+                    <div className="nf-card__header">
+                        <span className="nf-card__title">
+                            <CheckCircle size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-success)' }} />
+                            {courseName ? "Tâches du cours" : "Upcoming Tasks"}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span className="nf-card__badge nf-card__badge--info">{totalActive} tasks</span>
+                            {onNavigate && (
+                                <button className="nf-card__link" onClick={() => onNavigate("tasks")}>
+                                    View All
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
                 <div className="nf-task-list">
                     {displayTasks.length === 0 ? (
                         <div className="nf-empty-state">
@@ -135,6 +387,11 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
                         displayTasks.map((task) => {
                             const priority = getPriority(task);
                             const dueDate = getDueDate(task);
+                            const parentEvent = task.parent_event_id
+                                ? localEvents.find(e => e.id === task.parent_event_id || e.external_id === task.parent_event_id)
+                                : null;
+                            const eventName = parentEvent ? parentEvent.title : '';
+
                             return (
                                 <div
                                     key={task.id}
@@ -144,6 +401,7 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
                                 >
                                     <div
                                         className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""}`}
+                                        style={{ marginRight: "12px" }}
                                     >
                                         {task.done && <span style={{ fontSize: "10px", color: "white" }}>✓</span>}
                                     </div>
@@ -151,11 +409,9 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
                                         <div className={`nf-task__title ${task.done ? "nf-task__title--done" : ""}`}>
                                             {task.title}
                                         </div>
-                                        <div className="nf-task__meta">
-                                            <span className={`nf-task__priority-badge nf-task__priority-badge--${priority}`}>
-                                                {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                                            </span>
-                                            {dueDate && <span>{dueDate}</span>}
+                                        <div className="nf-task__meta" style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px" }}>
+                                            {dueDate && <span style={{ color: "var(--nf-text-muted)", display: "flex", alignItems: "center", gap: "4px" }}><Clock size={12} /> {dueDate}</span>}
+                                            {eventName && <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--nf-text-secondary)" }}><Calendar size={12} /> {eventName}</span>}
                                         </div>
                                     </div>
                                 </div>
@@ -163,6 +419,13 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
                         })
                     )}
                 </div>
+            </>
+        );
+
+        if (noWrapper) return content;
+        return (
+            <div className="nf-card nf-card--glow nf-animate-in">
+                {content}
             </div>
         );
     }
@@ -189,41 +452,95 @@ export default function TaskList({ compact = false, onNavigate }: TaskListProps)
                         tasks.map((task) => {
                             const priority = getPriority(task);
                             const dueDate = getDueDate(task);
+                            const isEditing = editingTaskId === task.id;
+                            const parentEvent = task.parent_event_id
+                                ? localEvents.find(e => e.id === task.parent_event_id || e.external_id === task.parent_event_id)
+                                : null;
+                            const eventName = parentEvent ? parentEvent.title : '';
+
                             return (
                                 <div
                                     key={task.id}
                                     className={`nf-task nf-task--${priority}`}
-                                    onClick={() => toggleTask(task)}
-                                    style={{ cursor: "pointer" }}
+                                    onClick={() => !isEditing && toggleTask(task)}
+                                    style={{
+                                        cursor: isEditing ? "default" : "pointer",
+                                        flexDirection: isEditing ? "column" : "row",
+                                        alignItems: isEditing ? "flex-start" : "center",
+                                        zIndex: isEditing ? 50 : 1,
+                                        position: "relative"
+                                    }}
                                 >
-                                    <div
-                                        className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""}`}
-                                    >
-                                        {task.done && <span style={{ fontSize: "10px", color: "white" }}>✓</span>}
-                                    </div>
-                                    <div className="nf-task__content">
-                                        <div className={`nf-task__title ${task.done ? "nf-task__title--done" : ""}`}>
-                                            {task.title}
-                                        </div>
-                                        <div className="nf-task__meta">
-                                            <span className={`nf-task__priority-badge nf-task__priority-badge--${priority}`}>
-                                                {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                                            </span>
-                                            {dueDate && <span>{dueDate}</span>}
-                                        </div>
-                                    </div>
-                                    <div className="nf-task__actions">
-                                        <button
-                                            className="nf-btn--icon"
+                                    <div style={{ display: "flex", width: "100%", alignItems: "center" }}>
+                                        <div
+                                            className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""}`}
                                             onClick={(e) => {
-                                                e.stopPropagation();
-                                                deleteTask(task.id);
+                                                if (isEditing) {
+                                                    e.stopPropagation();
+                                                    toggleTask(task);
+                                                }
                                             }}
-                                            title="Delete task"
+                                            style={isEditing ? { cursor: "pointer", marginRight: "12px" } : { marginRight: "12px" }}
                                         >
-                                            🗑️
-                                        </button>
+                                            {task.done && <span style={{ fontSize: "10px", color: "white" }}>✓</span>}
+                                        </div>
+                                        <div className="nf-task__content">
+                                            <div className={`nf-task__title ${task.done ? "nf-task__title--done" : ""}`}>
+                                                {task.title}
+                                            </div>
+                                            <div className="nf-task__meta" style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px" }}>
+                                                {dueDate && <span style={{ color: "var(--nf-text-muted)" }}>🕒 {dueDate}</span>}
+                                                {eventName && <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--nf-text-secondary)" }}>📅 {eventName}</span>}
+                                            </div>
+                                        </div>
+                                        <div className="nf-task__actions">
+                                            <button
+                                                className="nf-btn--icon"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditingTaskId(isEditing ? null : task.id);
+                                                }}
+                                                title={isEditing ? "Close edit" : "Edit task"}
+                                            >
+                                                {isEditing ? "❌" : "✏️"}
+                                            </button>
+                                            <button
+                                                className="nf-btn--icon"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteTask(task.id);
+                                                }}
+                                                title="Delete task"
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {isEditing && (
+                                        <div style={{ padding: "10px", marginTop: "10px", width: "100%", borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: "10px" }} onClick={e => e.stopPropagation()}>
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                                                <label style={{ fontSize: "12px", color: "var(--nf-text-secondary)" }}>Event associé :</label>
+                                                <EventSelector
+                                                    currentValue={task.parent_event_id || ""}
+                                                    options={localEvents}
+                                                    onSelect={(val) => updateTaskParentEvent(task.id, val)}
+                                                />
+                                            </div>
+
+                                            {!task.parent_event_id && (
+                                                <div>
+                                                    <button
+                                                        className="nf-btn nf-btn--secondary"
+                                                        onClick={() => forceCreateEvent(task.id)}
+                                                        style={{ fontSize: "12px", padding: "4px 8px" }}
+                                                    >
+                                                        ✨ Créer un événement lié (AI)
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })

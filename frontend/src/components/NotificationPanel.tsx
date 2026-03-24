@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { Bell, Clock, AlertTriangle, CheckCircle, Info, Inbox } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface Notification {
     id: string;
@@ -97,10 +98,10 @@ export default function NotificationPanel() {
 
     const getTypeIcon = (type: string) => {
         switch (type) {
-            case "deadline": return "⏰";
-            case "warning": return "⚠️";
-            case "success": return "✅";
-            default: return "ℹ️";
+            case "deadline": return <Clock size={14} color="var(--nf-danger)" />;
+            case "warning": return <AlertTriangle size={14} color="var(--nf-warning)" />;
+            case "success": return <CheckCircle size={14} color="var(--nf-success)" />;
+            default: return <Info size={14} color="var(--nf-info)" />;
         }
     };
 
@@ -111,7 +112,7 @@ export default function NotificationPanel() {
                 onClick={() => setIsOpen(!isOpen)}
                 style={{ position: "relative" }}
             >
-                <span>🔔</span>
+                <Bell size={20} />
                 {unreadCount > 0 && (
                     <span style={{
                         position: "absolute",
@@ -177,7 +178,9 @@ export default function NotificationPanel() {
                     <div style={{ maxHeight: "380px", overflowY: "auto" }}>
                         {notifications.length === 0 ? (
                             <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--nf-text-muted)" }}>
-                                <span style={{ fontSize: "24px", display: "block", marginBottom: "8px" }}>📭</span>
+                                <div style={{ marginBottom: "8px", opacity: 0.5 }}>
+                                    <Inbox size={40} strokeWidth={1} style={{ margin: "0 auto" }} />
+                                </div>
                                 <p style={{ fontSize: "13px" }}>No notifications</p>
                             </div>
                         ) : (
@@ -209,7 +212,7 @@ export default function NotificationPanel() {
                                         }} />
                                     )}
                                     <div style={{ display: "flex", gap: "10px" }}>
-                                        <span style={{ fontSize: "16px" }}>{getTypeIcon(notif.type)}</span>
+                                        <span style={{ display: "flex", alignItems: "center", marginTop: "2px" }}>{getTypeIcon(notif.type)}</span>
                                         <div style={{ flex: 1 }}>
                                             <div style={{
                                                 fontSize: "13px",

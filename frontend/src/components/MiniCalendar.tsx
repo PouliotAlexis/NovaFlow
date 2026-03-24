@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { Calendar } from "lucide-react";
 
 interface CalendarEvent {
     title?: string;
@@ -8,11 +9,17 @@ interface CalendarEvent {
     start?: string;
     end?: string;
     all_day?: boolean;
+    category?: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+interface MiniCalendarProps {
+    courseName?: string;
+    noWrapper?: boolean;
+}
 
-export default function MiniCalendar() {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+export default function MiniCalendar({ courseName, noWrapper = false }: MiniCalendarProps) {
     const now = new Date();
     const [selectedDay, setSelectedDay] = useState(now.getDate());
     const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
@@ -32,7 +39,32 @@ export default function MiniCalendar() {
             const res = await fetch(`${API_URL}/api/calendar/events?days=${daysInMonth}`);
             if (res.ok) {
                 const data = await res.json();
-                setAllEvents(data.events || []);
+                let events = data.events || [];
+                
+                // Filtrage par cours
+                if (courseName) {
+                    const target = courseName.toLowerCase();
+                    const targetCode = target.match(/[a-z]{3,4}-?\d{3,4}/)?.[0];
+                    
+                    events = events.filter((e: any) => {
+                        // 1. Match direct sur course_title (calculé par le backend)
+                        if (e.course_title === courseName) return true;
+                        
+                        const cat = (e.category || "").toLowerCase();
+                        const title = (e.title || "").toLowerCase();
+                        
+                        // 2. Correspondance de code de cours (ex: IFT-1000)
+                        if (targetCode && (cat.includes(targetCode) || title.includes(targetCode))) return true;
+                        
+                        // 3. Correspondance de sous-chaîne (si la catégorie est dans le nom du cours)
+                        if (cat && cat.length > 3 && target.includes(cat)) return true;
+                        
+                        // 4. Fallback includes standard
+                        return cat.includes(target) || title.includes(target);
+                    });
+                }
+                
+                setAllEvents(events);
             }
         } catch (e) {
             console.error("MiniCalendar fetch error", e);
@@ -87,11 +119,16 @@ export default function MiniCalendar() {
         ? "Today's Events"
         : selectedDateObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 
-    return (
-        <div className="nf-card nf-card--glow nf-animate-in">
-            <div className="nf-card__header">
-                <span className="nf-card__title">📅 Mini Calendar</span>
-            </div>
+    const content = (
+        <>
+            {!noWrapper && (
+                <div className="nf-card__header">
+                    <span className="nf-card__title">
+                        <Calendar size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-accent)' }} />
+                        {courseName ? "Agenda du cours" : "Mini Calendar"}
+                    </span>
+                </div>
+            )}
 
             <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px", color: "var(--nf-text)" }}>
                 {monthName}
@@ -160,6 +197,14 @@ export default function MiniCalendar() {
                     })
                 )}
             </div>
+        </>
+    );
+
+    if (noWrapper) return <div className="nf-animate-in">{content}</div>;
+
+    return (
+        <div className="nf-card nf-card--glow nf-animate-in">
+            {content}
         </div>
     );
 }

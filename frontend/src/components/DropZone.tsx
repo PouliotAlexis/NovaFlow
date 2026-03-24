@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import { Upload, CheckCircle, XCircle, RefreshCw, Cloud, Target, File } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface UploadedFile {
     name: string;
@@ -94,10 +95,10 @@ export default function DropZone() {
         input.click();
     }, []);
 
-    const statusIcons: Record<string, string> = {
-        uploading: "⏳",
-        analyzed: "✅",
-        error: "❌",
+    const statusIcons: Record<string, React.ReactNode> = {
+        uploading: <RefreshCw size={16} className="nf-spin" />,
+        analyzed: <CheckCircle size={16} color="var(--nf-success)" />,
+        error: <XCircle size={16} color="var(--nf-danger)" />,
     };
 
     const statusLabels: Record<string, { text: string; badge: string }> = {
@@ -125,7 +126,7 @@ export default function DropZone() {
                 onClick={handleClick}
             >
                 <span className="nf-dropzone__icon">
-                    {isDragging ? "🎯" : "☁️"}
+                    {isDragging ? <Target size={32} color="var(--nf-accent)" /> : <Cloud size={32} color="var(--nf-text-muted)" />}
                 </span>
                 <span className="nf-dropzone__title">
                     {isDragging ? "Drop it here!" : "Drag & Drop Files Here"}
@@ -142,7 +143,7 @@ export default function DropZone() {
                 <div className="nf-task-list" style={{ marginTop: "12px" }}>
                     {files.map((file, i) => (
                         <div key={i} className="nf-task">
-                            <span style={{ fontSize: "16px" }}>{statusIcons[file.status]}</span>
+                            <span style={{ display: "flex", alignItems: "center" }}>{statusIcons[file.status]}</span>
                             <div className="nf-task__content">
                                 <div className="nf-task__title">{file.name}</div>
                                 <div className="nf-task__meta">

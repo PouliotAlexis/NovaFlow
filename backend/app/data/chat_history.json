@@ -1,0 +1,50 @@
+[
+  {
+    "id": "20260316212541853862",
+    "role": "user",
+    "content": "test",
+    "timestamp": "2026-03-16T21:25:41.853909"
+  },
+  {
+    "id": "20260316212619332218",
+    "role": "ai",
+    "content": "Bonjour ! Je suis NovaFlow, votre assistant personnel intelligent. Je suis prêt à vous aider. Qu'est-ce que j peux faire pour vous aujourd'hui ?",
+    "timestamp": "2026-03-16T21:26:19.332265"
+  },
+  {
+    "id": "20260317104037053062",
+    "role": "user",
+    "content": "Fait moi un résumé de tes infos",
+    "timestamp": "2026-03-17T10:40:37.053091"
+  },
+  {
+    "id": "20260317104111645869",
+    "role": "ai",
+    "content": "Bonjour ! Je suis NovaFlow, votre assistant personnel intelligent. Voici quelques informations utiles sur mes capacités :\n\n* Je parle français et peux répondre à vos questions en utilisant des commandes spécifiques.\n* J'ai une fonction de gestion de tâches : écrivez `✅ Tâche 'Titre de la tâche' ajoutée.` pour ajouter une nouvelle tâche à ma liste.\n\nJe suis prêt à vous aider !",
+    "timestamp": "2026-03-17T10:41:11.645897"
+  },
+  {
+    "id": "20260324085242104283",
+    "role": "user",
+    "content": "test",
+    "timestamp": "2026-03-24T08:52:42.104327"
+  },
+  {
+    "id": "20260324085252511131",
+    "role": "ai",
+    "content": "Je suis NovaFlow, votre assistant personnel intelligent. Je suis prêt à vous aider avec tout ce que vous avez besoin. Pour commencer, qu'est-ce que vous souhaitez faire ou discuter ?",
+    "timestamp": "2026-03-24T08:52:52.511258"
+  },
+  {
+    "id": "20260324114045632855",
+    "role": "user",
+    "content": "résume moi ce que je dois faire dans le cours de Vulgarisation scientifique pour la fin de la session dans ce cours",
+    "timestamp": "2026-03-24T11:40:45.632909"
+  },
+  {
+    "id": "20260324114111485797",
+    "role": "ai",
+    "content": "Pour la fin de la session dans le cours de Vulgarisation scientifique, il est recommandé de :\n\n* Réviser les notions clés apprises pendant la session (notamment sur [suivez le lien])\n* Compléter les exercices pratiques pour réinforcer vos connaissances\n* Demander des explications supplémentaires aux enseignants si vous avez des questions ou des difficultés à comprendre certains concepts\n\nN'hésitez pas à me poser d'autres questions si je peux vous aider en plus !",
+    "timestamp": "2026-03-24T11:41:11.485869"
+  }
+]

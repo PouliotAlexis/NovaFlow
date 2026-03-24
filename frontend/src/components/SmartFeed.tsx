@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { Sparkles } from "lucide-react";
 
 export default function SmartFeed() {
     const [greeting, setGreeting] = useState("");
@@ -27,7 +28,10 @@ export default function SmartFeed() {
 
     return (
         <div className="nf-smart-feed nf-animate-in">
-            <div className="nf-smart-feed__label">Smart Feed</div>
+            <div className="nf-smart-feed__label">
+                <Sparkles size={14} style={{ marginRight: '6px' }} />
+                Smart Feed
+            </div>
             <div className="nf-smart-feed__greeting">
                 {greeting || "Bonjour"}, Alexis
             </div>

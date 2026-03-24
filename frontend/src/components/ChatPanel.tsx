@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { MessageSquare, Zap, User, Trash2, Loader2, AlertCircle, Send } from "lucide-react";
 
 interface Message {
     id: string;
@@ -19,7 +20,7 @@ const INITIAL_MESSAGES: Message[] = [
     },
 ];
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface ChatPanelProps {
     compact?: boolean;
@@ -29,6 +30,11 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
     const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const messagesEndRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
 
     React.useEffect(() => {
         const fetchHistory = async () => {
@@ -72,8 +78,11 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
         setInput("");
         setIsLoading(true);
 
+        const aiMsgId = (Date.now() + 1).toString();
+        setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: "" }]);
+
         try {
-            const response = await fetch(`${API_URL}/api/chat`, {
+            const response = await fetch(`${API_URL}/api/chat/stream`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -83,25 +92,64 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                 }),
             });
 
-            if (!response.ok) throw new Error("API Error");
+            if (!response.ok || !response.body) throw new Error("API Error");
 
-            const data = await response.json();
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
 
-            const aiMsg: Message = {
-                id: (Date.now() + 1).toString(),
-                role: "ai",
-                content: data.response,
-            };
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-            setMessages((prev) => [...prev, aiMsg]);
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n\n");
+                buffer = lines.pop() ?? "";
+
+                for (const line of lines) {
+                    if (!line.startsWith("data: ")) continue;
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (data.type === "token") {
+                            setMessages((prev) =>
+                                prev.map((msg) =>
+                                    msg.id === aiMsgId
+                                        ? { ...msg, content: msg.content + data.content }
+                                        : msg
+                                )
+                            );
+                        } else if (data.type === "done") {
+                            setMessages((prev) =>
+                                prev.map((msg) =>
+                                    msg.id === aiMsgId ? { ...msg, content: data.response } : msg
+                                )
+                            );
+                        } else if (data.type === "error") {
+                            setMessages((prev) =>
+                                prev.map((msg) =>
+                                    msg.id === aiMsgId
+                                        ? { ...msg, content: `Error: ${data.message}` }
+                                        : msg
+                                )
+                            );
+                        }
+                    } catch {
+                        // ignore malformed SSE lines
+                    }
+                }
+            }
         } catch {
-            const errorMsg: Message = {
-                id: (Date.now() + 1).toString(),
-                role: "ai",
-                content:
-                    "⚠️ I can't respond right now. Make sure the backend server (`python main.py`) and Ollama are running.",
-            };
-            setMessages((prev) => [...prev, errorMsg]);
+            setMessages((prev) =>
+                prev.map((msg) =>
+                    msg.id === aiMsgId
+                        ? {
+                              ...msg,
+                              content:
+                                  "⚠️ I can't respond right now. Make sure the backend server (`python main.py`) and Ollama are running.",
+                          }
+                        : msg
+                )
+            );
         } finally {
             setIsLoading(false);
         }
@@ -121,7 +169,10 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
         return (
             <div className="nf-card nf-card--glow nf-animate-in" style={{ display: "flex", flexDirection: "column" }}>
                 <div className="nf-card__header">
-                    <span className="nf-card__title">💬 Chat AI</span>
+                    <span className="nf-card__title">
+                        <MessageSquare size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-accent)' }} />
+                        Chat AI
+                    </span>
                     <div className="nf-ai-mode nf-ai-mode--local" style={{ fontSize: "10px" }}>
                         <span className="nf-ai-mode__dot" />
                         Local
@@ -141,7 +192,7 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                                 display: "flex", alignItems: "center", justifyContent: "center",
                                 background: msg.role === "ai" ? "var(--nf-accent-gradient)" : "var(--nf-bg-tertiary)",
                             }}>
-                                {msg.role === "ai" ? "⚡" : "👤"}
+                                {msg.role === "ai" ? <Zap size={14} color="white" /> : <User size={14} />}
                             </div>
                             <div style={{
                                 padding: "6px 10px", borderRadius: "10px",
@@ -170,7 +221,7 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                     <button className="nf-btn nf-btn--primary" onClick={sendMessage}
                         disabled={isLoading || !input.trim()}
                         style={{ fontSize: "11px", padding: "6px 10px" }}>
-                        {isLoading ? "⏳" : "→"}
+                        {isLoading ? <Loader2 size={14} className="nf-spin" /> : <Send size={14} />}
                     </button>
                 </div>
             </div>
@@ -188,11 +239,14 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
             <div className="nf-card" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "400px" }}>
                 <div className="nf-card__header">
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span className="nf-card__title">💬 Chat AI</span>
+                        <span className="nf-card__title">
+                            <MessageSquare size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-accent)' }} />
+                            Chat AI
+                        </span>
                         <button onClick={clearHistory} className="nf-btn nf-btn--ghost"
                             style={{ padding: "2px 6px", fontSize: "11px", opacity: 0.6 }}
                             title="Clear history">
-                            🗑️
+                            <Trash2 size={14} />
                         </button>
                     </div>
                     <div className="nf-ai-mode nf-ai-mode--local">
@@ -207,12 +261,12 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                         <div key={msg.id}
                             className={`nf-chat__message nf-chat__message--${msg.role}`}>
                             <div className={`nf-chat__avatar nf-chat__avatar--${msg.role}`}>
-                                {msg.role === "ai" ? "⚡" : "👤"}
+                                {msg.role === "ai" ? <Zap size={16} color="white" /> : <User size={16} />}
                             </div>
                             <div className={`nf-chat__bubble nf-chat__bubble--${msg.role} ${msg.role === "ai" ? "nf-markdown" : ""}`}>
                                 {msg.role === "ai" ? (
                                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                        {msg.content}
+                                        {msg.content || (isLoading ? "▋" : "")}
                                     </ReactMarkdown>
                                 ) : (
                                     msg.content
@@ -220,15 +274,7 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                             </div>
                         </div>
                     ))}
-
-                    {isLoading && (
-                        <div className="nf-chat__message nf-chat__message--ai">
-                            <div className="nf-chat__avatar nf-chat__avatar--ai">⚡</div>
-                            <div className="nf-chat__bubble nf-chat__bubble--ai" style={{ opacity: 0.7 }}>
-                                Thinking...
-                            </div>
-                        </div>
-                    )}
+                    <div ref={messagesEndRef} />
                 </div>
 
                 {/* Input */}
@@ -243,7 +289,7 @@ export default function ChatPanel({ compact = false }: ChatPanelProps) {
                     />
                     <button className="nf-btn nf-btn--primary" onClick={sendMessage}
                         disabled={isLoading || !input.trim()}>
-                        {isLoading ? "⏳" : "Send"}
+                        {isLoading ? <Loader2 size={18} className="nf-spin" /> : "Send"}
                     </button>
                 </div>
             </div>

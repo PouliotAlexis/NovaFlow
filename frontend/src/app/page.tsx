@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import SmartFeed from "@/components/SmartFeed";
 import DailySummary from "@/components/DailySummary";
@@ -16,9 +16,19 @@ import DocumentsView from "@/components/DocumentsView";
 import SettingsPanel from "@/components/SettingsPanel";
 import NotificationPanel from "@/components/NotificationPanel";
 import AutomationStatus from "@/components/AutomationStatus";
+import MoodleDashboard from "@/components/MoodleDashboard";
+import { Hammer } from "lucide-react";
 
 export default function Home() {
   const [activeView, setActiveView] = useState("dashboard");
+  
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    if (view) {
+      setActiveView(view);
+    }
+  }, []);
 
   const renderDynamicView = () => {
     switch (activeView) {
@@ -32,13 +42,21 @@ export default function Home() {
         return <FocusMode />;
       case "settings":
         return <SettingsPanel />;
+      case "courses":
+        return (
+          <div style={{ marginTop: "20px" }}>
+            <MoodleDashboard />
+          </div>
+        );
       case "tasks":
       case "calendar":
         return null;
       default:
         return (
           <div className="nf-card nf-animate-in" style={{ textAlign: "center", padding: "60px" }}>
-            <span style={{ fontSize: "48px", display: "block", marginBottom: "16px" }}>🚧</span>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px", opacity: 0.5 }}>
+              <Hammer size={48} strokeWidth={1} />
+            </div>
             <h2 style={{ fontSize: "20px", fontWeight: 600, marginBottom: "8px" }}>
               En construction
             </h2>

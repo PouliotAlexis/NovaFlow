@@ -1,8 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { 
+    Calendar, CheckCircle, Link, MapPin, BookOpen, User, Clock, 
+    ChevronLeft, ChevronRight, Settings 
+} from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface Task {
     id: string;
@@ -11,6 +15,7 @@ interface Task {
     priority: "high" | "medium" | "low";
     done: boolean;
     parent_event_id?: string;
+    due_date?: string;
 }
 
 interface CalendarEvent {
@@ -313,16 +318,19 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
             {/* Calendar Grid */}
             <div className="nf-card">
                 <div className="nf-card__header">
-                    <span className="nf-card__title">📅 {MONTHS_FR[currentMonth]} {currentYear}</span>
+                    <span className="nf-card__title">
+                        <Calendar size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-accent)' }} />
+                        {MONTHS_FR[currentMonth]} {currentYear}
+                    </span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                         {(googleAccounts.length + microsoftAccounts.length + moodleUrls.length) > 0 ? (
                             <div style={{ position: "relative" }}>
                                 <span
                                     className="nf-card__badge nf-card__badge--success"
-                                    style={{ cursor: "pointer", userSelect: "none" }}
+                                    style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "4px" }}
                                     onClick={() => setShowAccountsDropdown(!showAccountsDropdown)}
                                 >
-                                    ✅ {googleAccounts.length + microsoftAccounts.length + moodleUrls.length} compte{(googleAccounts.length + microsoftAccounts.length + moodleUrls.length) > 1 ? "s" : ""} connecté{(googleAccounts.length + microsoftAccounts.length + moodleUrls.length) > 1 ? "s" : ""}
+                                    <CheckCircle size={12} /> {googleAccounts.length + microsoftAccounts.length + moodleUrls.length} compte{(googleAccounts.length + microsoftAccounts.length + moodleUrls.length) > 1 ? "s" : ""} connecté{(googleAccounts.length + microsoftAccounts.length + moodleUrls.length) > 1 ? "s" : ""}
                                 </span>
                                 {showAccountsDropdown && (
                                     <div className="nf-card nf-animate-in" style={{
@@ -394,29 +402,29 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                                 setShowAccountsDropdown(false);
                                                 if (onNavigate) onNavigate("settings");
                                             }}
-                                            style={{ marginTop: "10px", fontSize: "11px", width: "100%", padding: "6px", textAlign: "center" }}
+                                            style={{ marginTop: "10px", fontSize: "11px", width: "100%", padding: "6px", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
                                         >
-                                            ⚙️ Gérer les comptes
+                                            <Settings size={12} /> Gérer les comptes
                                         </button>
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            <button
-                                className="nf-btn nf-btn--primary"
-                                onClick={() => {
-                                    if (onNavigate) {
-                                        onNavigate("settings");
-                                        window.location.hash = "connections";
-                                    }
-                                }}
-                                style={{ padding: "6px 12px", fontSize: "12px", gap: "6px", display: "inline-flex", alignItems: "center", height: "32px" }}
-                            >
-                                <span>🔗</span> Connecter
-                            </button>
+                                <button
+                                    className="nf-btn nf-btn--primary"
+                                    onClick={() => {
+                                        if (onNavigate) {
+                                            onNavigate("settings");
+                                            window.location.hash = "connections";
+                                        }
+                                    }}
+                                    style={{ padding: "6px 12px", fontSize: "12px", gap: "6px", display: "inline-flex", alignItems: "center", height: "32px" }}
+                                >
+                                    <Link size={14} /> Connecter
+                                </button>
                         )}
-                        <button className="nf-btn--icon" onClick={prevMonth}>◀</button>
-                        <button className="nf-btn--icon" onClick={nextMonth}>▶</button>
+                        <button className="nf-btn--icon" onClick={prevMonth}><ChevronLeft size={16} /></button>
+                        <button className="nf-btn--icon" onClick={nextMonth}><ChevronRight size={16} /></button>
                     </div>
                 </div>
 
@@ -532,8 +540,9 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                 {selectedDate && (
                     <div className="nf-card">
                         <div className="nf-card__header">
-                            <span className="nf-card__title">
-                                📌 {new Date(selectedDate + "T00:00:00").toLocaleDateString("fr-CA", {
+                            <span className="nf-card__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <MapPin size={16} color="var(--nf-accent)" /> 
+                                {new Date(selectedDate + "T00:00:00").toLocaleDateString("fr-CA", {
                                     weekday: "long",
                                     day: "numeric",
                                     month: "long",
@@ -578,13 +587,13 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                                                     {evt.location && !evt.source?.includes("moodle") ? ` · 📍 ${evt.location}` : ""}
                                                 </div>
                                                 {evt.category && evt.category !== "Événements de site" && evt.category !== "Général" && (
-                                                    <div style={{ fontSize: "11px", color: "var(--nf-accent)", marginTop: "2px" }}>
-                                                        📚 {evt.category}
+                                                    <div style={{ fontSize: "11px", color: "var(--nf-accent)", marginTop: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                                        <BookOpen size={12} /> {evt.category}
                                                     </div>
                                                 )}
                                                 {evt.accounts && (
-                                                    <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "4px" }}>
-                                                        👤 {evt.accounts.join(" · ")}
+                                                    <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                                        <User size={10} /> {evt.accounts.join(" · ")}
                                                     </div>
                                                 )}
                                             </div>
@@ -614,26 +623,51 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
 
                                         {evt.tasks && evt.tasks.length > 0 && (
                                             <div style={{ paddingLeft: "24px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "-8px", marginBottom: "8px" }}>
-                                                {evt.tasks.map(task => (
-                                                    <div
-                                                        key={task.id}
-                                                        className="nf-task"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            toggleTask(task.id, evt.id);
-                                                        }}
-                                                        style={{ minHeight: "32px", padding: "4px 8px", background: "rgba(255,255,255,0.02)" }}
-                                                    >
-                                                        <div className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""}`} style={{ width: "14px", height: "14px", fontSize: "10px" }}>
-                                                            {task.done && "✓"}
-                                                        </div>
-                                                        <div className="nf-task__content">
-                                                            <div className={`nf-task__title ${task.done ? "nf-task__title--done" : ""}`} style={{ fontSize: "12px" }}>
-                                                                {task.title}
+                                                {evt.tasks.map(task => {
+                                                    let customDateDisplay = null;
+                                                    if (task.due_date) {
+                                                        const isDateOnly = !task.due_date.includes("T") || task.due_date.endsWith("T00:00:00.000Z") || task.due_date.endsWith("T00:00:00Z");
+                                                        const taskDateObj = isDateOnly ? new Date(task.due_date.split("T")[0] + "T12:00:00") : new Date(task.due_date);
+                                                        const taskDayStr = taskDateObj.toISOString().split("T")[0];
+                                                        const taskTimeStr = isDateOnly ? "Journée" : taskDateObj.toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
+
+                                                        if (taskDayStr !== evt.date) {
+                                                            customDateDisplay = isDateOnly
+                                                                ? taskDateObj.toLocaleDateString("fr-CA", { day: "numeric", month: "short" })
+                                                                : taskDateObj.toLocaleDateString("fr-CA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).replace(",", "");
+                                                        } else if (!isDateOnly && taskTimeStr !== evt.time && evt.time !== "Journée") {
+                                                            customDateDisplay = taskTimeStr;
+                                                        } else if (!isDateOnly && evt.time === "Journée") {
+                                                            customDateDisplay = taskTimeStr;
+                                                        }
+                                                    }
+
+                                                    return (
+                                                        <div
+                                                            key={task.id}
+                                                            className="nf-task"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleTask(task.id, evt.id);
+                                                            }}
+                                                            style={{ minHeight: "32px", padding: "4px 8px", background: "rgba(255,255,255,0.02)" }}
+                                                        >
+                                                            <div className={`nf-task__checkbox ${task.done ? "nf-task__checkbox--checked" : ""}`} style={{ width: "14px", height: "14px", fontSize: "10px" }}>
+                                                                {task.done && <CheckCircle size={10} />}
+                                                            </div>
+                                                            <div className="nf-task__content">
+                                                                <div className={`nf-task__title ${task.done ? "nf-task__title--done" : ""}`} style={{ fontSize: "12px" }}>
+                                                                    {task.title}
+                                                                </div>
+                                                                {customDateDisplay && (
+                                                                    <div style={{ fontSize: "10px", color: "var(--nf-text-muted)", marginTop: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                                                        <Clock size={10} /> {customDateDisplay}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </React.Fragment>
@@ -650,7 +684,9 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
                 {/* Upcoming Events */}
                 <div className="nf-card">
                     <div className="nf-card__header">
-                        <span className="nf-card__title">⏰ Prochains événements</span>
+                        <span className="nf-card__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Clock size={18} color="var(--nf-warning)" /> Prochains événements
+                        </span>
                         <span className="nf-card__badge nf-card__badge--warning">{upcomingEvents.length}</span>
                     </div>
                     {isLoading ? (

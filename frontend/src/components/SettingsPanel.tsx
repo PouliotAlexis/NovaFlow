@@ -1,6 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { 
+    User, GraduationCap, Briefcase, Home, Brain, 
+    Cloud, Mail, Calendar, Link, Plus, Trash2, Shield 
+} from "lucide-react";
 
 export default function SettingsPanel() {
     const [aiMode, setAiMode] = useState<"local" | "cloud">("local");
@@ -13,7 +17,7 @@ export default function SettingsPanel() {
     const prevAccountCount = useRef<number | null>(null);
     const prevMsAccountCount = useRef<number | null>(null);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
     const fetchGoogleAccounts = async () => {
         try {
@@ -182,14 +186,16 @@ export default function SettingsPanel() {
             {/* Profile Selection */}
             <div className="nf-card">
                 <div className="nf-card__header">
-                    <span className="nf-card__title">👤 Profile</span>
+                    <span className="nf-card__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <User size={18} color="var(--nf-accent)" /> Profile
+                    </span>
                 </div>
 
                 <div style={{ display: "flex", gap: "12px" }}>
                     {[
-                        { id: "student" as const, icon: "🎓", label: "Student" },
-                        { id: "pro" as const, icon: "💼", label: "Professional" },
-                        { id: "personal" as const, icon: "🏠", label: "Personal" },
+                        { id: "student" as const, icon: <GraduationCap size={16} />, label: "Student" },
+                        { id: "pro" as const, icon: <Briefcase size={16} />, label: "Professional" },
+                        { id: "personal" as const, icon: <Home size={16} />, label: "Personal" },
                     ].map((p) => (
                         <button
                             key={p.id}
@@ -218,7 +224,9 @@ export default function SettingsPanel() {
             {/* AI Mode */}
             <div className="nf-card">
                 <div className="nf-card__header">
-                    <span className="nf-card__title">🧠 AI Engine</span>
+                    <span className="nf-card__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Brain size={18} color="var(--nf-accent)" /> AI Engine
+                    </span>
                     <div className={`nf-ai-mode nf-ai-mode--${aiMode}`}>
                         <span className="nf-ai-mode__dot" />
                         {aiMode === "local" ? "Local (Ollama)" : "Cloud (OpenAI)"}
@@ -229,16 +237,16 @@ export default function SettingsPanel() {
                     <button
                         className={`nf-btn ${aiMode === "local" ? "nf-btn--primary" : "nf-btn--ghost"}`}
                         onClick={() => setAiMode("local")}
-                        style={{ flex: 1, justifyContent: "center" }}
+                        style={{ flex: 1, justifyContent: "center", gap: "8px" }}
                     >
-                        🏠 Local (Private)
+                        <Home size={16} /> Local (Private)
                     </button>
                     <button
                         className={`nf-btn ${aiMode === "cloud" ? "nf-btn--primary" : "nf-btn--ghost"}`}
                         onClick={() => setAiMode("cloud")}
-                        style={{ flex: 1, justifyContent: "center" }}
+                        style={{ flex: 1, justifyContent: "center", gap: "8px" }}
                     >
-                        ☁️ Cloud
+                        <Cloud size={16} /> Cloud
                     </button>
                 </div>
 
@@ -256,7 +264,9 @@ export default function SettingsPanel() {
                 }}>
                     {aiMode === "local" ? (
                         <>
-                            <strong style={{ color: "var(--nf-success)" }}>🔒 Bunker Mode</strong>
+                            <strong style={{ color: "var(--nf-success)", display: "flex", alignItems: "center", gap: "4px" }}>
+                                <Shield size={14} /> Bunker Mode
+                            </strong>
                             <br />
                             All data stays on your PC. Nothing leaves.
                             <br />
@@ -277,7 +287,9 @@ export default function SettingsPanel() {
             {/* Connections */}
             <div className="nf-card" id="connections">
                 <div className="nf-card__header">
-                    <span className="nf-card__title">🔗 Connections</span>
+                    <span className="nf-card__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Link size={18} color="var(--nf-accent)" /> Connections
+                    </span>
                 </div>
 
                 <div className="nf-task-list">
@@ -307,7 +319,9 @@ export default function SettingsPanel() {
                                         border: "1px solid var(--nf-border)",
                                         fontSize: "12px"
                                     }}>
-                                        <span style={{ color: "var(--nf-text-secondary)" }}>📧 {email}</span>
+                                        <span style={{ color: "var(--nf-text-secondary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <Mail size={12} /> {email}
+                                        </span>
                                         <button
                                             onClick={() => disconnectGoogle(email)}
                                             style={{ background: "transparent", border: "none", color: "var(--nf-danger)", cursor: "pointer", fontSize: "11px", fontWeight: 500 }}
@@ -382,8 +396,8 @@ export default function SettingsPanel() {
                                         border: "1px solid var(--nf-border)",
                                         fontSize: "12px"
                                     }}>
-                                        <span style={{ color: "var(--nf-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%" }}>
-                                            📅 Calendrier {i + 1} — {url.includes("usherbrooke") ? "UdeS" : url.split("/")[2] || "Moodle"}
+                                        <span style={{ color: "var(--nf-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "80%", display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <Calendar size={12} /> Calendrier {i + 1} — {url.includes("usherbrooke") ? "UdeS" : url.split("/")[2] || "Moodle"}
                                         </span>
                                         <button
                                             onClick={() => removeMoodleUrl(url)}

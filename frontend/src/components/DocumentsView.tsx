@@ -1,8 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { 
+    FileText, FilePlus, Search, CheckCircle, Clock, 
+    Trash2, ExternalLink, Filter, FolderOpen 
+} from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface Document {
     id: string;
@@ -19,15 +23,15 @@ interface Document {
     summary?: string;
 }
 
-const FILE_ICONS: Record<string, string> = {
-    pdf: "📕",
-    doc: "📘",
-    docx: "📘",
-    xlsx: "📗",
-    pptx: "📙",
-    txt: "📝",
-    md: "📝",
-    csv: "📊",
+const FILE_ICONS: Record<string, React.ReactNode> = {
+    pdf: <FileText size={24} color="#ef4444" />,
+    doc: <FileText size={24} color="#3b82f6" />,
+    docx: <FileText size={24} color="#3b82f6" />,
+    xlsx: <FilePlus size={24} color="#10b981" />,
+    pptx: <FilePlus size={24} color="#f59e0b" />,
+    txt: <FileText size={24} color="#6b7280" />,
+    md: <FileText size={24} color="#6b7280" />,
+    csv: <FilePlus size={24} color="#10b981" />,
 };
 
 const STATUS_CONFIG = {
@@ -36,9 +40,9 @@ const STATUS_CONFIG = {
     error: { label: "Error", badge: "nf-card__badge--danger" },
 };
 
-function getFileIcon(fileName: string): string {
+function getFileIcon(fileName: string): React.ReactNode {
     const ext = fileName.split(".").pop()?.toLowerCase() || "";
-    return FILE_ICONS[ext] || "📄";
+    return FILE_ICONS[ext] || <FileText size={24} />;
 }
 
 function buildTags(doc: {
@@ -171,13 +175,14 @@ export default function DocumentsView() {
 
             {/* Search & Filters */}
             <div className="nf-card">
-                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "12px", alignItems: "center", position: "relative" }}>
+                    <Search size={16} style={{ position: "absolute", left: "12px", color: "var(--nf-text-muted)" }} />
                     <input
                         className="nf-input"
-                        placeholder="🔍 Search documents or tags..."
+                        placeholder="Search documents or tags..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        style={{ flex: 1 }}
+                        style={{ flex: 1, paddingLeft: "36px" }}
                     />
                     <div style={{ display: "flex", gap: "4px" }}>
                         {(["all", "analyzed", "pending"] as const).map((f) => (
@@ -185,9 +190,9 @@ export default function DocumentsView() {
                                 key={f}
                                 className={`nf-btn ${filter === f ? "nf-btn--primary" : "nf-btn--ghost"}`}
                                 onClick={() => setFilter(f)}
-                                style={{ fontSize: "12px", padding: "8px 14px" }}
+                                style={{ fontSize: "12px", padding: "8px 14px", display: "flex", alignItems: "center", gap: "6px" }}
                             >
-                                {f === "all" ? "All" : f === "analyzed" ? "✅ Analyzed" : "⏳ Pending"}
+                                {f === "all" ? "All" : f === "analyzed" ? <><CheckCircle size={14} /> Analyzed</> : <><Clock size={14} /> Pending</>}
                             </button>
                         ))}
                     </div>
@@ -196,8 +201,8 @@ export default function DocumentsView() {
 
             {/* Loading */}
             {isLoading && (
-                <div className="nf-loading">
-                    <span className="nf-spinner">⏳</span> Loading documents...
+                <div className="nf-loading" style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                    <Clock size={16} className="nf-spin" /> Loading documents...
                 </div>
             )}
 
@@ -274,16 +279,16 @@ export default function DocumentsView() {
                                         <button
                                             className="nf-btn nf-btn--ghost"
                                             onClick={(e) => { e.stopPropagation(); handleOpen(doc.id); }}
-                                            style={{ fontSize: "11px", padding: "4px 10px" }}
+                                            style={{ fontSize: "11px", padding: "4px 10px", display: "flex", alignItems: "center", gap: "4px" }}
                                         >
-                                            📂 Open
+                                            <FolderOpen size={14} /> Open
                                         </button>
                                         <button
                                             className="nf-btn nf-btn--danger"
                                             onClick={(e) => { e.stopPropagation(); handleDelete(doc.id); }}
                                             style={{ fontSize: "11px", padding: "4px 10px" }}
                                         >
-                                            🗑️
+                                            <Trash2 size={14} />
                                         </button>
                                     </div>
                                 </div>
@@ -293,8 +298,8 @@ export default function DocumentsView() {
 
                     {filteredDocs.length === 0 && (
                         <div className="nf-empty-state">
-                            <span className="nf-empty-state__icon">
-                                {documents.length === 0 ? "📄" : "🔍"}
+                            <span className="nf-empty-state__icon" style={{ opacity: 0.5 }}>
+                                {documents.length === 0 ? <FilePlus size={48} /> : <Search size={48} />}
                             </span>
                             <span className="nf-empty-state__text">
                                 {documents.length === 0
