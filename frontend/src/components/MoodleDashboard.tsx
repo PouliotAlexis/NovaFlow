@@ -9,7 +9,10 @@ export default function MoodleDashboard() {
   const [isSyncDialogOpen, setIsSyncDialogOpen] = useState(false);
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
+  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
+
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
 
   const fetchStatus = async () => {
     try {
@@ -50,7 +53,16 @@ export default function MoodleDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const dashboardRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (expandedCourseId && dashboardRef.current) {
+      dashboardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [expandedCourseId]);
+
   const handleSyncStarted = () => {
+
     // Show a notification or just refresh periodically
     fetchCourses();
   };
@@ -60,7 +72,8 @@ export default function MoodleDashboard() {
   };
 
   return (
-    <div className="nf-moodle-dashboard nf-animate-in">
+    <div ref={dashboardRef} className="nf-moodle-dashboard nf-animate-in">
+
       <div className="nf-page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <GraduationCap size={28} color="var(--nf-accent)" />
@@ -132,16 +145,19 @@ export default function MoodleDashboard() {
             <p style={{ color: "var(--nf-text-muted)" }}>Aucun document Moodle synchronisé. Cliquez sur "Nouvelle Synchro" pour commencer.</p>
           </div>
         )}
-        {courses.map(course => (
+        {[...courses].sort((a, b) => (a.id === expandedCourseId ? -1 : b.id === expandedCourseId ? 1 : 0)).map(course => (
           <CourseCard 
             key={course.id}
             id={course.id}
             name={course.name}
             filesCount={course.filesCount}
+            isExpanded={course.id === expandedCourseId}
+            onToggleExpand={() => setExpandedCourseId(expandedCourseId === course.id ? null : course.id)}
             onSync={() => setIsSyncDialogOpen(true)}
             onOpenChat={handleChat}
           />
         ))}
+
       </div>
 
       <MoodleSyncDialog 
