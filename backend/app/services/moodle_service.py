@@ -107,6 +107,11 @@ async def sync_moodle_courses(username, password, url, token=None):
     download_dir = settings.MOODLE_DOWNLOADS_DESTINATION
     
     results = []
+    ALLOWED_EXTENSIONS = (
+        ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls", ".csv",
+        ".jpg", ".jpeg", ".png", ".gif", ".svg"
+    )
+
     for course in courses:
         course_name = course.get("fullname", "Unknown Course")
         course_id = course.get("id")
@@ -120,39 +125,90 @@ async def sync_moodle_courses(username, password, url, token=None):
             json.dump({"id": course_id, "name": course_name}, f, ensure_ascii=False, indent=2)
         
         contents = await service.get_course_contents(course_id)
-        pdf_count = 0
+        files_to_sync = []
+        
         for section in contents:
             for module in section.get("modules", []):
                 modname = module.get("modname")
-                for content in module.get("contents", []):
-                    if content.get("type") == "file" and content.get("filename", "").endswith(".pdf"):
-                        pdf_count += 1
-                        file_url = content.get("fileurl")
-                        file_name = content.get("filename")
-                        print(f"[MOODLE SYNC]   PDF trouvé ({modname}): {file_name}", flush=True)
-                        
-                        # Téléchargement
-                        try:
-                            file_path = await service.download_file(file_url, course_dir, file_name)
-                            print(f"[MOODLE SYNC]   Téléchargé: {file_path}", flush=True)
-                            # Ingestion RAG
-                            ingest_result = ingest_document(file_path, course_id=str(course_id))
-                            results.append({
-                                "course": course_name,
-                                "file": file_name,
-                                "status": "synced",
-                                "rag": ingest_result
+                
+                # 1. Ressources directes (File)
+                if modname == "resource":
+                    for content in module.get("contents", []):
+                        if content.get("type") == "file":
+                            files_to_sync.append({
+                                "url": content.get("fileurl"),
+                                "name": content.get("filename"),
+                                "mtime": content.get("timemodified", 0),
+                                "modname": modname
                             })
-                        except Exception as e:
-                            print(f"[MOODLE SYNC]   ERREUR {file_name}: {e}", flush=True)
-                            traceback.print_exc()
-                            results.append({
-                                "course": course_name,
-                                "file": file_name,
-                                "status": "error",
-                                "error": str(e)
-                            })
-        print(f"[MOODLE SYNC]   → {pdf_count} PDF(s) dans ce cours", flush=True)
+                
+                # 2. Devoirs (Assign) - Fichiers joints à la consigne
+                elif modname == "assign":
+                    # Moodle stocke les pièces jointes d'intro dans introattachments
+                    for attachment in module.get("introattachments", []):
+                        files_to_sync.append({
+                            "url": attachment.get("fileurl"),
+                            "name": attachment.get("filename"),
+                            "mtime": attachment.get("timemodified", 0),
+                            "modname": modname
+                        })
+        
+        # Filtrage et téléchargement
+        synced_in_course = 0
+        for f_info in files_to_sync:
+            file_name = f_info["name"]
+            
+            # Vérifier l'extension
+            if not file_name.lower().endswith(ALLOWED_EXTENSIONS):
+                continue
+                
+            file_url = f_info["url"]
+            remote_mtime = f_info["mtime"]
+            file_path = os.path.abspath(os.path.join(course_dir, file_name))
+            
+            # Skip si déjà téléchargé ET pas mis à jour côté Moodle
+            if os.path.exists(file_path):
+                try:
+                    local_mtime = int(os.path.getmtime(file_path))
+                    if remote_mtime and local_mtime >= remote_mtime:
+                        continue # Déjà à jour silencieusement
+                except Exception:
+                    pass
+            
+            # Téléchargement
+            try:
+                print(f"[MOODLE SYNC]   📥 Sync ({f_info['modname']}): {file_name}", flush=True)
+                downloaded_path = await service.download_file(file_url, course_dir, file_name)
+                synced_in_course += 1
+                
+                # Ingestion RAG (si supporté par ingest_document)
+                try:
+                    ingest_result = await asyncio.to_thread(ingest_document, downloaded_path, course_id=str(course_id))
+
+                    results.append({
+                        "course": course_name,
+                        "file": file_name,
+                        "status": "synced",
+                        "rag": ingest_result
+                    })
+                except Exception as ir:
+                    print(f"[MOODLE SYNC]   ⚠️ RAG Skip {file_name}: {ir}", flush=True)
+                    results.append({
+                        "course": course_name,
+                        "file": file_name,
+                        "status": "synced_no_rag"
+                    })
+            except Exception as e:
+                print(f"[MOODLE SYNC]   ❌ ERREUR {file_name}: {e}", flush=True)
+                results.append({
+                    "course": course_name,
+                    "file": file_name,
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        if synced_in_course > 0:
+            print(f"[MOODLE SYNC]   → {synced_in_course} nouveau(x) fichier(s) synchronisé(s)", flush=True)
     
-    print(f"[MOODLE SYNC] Terminé. {len(results)} fichiers traités.", flush=True)
+    print(f"[MOODLE SYNC] Terminé. {len(results)} fichiers traités au total.", flush=True)
     return results

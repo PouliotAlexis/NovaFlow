@@ -19,7 +19,8 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
   const [files, setFiles] = useState<CourseFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [selectedFilenames, setSelectedFilenames] = useState<Set<string>>(new Set());
-  const [courseName, setCourseName] = useState<string>(`Cours ${courseId}`);
+  const [courseName, setCourseName] = useState<string>("");
+
   
   // États pour le redimensionnement de la barre latérale
   const [sidebarWidth, setSidebarWidth] = useState(300);
@@ -231,8 +232,9 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
               </div>
             ) : files.length === 0 ? (
               <div className="nf-sidebar__item" style={{ opacity: 0.5, fontSize: "12px" }}>
-                Aucun document PDF trouvé.
+                Aucun document trouvé.
               </div>
+
             ) : (
               files.map((file, idx) => (
                 <div 
@@ -320,8 +322,11 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
 
       <main className="nf-main nf-chat-layout">
         <header className="nf-header">
-          <h1 className="nf-header__title">Second Brain : {courseName}</h1>
+          <h1 className="nf-header__title">
+            Second Brain : {courseName || `Chargement...`}
+          </h1>
         </header>
+
 
         <div 
           className="nf-chat__messages" 
@@ -330,9 +335,9 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
         >
           {messages.length === 0 && (
             <div className="nf-chat__welcome">
-              <div className="nf-chat__welcome-icon">🧠</div>
               <h2>Comment puis-je vous aider pour ce cours ?</h2>
-              <p>Je peux répondre à vos questions en me basant sur les PDF synchronisés de Moodle.</p>
+              <p>Je peux répondre à vos questions en me basant sur les documents synchronisés de Moodle (PDF, Office, etc.).</p>
+
             </div>
           )}
           {messages.map((m: Message) => (

@@ -1,6 +1,9 @@
 import os
 from typing import List
-from langchain_community.document_loaders import PyPDFLoader, TextLoader, UnstructuredMarkdownLoader
+from langchain_community.document_loaders import (
+    PyPDFLoader, TextLoader, UnstructuredMarkdownLoader, 
+    Docx2txtLoader, UnstructuredPowerPointLoader, UnstructuredExcelLoader, CSVLoader
+)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
@@ -44,17 +47,36 @@ def ingest_document(file_path: str, course_id: str = None):
     """
     ext = os.path.splitext(file_path)[1].lower()
     
-    # 1. Chargement
-    if ext == ".pdf":
+    # 1. Chargement selon l'extension
+    print(f"[RAG] Ingestion: {file_path} (ext={ext})", flush=True)
+    if ext == ".pdf" or ext == ".PDF":
         loader = PyPDFLoader(file_path)
     elif ext == ".txt":
         loader = TextLoader(file_path, encoding="utf-8")
     elif ext == ".md":
         loader = UnstructuredMarkdownLoader(file_path)
+    elif ext in [".docx", ".doc"]:
+        print(f"[RAG] Using Docx2txtLoader for {file_path}", flush=True)
+        loader = Docx2txtLoader(file_path)
+    elif ext in [".pptx", ".ppt"]:
+        print(f"[RAG] Using UnstructuredPowerPointLoader for {file_path}", flush=True)
+        loader = UnstructuredPowerPointLoader(file_path)
+    elif ext in [".xlsx", ".xls"]:
+        print(f"[RAG] Using UnstructuredExcelLoader for {file_path}", flush=True)
+        loader = UnstructuredExcelLoader(file_path)
+    elif ext == ".csv":
+        loader = CSVLoader(file_path, encoding="utf-8")
+    elif ext in [".jpg", ".jpeg", ".png", ".gif", ".svg"]:
+        print(f"[RAG] Image skipped for text ingestion: {file_path}", flush=True)
+        # Pour les images, on ne fait pas d'OCR pour l'instant
+        # On retourne un succès vide pour ne pas bloquer la sync
+        return {"status": "skipped", "reason": "image_not_indexed"}
     else:
         raise ValueError(f"Format de fichier non supporté : {ext}")
 
     documents = loader.load()
+    print(f"[RAG] Loaded {len(documents)} document objects from {file_path}", flush=True)
+
 
     # 2. Découpage
     text_splitter = RecursiveCharacterTextSplitter(

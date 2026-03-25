@@ -34,6 +34,8 @@ import datetime
 import asyncio
 import uuid
 from .moodle_sync_service import moodle_service
+from .moodle_service import sync_moodle_courses
+
 
 # Logging setup
 LOG_FILE = os.path.join(
@@ -130,15 +132,30 @@ async def start_job(name: str, coro):
 
 
 def get_recent_logs(lines: int = 5) -> List[str]:
-    """Récupère les dernières lignes du log d'automatisation."""
+    """Récupère les dernières lignes du log d'automatisation de manière efficace."""
     if not os.path.exists(LOG_FILE):
         return []
     try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            content = f.read().splitlines()
-            return content[-lines:]
+        # Lecture par la fin du fichier pour éviter de tout charger en mémoire
+        with open(LOG_FILE, "rb") as f:
+            try:
+                f.seek(0, os.SEEK_END)
+                buffer_size = 1024 * 10 # 10 KB devraient suffire pour 5-10 lignes
+                if f.tell() < buffer_size:
+                    buffer_size = f.tell()
+                
+                f.seek(-buffer_size, os.SEEK_END)
+                chunk = f.read(buffer_size).decode('utf-8', errors='ignore')
+                content = chunk.splitlines()
+                return content[-lines:]
+            except Exception:
+                # Fallback si le fichier est trop petit ou erreur seek
+                f.seek(0)
+                content = f.read().decode('utf-8', errors='ignore').splitlines()
+                return content[-lines:]
     except Exception:
         return []
+
 
 # Fichier pour stocker les IDs des éléments déjà traités (pour éviter les doublons)
 PROCESSED_DATA_FILE = os.path.join(
@@ -752,33 +769,48 @@ async def sync_moodle_native_v2():
     Tâche de fond : Synchronisation profonde de Moodle via Playwright.
     """
     log_auto("🔄 Sync Moodle Native v2 : Démarrage...")
+    # Charger le token depuis le fichier de persistance
+    token_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "moodle_token.json")
+    token = None
+    if os.path.exists(token_path):
+        try:
+            with open(token_path, "r", encoding="utf-8") as f:
+                token_data = json.load(f)
+                token = token_data.get("token")
+        except Exception as e:
+            log_auto(f"⚠️ Erreur lecture token: {e}")
+
+    if not token:
+        log_auto("⚠️ Sync Moodle avortée: Aucun token SSO trouvé. Connecte-toi via le Dashboard.")
+        return {"status": "MOODLE_DISCONNECTED", "message": "No token found"}
+
     try:
-        result = await moodle_service.run_sync()
-        status = result.get("status")
+        # Url Moodle normalisée
+        moodle_url = settings.MOODLE_URL or "https://moodle.usherbrooke.ca"
         
-        if status == "SUCCESS":
-            log_auto(f"✅ Sync Moodle terminée: {result.get('courses_scanned')} cours scannés.")
-        elif status == "MOODLE_DISCONNECTED":
-            log_auto("⚠️ Sync Moodle avortée: session expirée ou invalide.")
-        else:
-            log_auto(f"❌ Erreur Sync Moodle: {result.get('message')}")
-            
-        return result
+        # Lancer la sync via REST (plus rapide et supporte multi-format + devoirs)
+        results = await sync_moodle_courses(
+            username=None, 
+            password=None, 
+            url=moodle_url, 
+            token=token
+        )
+        
+        # Calculer les stats
+        scanned = len(results)
+        synced = len([r for r in results if r.get("status") in ["synced", "synced_no_rag"]])
+        
+        log_auto(f"✅ Sync Moodle terminée: {synced} fichiers synchronisés ({scanned} scannés).")
+        return {
+            "status": "SUCCESS", 
+            "courses_scanned": scanned, 
+            "files_synced": synced,
+            "timestamp": datetime.datetime.now()
+        }
     except Exception as e:
         import traceback
         err_msg = traceback.format_exc()
-        log_auto(f"❌ Erreur critique Sync Moodle:\n{err_msg}")
-        
-        # Alerte utilisateur via notification NovaFlow si possible
-        msg = str(e)
-        if "Target page, context or browser has been closed" in msg or "used by another process" in msg:
-            from .notification_manager import NotificationManager
-            NotificationManager.instance().add_notification(
-                title="Erreur Moodle",
-                content="Impossible de lancer la synchro : Ferme Chrome et réessaie.",
-                type="error"
-            )
-
+        log_auto(f"❌ Erreur Sync Moodle Native v2:\n{err_msg}")
         return {"status": "ERROR", "message": str(e), "trace": err_msg}
 
 async def analyze_and_link_tasks(new_tasks: list):
