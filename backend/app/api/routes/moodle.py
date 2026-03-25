@@ -135,6 +135,34 @@ async def list_moodle_courses():
             
     return courses
 
+@router.get("/moodle/courses/{course_id}")
+async def get_course_details(course_id: str):
+    """
+    Récupère les détails d'un cours spécifique.
+    """
+    dest_dir = settings.MOODLE_DOWNLOADS_DESTINATION
+    course_path = os.path.join(dest_dir, course_id)
+    
+    if not os.path.exists(course_path) or not os.path.isdir(course_path):
+        raise HTTPException(status_code=404, detail="Cours non trouvé")
+        
+    # Tenter de lire le nom du cours depuis course_info.json
+    name = f"Cours {course_id}"
+    info_path = os.path.join(course_path, "course_info.json")
+    if os.path.exists(info_path):
+        try:
+            with open(info_path, "r", encoding="utf-8") as f:
+                info = json.load(f)
+                name = info.get("name", name)
+        except Exception:
+            pass
+            
+    return {
+        "id": course_id,
+        "name": name,
+        "path": course_path
+    }
+
 @router.get("/moodle/courses/{course_id}/files")
 async def list_course_files(course_id: str):
     """

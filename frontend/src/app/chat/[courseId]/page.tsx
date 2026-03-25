@@ -19,6 +19,7 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
   const [files, setFiles] = useState<CourseFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [selectedFilenames, setSelectedFilenames] = useState<Set<string>>(new Set());
+  const [courseName, setCourseName] = useState<string>(`Cours ${courseId}`);
   
   // États pour le redimensionnement de la barre latérale
   const [sidebarWidth, setSidebarWidth] = useState(300);
@@ -90,7 +91,20 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
         setLoadingFiles(false);
       }
     };
+    const fetchCourseDetails = async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/api/v2/moodle/courses/${courseId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCourseName(data.name);
+        }
+      } catch (err) {
+        console.error("Erreur lors de la récupération des détails du cours:", err);
+      }
+    };
+
     fetchFiles();
+    fetchCourseDetails();
   }, [courseId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -306,7 +320,7 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
 
       <main className="nf-main nf-chat-layout">
         <header className="nf-header">
-          <h1 className="nf-header__title">Second Brain : Cours {courseId}</h1>
+          <h1 className="nf-header__title">Second Brain : {courseName}</h1>
         </header>
 
         <div 
