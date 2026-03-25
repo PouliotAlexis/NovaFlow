@@ -1,5 +1,33 @@
 [
   {
+    "id": "e03caa49-0b77-4088-8513-08785d0e3644",
+    "title": "Chercher des exemples d'utilisation de la méthode",
+    "priority": "medium",
+    "meta": "AI Generated (37353)",
+    "done": false,
+    "parent_event_id": null,
+    "created_at": "2026-03-25T09:54:39.538118",
+    "external_id": null,
+    "source": "local",
+    "due_date": null,
+    "description": "",
+    "course_id": "37353"
+  },
+  {
+    "id": "235d9d2a-db5d-48b3-b6ca-aabbb5b64d15",
+    "title": "Rechercher des informations sur le sujet",
+    "priority": "medium",
+    "meta": "AI Generated (37353)",
+    "done": false,
+    "parent_event_id": null,
+    "created_at": "2026-03-25T09:54:39.536105",
+    "external_id": null,
+    "source": "local",
+    "due_date": null,
+    "description": "",
+    "course_id": "37353"
+  },
+  {
     "id": "34a903da-cb3a-43f4-89b2-5372b5858e6d",
     "title": "Schedule meeting with John",
     "priority": "medium",

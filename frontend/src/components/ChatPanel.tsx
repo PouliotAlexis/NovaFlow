@@ -32,9 +32,20 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const shouldAutoScroll = useRef(true);
+
+    const handleScroll = () => {
+        if (!scrollContainerRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+        const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+        shouldAutoScroll.current = isAtBottom;
+    };
 
     React.useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        if (shouldAutoScroll.current) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        }
     }, [messages]);
 
     React.useEffect(() => {
@@ -258,7 +269,12 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                 </div>
 
                 {/* Messages */}
-                <div className="nf-chat__messages" style={{ flex: 1 }}>
+                <div 
+                    className="nf-chat__messages" 
+                    style={{ flex: 1 }}
+                    ref={scrollContainerRef}
+                    onScroll={handleScroll}
+                >
                     {messages.map((msg) => (
                         <div key={msg.id}
                             className={`nf-chat__message nf-chat__message--${msg.role}`}>

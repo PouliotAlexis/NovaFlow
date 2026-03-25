@@ -1,5 +1,21 @@
 [
   {
+    "id": "ad06d4c9-a7fe-4fa6-aff5-2a214dd24a73",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Chercher des exemples d'utilisation de la méthode",
+    "type": "success",
+    "timestamp": "2026-03-25T09:54:39.538884",
+    "read": false
+  },
+  {
+    "id": "6865e367-dcab-42b4-92a5-0ae9fe7c8e8b",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Rechercher des informations sur le sujet",
+    "type": "success",
+    "timestamp": "2026-03-25T09:54:39.537106",
+    "read": false
+  },
+  {
     "id": "0c9c6d07-85b9-4cfc-827f-3d5a824731ee",
     "title": "Nouvelle tâche (Cours)",
     "content": "Tâche créée : Schedule meeting with John",

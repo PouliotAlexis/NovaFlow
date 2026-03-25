@@ -94,9 +94,21 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
   }, [courseId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScroll = useRef(true);
+
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    // On considère qu'on est en bas si on est à moins de 50px du bord
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    shouldAutoScroll.current = isAtBottom;
+  };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    if (shouldAutoScroll.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    }
   }, [messages]);
 
   const sidebarRef = React.useRef<HTMLDivElement>(null);
@@ -297,7 +309,11 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
           <h1 className="nf-header__title">Second Brain : Cours {courseId}</h1>
         </header>
 
-        <div className="nf-chat__messages">
+        <div 
+          className="nf-chat__messages" 
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+        >
           {messages.length === 0 && (
             <div className="nf-chat__welcome">
               <div className="nf-chat__welcome-icon">🧠</div>
