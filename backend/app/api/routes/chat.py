@@ -22,6 +22,7 @@ class CourseChatRequest(BaseModel):
     messages: List[ChatMessage]
     course_id: Optional[str] = None
     use_rag: Optional[bool] = True
+    filenames: Optional[List[str]] = None
 
 @router.post("/chat")
 async def chat_endpoint(request: CourseChatRequest):
@@ -34,8 +35,8 @@ async def chat_endpoint(request: CourseChatRequest):
         
         context = ""
         if request.use_rag and user_message:
-            # Recherche RAG avec filtre par cours
-            context = query_rag(user_message, course_id=request.course_id)
+            # Recherche RAG avec filtre par cours et par fichiers sélectionnés
+            context = query_rag(user_message, course_id=request.course_id, filenames=request.filenames)
         
         task_pattern = r"\[TASK:\s*(.*?)\]"
         async def generate():

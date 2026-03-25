@@ -1,4 +1,5 @@
 import os
+from typing import List
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
@@ -16,6 +17,19 @@ def get_embeddings():
         return OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
     else:
         return OllamaEmbeddings(base_url=settings.OLLAMA_HOST, model=settings.OLLAMA_MODEL)
+
+_vectorstore = None
+
+def get_vectorstore():
+    global _vectorstore
+    if _vectorstore is None:
+        print(f"[RAG] Initialisation du vectorstore Chroma à {CHROMA_DIR}")
+        _vectorstore = Chroma(
+            persist_directory=CHROMA_DIR,
+            embedding_function=get_embeddings(),
+            collection_name="novaflow_v2"
+        )
+    return _vectorstore
 
 def ingest_document(file_path: str, course_id: str = None):
     """
@@ -47,15 +61,14 @@ def ingest_document(file_path: str, course_id: str = None):
     if course_id:
         for chunk in chunks:
             chunk.metadata["course_id"] = str(course_id)
+            chunk.metadata["filename"] = os.path.basename(file_path)
 
     # 4. Stockage
-    embeddings = get_embeddings()
-    vectorstore = Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        persist_directory=CHROMA_DIR,
-        collection_name="novaflow_v2"
-    )
+    vectorstore = get_vectorstore()
+    vectorstore.add_documents(chunks)
+    
+    # On reset le singleton pour forcer une recharge si nécessaire (optionnel selon implementation Chroma)
+    # Mais add_documents s'en occupe généralement.
     
     return {
         "status": "success",
@@ -64,24 +77,37 @@ def ingest_document(file_path: str, course_id: str = None):
         "course_id": course_id
     }
 
-def query_rag(query: str, n_results: int = 3, course_id: str = None):
+def query_rag(query: str, n_results: int = 3, course_id: str = None, filenames: List[str] = None):
     """
-    Interroge le moteur RAG pour obtenir le contexte.
+    Interroge le moteur RAG pour obtenir le contexte, avec filtrage optionnel par cours et fichiers.
     """
     if course_id:
         print(f"[RAG] Recherche contextuelle filtrée pour le cours {course_id}")
+    if filenames:
+        print(f"[RAG] Filtre par fichiers : {filenames}")
         
-    embeddings = get_embeddings()
-    vectorstore = Chroma(
-        persist_directory=CHROMA_DIR,
-        embedding_function=embeddings,
-        collection_name="novaflow_v2"
-    )
+    vectorstore = get_vectorstore()
     
-    # Gestion du filtrage par course_id
+    # Gestion du filtrage complexe
     search_kwargs = {"k": n_results}
+    
+    filters = []
     if course_id:
-        search_kwargs["filter"] = {"course_id": str(course_id)}
+        filters.append({"course_id": str(course_id)})
+    
+    if filenames and len(filenames) > 0:
+        # On filtre par le champ 'filename' qu'on vient d'ajouter
+        # Pour les anciens docs, on peut aussi essayer de matcher 'source' 
+        # mais le plus propre est d'utiliser 'filename'
+        if len(filenames) == 1:
+            filters.append({"filename": filenames[0]})
+        else:
+            filters.append({"filename": {"$in": filenames}})
+            
+    if len(filters) == 1:
+        search_kwargs["filter"] = filters[0]
+    elif len(filters) > 1:
+        search_kwargs["filter"] = {"$and": filters}
         
     results = vectorstore.similarity_search(query, **search_kwargs)
     context = "\n\n".join([doc.page_content for doc in results])
@@ -91,12 +117,7 @@ def get_ingested_files(course_id: str):
     """
     Retourne la liste des noms de fichiers déjà ingérés pour un cours.
     """
-    embeddings = get_embeddings()
-    vectorstore = Chroma(
-        persist_directory=CHROMA_DIR,
-        embedding_function=embeddings,
-        collection_name="novaflow_v2"
-    )
+    vectorstore = get_vectorstore()
     
     # On récupère tous les documents filtrés par course_id
     # Chroma ne permet pas facilement de récupérer uniquement les métadonnées sans les documents

@@ -2,6 +2,7 @@ import os
 import json
 from typing import Optional, List
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from app.services.moodle_service import sync_moodle_courses
 from app.services.moodle_browser import capture_moodle_token
@@ -164,3 +165,20 @@ async def list_course_files(course_id: str):
                 })
                 
     return files_list
+
+@router.get("/moodle/courses/{course_id}/files/{filename:path}")
+async def get_course_file(course_id: str, filename: str):
+    """
+    Sert le contenu d'un fichier de cours spécifique.
+    """
+    dest_dir = settings.MOODLE_DOWNLOADS_DESTINATION
+    file_path = os.path.normpath(os.path.join(dest_dir, course_id, filename))
+    
+    # Sécurité : vérifier que le chemin est bien dans le dossier de destination
+    if not file_path.startswith(os.path.normpath(dest_dir)):
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+        
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+        
+    return FileResponse(file_path)
