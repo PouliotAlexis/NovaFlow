@@ -132,20 +132,35 @@ def query_rag(query: str, n_results: int = 3, course_id: str = None, filenames: 
             if results:
                 print(f"[RAG] Passe 1 (filename) : {len(results)} résultats.")
     
-    # Passe 2 : Chercher par champ 'source' (pour les docs ingérés AVANT l'ajout du champ 'filename')
-    if not results and norm_filenames:
-        print(f"[RAG] Passe 1 échouée. Tentative Passe 2 (source basename)...")
-        # On récupère les docs du cours et on filtre manuellement par basename du source
-        course_filter = {"course_id": str(course_id)} if course_id else None
-        if course_filter:
-            all_course_results = vectorstore.similarity_search(query, k=n_results * 3, filter=course_filter)
-            # Normalisation : remplacer les \ par / pour que basename() fonctionne sur les chemins Windows mixtes
-            results = [
-                doc for doc in all_course_results
-                if normalize_text(os.path.basename(doc.metadata.get("source", "").replace("\\", "/"))) in norm_filenames
-            ][:n_results]
-            if results:
-                print(f"[RAG] Passe 2 (source basename) : {len(results)} résultats.")
+    # Passe 2 : Pour les docs sans champ 'filename' (ingérés avant la migration)
+    # On utilise .get() pour récupérer TOUS les chunks du cours, puis on filtre manuellement par basename du source
+    if not results and norm_filenames and course_id:
+        print(f"[RAG] Passe 1 échouée. Tentative Passe 2 (get + basename filter)...")
+        try:
+            # Récupérer TOUS les chunks du cours avec leurs métadonnées et leur contenu
+            all_data = vectorstore.get(
+                where={"course_id": str(course_id)},
+                include=["metadatas", "documents"]
+            )
+            
+            if all_data and all_data.get("documents"):
+                # Filtrer manuellement par basename du source
+                matching_docs = []
+                for i, meta in enumerate(all_data["metadatas"]):
+                    source = meta.get("source", "")
+                    # Normaliser les séparateurs de chemin mixtes Windows
+                    basename = normalize_text(os.path.basename(source.replace("\\", "/")))
+                    if basename in norm_filenames:
+                        matching_docs.append(all_data["documents"][i])
+                
+                if matching_docs:
+                    # On a trouvé des chunks correspondants — on les retourne directement
+                    # (pas de re-ranking par similarité, mais au moins on a les bons docs)
+                    from langchain.schema import Document as LCDocument
+                    results = [LCDocument(page_content=doc) for doc in matching_docs[:n_results]]
+                    print(f"[RAG] Passe 2 (get + basename) : {len(results)} résultats sur {len(matching_docs)} chunks totaux.")
+        except Exception as e:
+            print(f"[RAG] Erreur Passe 2: {e}")
 
     # Passe 3 : Fallback - tout le cours sans filtre fichier
     if not results and course_id:
