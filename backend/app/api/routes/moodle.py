@@ -5,8 +5,8 @@ from typing import Optional, List
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from app.services.moodle_service import sync_moodle_courses
-from app.services.moodle_browser import capture_moodle_token
+from app.services.moodle_sync_service import sync_moodle_courses, capture_moodle_token
+
 from app.services.rag_engine.ingest import get_ingested_files
 from app.core.config import settings
 from app.services.automation import sync_moodle_native_v2, start_job

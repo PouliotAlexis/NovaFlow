@@ -1,341 +1,271 @@
-import sys
-import asyncio
-
-# Fix pour Windows : Nécessaire pour Playwright (sous-processus)
-if sys.platform == "win32":
-    try:
-        if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy):
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    except Exception:
-        pass
-
 import os
+import httpx
 import asyncio
-import logging
-from datetime import datetime
-from typing import List, Optional
-from playwright.async_api import async_playwright, BrowserContext, Page
+from typing import List, Dict, Any
+from urllib.parse import urlparse, urlunparse, urlencode, parse_qsl
+from app.services.rag_engine.ingest import ingest_document
 from app.core.config import settings
-from .moodle_utils import normalize_moodle_url
-from .document_dispatcher import dispatcher
 
-logger = logging.getLogger("moodle_sync")
-logging.basicConfig(level=logging.INFO)
-
-class MoodleSyncService:
-    def __init__(self):
-        self.raw_url = settings.MOODLE_URL or "https://moodle.usherbrooke.ca"
-        self.base_url = normalize_moodle_url(self.raw_url)
-        self.user_data_dir = settings.CHROME_USER_DATA_DIR
-        self.data_path = settings.MOODLE_DOWNLOADS_DESTINATION
+async def capture_moodle_token(url: str):
+    """
+    Ouvre une fenêtre Chromium pour capturer le token SSO Moodle.
+    Nécessite la connexion manuelle de l'utilisateur.
+    """
+    from playwright.async_api import async_playwright
+    import json
+    import time
+    
+    base_url = normalize_moodle_url(url)
+    # On utilise l'URL de l'app mobile pour forcer la génération de token
+    launch_url = f"{base_url}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport={time.time()}&urlscheme=moodlemobile"
+    
+    token = None
+    
+    async with async_playwright() as p:
+        # On lance un navigateur temporaire
+        browser = await p.chromium.launch(headless=False, args=["--app=" + launch_url])
+        page = await browser.new_page()
         
-        if not os.path.exists(self.data_path):
-            os.makedirs(self.data_path)
-            
-        self._session_cache = {"valid": None, "timestamp": datetime.min}
-
-    async def get_browser_context(self, playwright, headless: bool = True) -> BrowserContext:
-        """Lance Playwright avec le profil Chrome de l'utilisateur."""
+        print(f"[MOODLE SSO] En attente de connexion sur {base_url}...")
+        
+        # On surveille l'URL pour la redirection moodlemobile://token=xxx
         try:
-            logger.info(f"Lancement de Chrome avec le profil : {self.user_data_dir}")
+            while not token:
+                try:
+                    current_url = page.url
+                    if "token=" in current_url:
+                        token = current_url.split("token=")[1].split("&")[0]
+                        print(f"[MOODLE SSO] ✅ Token capturé !")
+                        break
+                    
+                    if page.is_closed():
+                        break
+                except Exception:
+                    break
+                await asyncio.sleep(0.5)
+        finally:
+            await browser.close()
             
-            # Note: Si Chrome est déjà ouvert, ceci échouera sur Windows (Verrouillage de dossier)
-            context = await playwright.chromium.launch_persistent_context(
-                user_data_dir=self.user_data_dir,
-                headless=headless,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox"
-                ]
-            )
-            logger.info("Navigateur lancé avec succès avec le profil utilisateur.")
-            return context
-        except Exception as e:
-            error_str = str(e)
-            if "Target page, context or browser has been closed" in error_str or "used by another process" in error_str:
-                logger.error("OUPS ! Impossible de lancer Chrome car il est déjà OUVERT.")
-                logger.error("CONSEIL : Ferme TOUTES tes fenêtres Chrome et réessaie pour utiliser ta session active.")
+    return token
+
+
+class MoodleService:
+    def __init__(self, base_url: str, username: str = None, password: str = None, token: str = None):
+        self.base_url = normalize_moodle_url(base_url)
+        self.username = username
+        self.password = password
+        self.token = token
+        self.client = httpx.AsyncClient(timeout=30.0)
+
+    async def authenticate(self) -> str:
+        """Obtient un token d'authentification Moodle Mobile API."""
+        if self.token:
+            return self.token
+        
+        login_url = f"{self.base_url}/login/token.php"
+        params = {
+            "username": self.username,
+            "password": self.password,
+            "service": "moodle_mobile_app"
+        }
+        
+        response = await self.client.post(login_url, params=params)
+        data = response.json()
+        
+        if "token" in data:
+            self.token = data["token"]
+            return self.token
+        else:
+            raise KeyError(f"Erreur d'authentification Moodle : {data.get('error', 'Inconnue')}")
+
+    async def call_web_service(self, function_name: str, params: Dict[str, Any] = None) -> Any:
+        """Appelle un service web Moodle."""
+        if not self.token:
+            await self.authenticate()
+        
+        url = f"{self.base_url}/webservice/rest/server.php"
+        default_params = {
+            "wstoken": self.token,
+            "wsfunction": function_name,
+            "moodlewsrestformat": "json"
+        }
+        if params:
+            default_params.update(params)
+        
+        response = await self.client.get(url, params=default_params)
+        return response.json()
+
+    async def get_courses(self, user_id: int):
+        """Récupère la liste des cours de l'utilisateur."""
+        return await self.call_web_service("core_enrol_get_users_courses", {"userid": user_id})
+
+    async def get_course_contents(self, course_id: int):
+        """Récupère le contenu d'un cours."""
+        return await self.call_web_service("core_course_get_contents", {"courseid": course_id})
+
+    def _prepare_download_url(self, file_url: str) -> str:
+        """Ajoute le token à l'URL de téléchargement."""
+        parts = list(urlparse(file_url))
+        query = dict(parse_qsl(parts[4]))
+        query.update({"token": self.token})
+        parts[4] = urlencode(query)
+        return urlunparse(parts)
+
+    async def download_file(self, file_url: str, dest_dir: str, file_name: str) -> str:
+        """Télécharge un fichier dans le dossier de destination."""
+        dl_url = self._prepare_download_url(file_url)
+        dest_path = os.path.join(dest_dir, file_name)
+        
+        os.makedirs(dest_dir, exist_ok=True)
+        
+        async with self.client.stream("GET", dl_url) as response:
+            if response.status_code == 200:
+                with open(dest_path, "wb") as f:
+                    async for chunk in response.aiter_bytes():
+                        f.write(chunk)
+                return dest_path
             else:
-                logger.error(f"Erreur lors du lancement de Chrome avec profil: {e}")
-            
-            logger.info("Tentative de lancement sans profil (mode invité) - La session Moodle ne sera pas disponible.")
-            return await playwright.chromium.launch(headless=headless)
+                raise Exception(f"Erreur téléchargement ({response.status_code}) : {file_url}")
 
-    async def check_session_validity(self, page: Page) -> bool:
-        """Vérifie si l'utilisateur est connecté à Moodle avec timeout."""
-        try:
-            url_to_check = f"{self.base_url}/my/"
-            logger.info(f"Vérification de session sur : {url_to_check}")
-            # Réduire le timeout pour éviter le "loading" infini
-            await page.goto(url_to_check, wait_until="domcontentloaded", timeout=15000)
-            logger.info(f"Page chargée : {page.url}")
-            # Si on est sur une page de login ou que l'URL ne contient pas 'my', on n'est probablement pas connecté
-            if "login" in page.url or "my" not in page.url:
-                logger.info(f"Session Moodle non détectée (URL: {page.url})")
-                return False
-            
-            # Si on est sur le dashboard, on considère que c'est valide par défaut
-            if "/my/" in page.url:
-                logger.info("Navigateur sur le dashboard. Session considérée valide.")
-                return True
+async def sync_moodle_courses(username, password, url, token=None):
+    """
+    Fonction wrapper pour synchroniser les cours Moodle.
+    """
+    import traceback
+    print(f"[MOODLE SYNC] Démarrage sync: url={url}, token={'oui' if token else 'non'}", flush=True)
 
-            # Vérification via sesskey (plus précis mais plus lent car nécessite JS execution)
-            sesskey = await page.evaluate("window.M ? window.M.cfg.sesskey : null")
-            if sesskey:
-                logger.info("Session Moodle confirmée via sesskey.")
-                return True
-            
-            return False
-        except Exception as e:
-            logger.error(f"Erreur lors de la vérification de session: {e}")
-            return False
+    service = MoodleService(url, username, password, token)
+    await service.authenticate()
+    print(f"[MOODLE SYNC] Authentification OK, token={service.token[:8]}...", flush=True)
+    
+    # Get user info for ID
+    user_info = await service.call_web_service("core_webservice_get_site_info")
+    user_id = user_info.get("userid")
+    print(f"[MOODLE SYNC] user_id={user_id}", flush=True)
+    
+    courses = await service.get_courses(user_id)
+    print(f"[MOODLE SYNC] {len(courses)} cours trouvés", flush=True)
+    download_dir = settings.MOODLE_DOWNLOADS_DESTINATION
+    
+    results = []
+    ALLOWED_EXTENSIONS = (
+        ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls", ".csv",
+        ".jpg", ".jpeg", ".png", ".gif", ".svg"
+    )
 
-    async def check_session_validity_cached(self, playwright=None) -> bool:
-        """Version cachée de la vérification de session avec loop dédiée pour Windows."""
-        if playwright:
-            # Si on a déjà un contexte playwright (déjà dans le thread dédié), on continue
-            return await self._perform_check(playwright)
+    for course in courses:
+        course_name = course.get("fullname", "Unknown Course")
+        course_id = course.get("id")
+        course_dir = os.path.join(download_dir, str(course_id))
+        os.makedirs(course_dir, exist_ok=True)
+        print(f"[MOODLE SYNC] Cours: {course_name} (id={course_id})", flush=True)
         
-        return await asyncio.to_thread(self._run_check_in_thread)
-
-    def _run_check_in_thread(self):
-        new_loop = asyncio.new_event_loop()
-        if sys.platform == "win32":
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        # Sauvegarder les infos du cours pour le dashboard
+        with open(os.path.join(course_dir, "course_info.json"), "w", encoding="utf-8") as f:
+            import json
+            json.dump({"id": course_id, "name": course_name}, f, ensure_ascii=False, indent=2)
         
-        async def _inner():
-            async with async_playwright() as p:
-                return await self._perform_check(p)
+        contents = await service.get_course_contents(course_id)
+        files_to_sync = []
         
-        try:
-            return new_loop.run_until_complete(_inner())
-        finally:
-            new_loop.close()
-
-    async def _perform_check(self, p):
-        try:
-            context = await self.get_browser_context(p, headless=True)
-            page = await context.new_page()
-            is_valid = await self.check_session_validity(page)
-            await context.close()
-            self._session_cache = {"valid": is_valid, "timestamp": datetime.now()}
-            return is_valid
-        except Exception as e:
-            logger.error(f"Erreur _perform_check: {e}")
-            return False
-
-    async def login_interactively(self) -> dict:
-        """Ouvre une fenêtre de navigateur (Threadé pour Windows). Retourne un dict {success, error}."""
-        return await asyncio.to_thread(self._run_login_thread)
-
-    def _run_login_thread(self) -> dict:
-        new_loop = asyncio.new_event_loop()
-        if sys.platform == "win32":
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-        
-        async def _inner():
-            async with async_playwright() as p:
-                try:
-                    context = await self.get_browser_context(p, headless=False)
-                    page = await context.new_page()
-                    await page.goto(f"{self.base_url}/login/index.php", wait_until="domcontentloaded")
-                    
-                    try:
-                        await page.wait_for_url("**/my/**", timeout=300000)
-                        is_valid = True
-                        error = None
-                    except Exception:
-                        is_valid = False
-                        error = "Délai d'attente dépassé ou connexion non complétée."
-                    
-                    await context.close()
-                    self._session_cache = {"valid": is_valid, "timestamp": datetime.now()}
-                    return {"success": is_valid, "error": error}
-                except Exception as e:
-                    msg = str(e)
-                    if "Target page, context or browser has been closed" in msg:
-                        msg = "Profil Chrome verrouillé. Ferme Chrome et réessaie."
-                    logger.error(f"Erreur login_interactively: {e}")
-                    return {"success": False, "error": msg}
-        
-        try:
-            return new_loop.run_until_complete(_inner())
-        finally:
-            new_loop.close()
-
-    async def run_sync(self):
-        """Cycle principal de synchronisation (Threadé pour Windows)."""
-        return await asyncio.to_thread(self._run_sync_thread)
-
-    def _run_sync_thread(self):
-        new_loop = asyncio.new_event_loop()
-        if sys.platform == "win32":
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-        
-        async def _inner():
-            async with async_playwright() as p:
-                try:
-                    context = await self.get_browser_context(p)
-                    page = await context.new_page()
-                    
-                    if not await self.check_session_validity(page):
-                        logger.warning("Synchronisation avortée: session invalide.")
-                        await context.close()
-                        return {"status": "MOODLE_DISCONNECTED", "timestamp": datetime.now()}
-
-                    # Phase 2: Découverte des cours
-                    courses = await self.get_courses(page)
-                    logger.info(f"{len(courses)} cours trouvés.")
-                    
-                    for course in courses:
-                        logger.info(f"Scraping du cours: {course['name']}")
-                        await self.scan_course_sections(page, course)
-                    
-                    await context.close()
-                    return {"status": "SUCCESS", "courses_scanned": len(courses), "timestamp": datetime.now()}
-                    
-                except Exception as e:
-                    import traceback
-                    logger.error(f"Échec de la synchronisation: {traceback.format_exc()}")
-                    return {"status": "ERROR", "message": str(e), "timestamp": datetime.now()}
-
-        try:
-            return new_loop.run_until_complete(_inner())
-        finally:
-            new_loop.close()
-
-    async def get_courses(self, page: Page) -> List[dict]:
-        """Récupère la liste des cours depuis la page 'My Courses'."""
-        await page.goto(f"{self.base_url}/my/courses.php", wait_until="networkidle")
-        
-        # On cherche les cartes de cours ou les liens
-        # Moodle v4 utilise souvent des sélecteurs comme .coursename
-        courses = []
-        course_elements = await page.query_selector_all("a.coursename")
-        
-        for el in course_elements:
-            name = await el.inner_text()
-            url = await el.get_attribute("href")
-            # Extraire l'ID du cours de l'URL (?id=XXX)
-            course_id = url.split("id=")[-1] if "id=" in url else None
-            if course_id:
-                courses.append({"id": course_id, "name": name.strip(), "url": url})
-        
-        return courses
-
-    async def scan_course_sections(self, page: Page, course: dict):
-        """Scanne les sections d'un cours spécifique avec une organisation granulaire."""
-        await page.goto(course["url"], wait_until="networkidle")
-        logger.info(f"Scanning sections pour {course['name']}...")
-        
-        # Moodle v4 affiche souvent les sections dans .course-content
-        # On essaie plusieurs sélecteurs courants
-        sections = await page.query_selector_all("li.section.main, div.section.main")
-        if not sections:
-            # Fallback pour d'autres thèmes Moodle
-            sections = await page.query_selector_all(".content .section")
-
-        for section in sections:
-            section_name_el = await section.query_selector(".sectionname, h3.section-title")
-            section_name = await section_name_el.inner_text() if section_name_el else "Général"
-            section_name = section_name.strip().replace("/", "-").replace(":", "-") # Sanitization
-            
-            logger.info(f"  Section: {section_name}")
-
-            # 1. Scraping des Ressources (Fichiers directs)
-            # On cherche les fichiers (pdf, docx, etc.)
-            resource_links = await section.query_selector_all("li.activity.resource a, div.activity.resource a")
-            for res_link in resource_links:
-                res_url = await res_link.get_attribute("href")
-                if res_url and "mod/resource" in res_url:
-                    await self.download_resource(page, res_link, course["name"], section_name, "Cours")
-
-            # 2. Scraping des Devoirs (Assignments)
-            # On entre dans chaque devoir pour voir s'il y a des documents joints
-            assign_links = await section.query_selector_all("li.activity.assign a, div.activity.assign a")
-            for assign_link in assign_links:
-                assign_url = await assign_link.get_attribute("href")
-                if assign_url and "mod/assign" in assign_url:
-                    assign_name_el = await assign_link.query_selector(".instancename")
-                    assign_name = await assign_name_el.inner_text() if assign_name_el else "Devoir"
-                    assign_name = assign_name.replace("Devoir", "").strip() # Nettoyer "Devoir Devoir"
-                    
-                    logger.info(f"    Vérification devoir: {assign_name}")
-                    # On ouvre le devoir dans un nouvel onglet ou la même page
-                    await self.scan_assignment_files(page, assign_url, course["name"], section_name, assign_name)
-                    # On revient en arrière pour continuer le scan de la section
-                    await page.goto(course["url"], wait_until="domcontentloaded")
-
-    async def scan_assignment_files(self, page: Page, url: str, course_name: str, section_name: str, assign_name: str):
-        """Explore une page de devoir pour extraire les fichiers fournis par l'enseignant."""
-        try:
-            await page.goto(url, wait_until="networkidle")
-            
-            # Dans un devoir, les fichiers peuvent être dans :
-            # - La description (.intro)
-            # - La zone de fichiers joints (.submissionstatustable ou .fileupload)
-            
-            # On cherche tous les liens de fichiers typiques dans la zone de contenu
-            file_links = await page.query_selector_all(".intro a, .submissionstatustable a, .fp-filename-icon a")
-            
-            download_count = 0
-            for link in file_links:
-                href = await link.get_attribute("href")
-                if href and ("forcedownload=1" in href or "pluginfile.php" in href):
-                    # On s'assure que c'est un fichier et pas un lien vers une autre page
-                    await self.download_resource(page, link, course_name, section_name, f"Devoirs/{assign_name}")
-                    download_count += 1
-            
-            if download_count > 0:
-                logger.info(f"      {download_count} fichiers récupérés dans le devoir '{assign_name}'")
+        for section in contents:
+            for module in section.get("modules", []):
+                modname = module.get("modname")
                 
-        except Exception as e:
-            logger.warning(f"  Erreur lors du scan du devoir {url}: {e}")
-
-    async def download_resource(self, page: Page, element, course_name: str, section_name: str, sub_type: str):
-        """Gère le téléchargement, le renommage intelligent et l'organisation locale."""
-        try:
-            # On clique et on attend le téléchargement
-            async with page.expect_download(timeout=30000) as download_info:
-                await element.click()
-            download = await download_info.value
+                # 1. Ressources directes (File)
+                if modname == "resource":
+                    for content in module.get("contents", []):
+                        if content.get("type") == "file":
+                            files_to_sync.append({
+                                "url": content.get("fileurl"),
+                                "name": content.get("filename"),
+                                "mtime": content.get("timemodified", 0),
+                                "modname": modname
+                            })
+                
+                # 2. Devoirs (Assign) - Fichiers joints à la consigne
+                elif modname == "assign":
+                    # Moodle stocke les pièces jointes d'intro dans introattachments
+                    for attachment in module.get("introattachments", []):
+                        files_to_sync.append({
+                            "url": attachment.get("fileurl"),
+                            "name": attachment.get("filename"),
+                            "mtime": attachment.get("timemodified", 0),
+                            "modname": modname
+                        })
+        
+        # Filtrage et téléchargement
+        synced_in_course = 0
+        for f_info in files_to_sync:
+            file_name = f_info["name"]
             
-            filename = download.suggested_filename
-            # Organisation: data/moodle/Nom_Cours/Nom_Section/Type/Fichier
-            target_dir = os.path.join(self.data_path, course_name, section_name, sub_type)
-            if not os.path.exists(target_dir):
-                os.makedirs(target_dir, exist_ok=True)
+            # Vérifier l'extension
+            if not file_name.lower().endswith(ALLOWED_EXTENSIONS):
+                continue
+                
+            file_url = f_info["url"]
+            remote_mtime = f_info["mtime"]
+            file_path = os.path.abspath(os.path.join(course_dir, file_name))
             
-            file_path = os.path.join(target_dir, filename)
-            
-            # Éviter d'écraser si le fichier existe déjà (ou alors vérifier la date)
+            # Skip si déjà téléchargé ET pas mis à jour côté Moodle
             if os.path.exists(file_path):
-                logger.debug(f"Fichier déjà présent: {filename}")
-                return
-
-            await download.save_as(file_path)
-            logger.info(f"Sauvegardé : {course_name} > {section_name} > {filename}")
+                try:
+                    local_mtime = int(os.path.getmtime(file_path))
+                    if remote_mtime and local_mtime >= remote_mtime:
+                        continue # Déjà à jour silencieusement
+                except Exception:
+                    pass
             
-            # Dispatcher pour indexation RAG
+            # Téléchargement
             try:
-                text = dispatcher.extract_text(file_path)
-                if text:
-                    md_content = dispatcher.normalize_to_markdown(text, filename)
-                    md_path = file_path + ".md"
-                    with open(md_path, "w", encoding="utf-8") as f:
-                        f.write(md_content)
-                    logger.info(f"  Indexé RAG : {filename}.md")
-            except Exception as e:
-                logger.error(f"  Erreur extraction RAG pour {filename}: {e}")
+                print(f"[MOODLE SYNC]   📥 Sync ({f_info['modname']}): {file_name}", flush=True)
+                downloaded_path = await service.download_file(file_url, course_dir, file_name)
+                synced_in_course += 1
                 
-        except Exception as e:
-            # Certains clics ne déclenchent pas de téléchargement (liens externes)
-            # On ignore silencieusement ou on log en debug
-            logger.debug(f"Clic ressource n'a pas déclenché de download direct: {e}")
+                # Ingestion RAG (si supporté par ingest_document)
+                try:
+                    ingest_result = await asyncio.to_thread(ingest_document, downloaded_path, course_id=str(course_id))
 
-moodle_service = MoodleSyncService()
+                    results.append({
+                        "course": course_name,
+                        "file": file_name,
+                        "status": "synced",
+                        "rag": ingest_result
+                    })
+                except Exception as ir:
+                    print(f"[MOODLE SYNC]   ⚠️ RAG Skip {file_name}: {ir}", flush=True)
+                    results.append({
+                        "course": course_name,
+                        "file": file_name,
+                        "status": "synced_no_rag"
+                    })
+            except Exception as e:
+                print(f"[MOODLE SYNC]   ❌ ERREUR {file_name}: {e}", flush=True)
+                results.append({
+                    "course": course_name,
+                    "file": file_name,
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        if synced_in_course > 0:
+            print(f"[MOODLE SYNC]   → {synced_in_course} nouveau(x) fichier(s) synchronisé(s)", flush=True)
+    
+    print(f"[MOODLE SYNC] Terminé. {len(results)} fichiers traités au total.", flush=True)
+    return results
 
-if __name__ == "__main__":
-    # Test local
-    asyncio.run(moodle_service.run_sync())
+def normalize_moodle_url(url: str) -> str:
+    """
+    Extrait la base URL d'un lien Moodle (qu'il s'agisse de la racine, du login, 
+    d'un cours ou d'un flux calendrier).
+     Exemple: https://moodle.usherbrooke.ca/calendar/export_execute.php?userid=...
+    Devient: https://moodle.usherbrooke.ca
+    """
+    from urllib.parse import urlparse, urlunparse
+    if not url:
+        return ""
+    
+    parsed = urlparse(url)
+    # On ne garde que le scheme et le netloc (ex: https://moodle.usherbrooke.ca)
+    base = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+    return base.rstrip("/")

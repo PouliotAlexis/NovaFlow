@@ -33,8 +33,8 @@ from .event_manager import EventManager, NovaFlowEvent
 import datetime
 import asyncio
 import uuid
-from .moodle_sync_service import moodle_service
-from .moodle_service import sync_moodle_courses
+from .moodle_sync_service import sync_moodle_courses
+
 
 
 # Logging setup
