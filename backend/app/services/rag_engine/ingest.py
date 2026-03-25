@@ -154,10 +154,12 @@ def query_rag(query: str, n_results: int = 3, course_id: str = None, filenames: 
                         matching_docs.append(all_data["documents"][i])
                 
                 if matching_docs:
-                    # On a trouvé des chunks correspondants — on les retourne directement
-                    # (pas de re-ranking par similarité, mais au moins on a les bons docs)
-                    from langchain.schema import Document as LCDocument
-                    results = [LCDocument(page_content=doc) for doc in matching_docs[:n_results]]
+                    # On crée des objets simples avec un attribut page_content
+                    class SimpleDoc:
+                        def __init__(self, content, metadata=None):
+                            self.page_content = content
+                            self.metadata = metadata or {}
+                    results = [SimpleDoc(doc) for doc in matching_docs[:n_results]]
                     print(f"[RAG] Passe 2 (get + basename) : {len(results)} résultats sur {len(matching_docs)} chunks totaux.")
         except Exception as e:
             print(f"[RAG] Erreur Passe 2: {e}")
