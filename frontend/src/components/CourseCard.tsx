@@ -109,10 +109,10 @@ export default function CourseCard({ id, name, filesCount, isExpanded = false, o
         </button>
         <button 
           className="nf-btn nf-btn--primary"
-          style={{ flex: 1, justifyContent: 'center', height: '40px', fontSize: '15px' }}
+          style={{ flex: 1.2, justifyContent: 'center', height: '40px', fontSize: '15px', whiteSpace: 'nowrap' }}
           onClick={() => onOpenChat(id)}
         >
-          Discuter avec le cours
+          Discuter
           <ChevronRight size={18} />
         </button>
       </div>
