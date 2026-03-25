@@ -1,122 +1,98 @@
 [
   {
-    "id": "20260316212541853862",
-    "role": "user",
-    "content": "test",
-    "timestamp": "2026-03-16T21:25:41.853909"
-  },
-  {
-    "id": "20260316212619332218",
-    "role": "ai",
-    "content": "Bonjour ! Je suis NovaFlow, votre assistant personnel intelligent. Je suis prêt à vous aider. Qu'est-ce que j peux faire pour vous aujourd'hui ?",
-    "timestamp": "2026-03-16T21:26:19.332265"
-  },
-  {
-    "id": "20260317104037053062",
-    "role": "user",
-    "content": "Fait moi un résumé de tes infos",
-    "timestamp": "2026-03-17T10:40:37.053091"
-  },
-  {
-    "id": "20260317104111645869",
-    "role": "ai",
-    "content": "Bonjour ! Je suis NovaFlow, votre assistant personnel intelligent. Voici quelques informations utiles sur mes capacités :\n\n* Je parle français et peux répondre à vos questions en utilisant des commandes spécifiques.\n* J'ai une fonction de gestion de tâches : écrivez `✅ Tâche 'Titre de la tâche' ajoutée.` pour ajouter une nouvelle tâche à ma liste.\n\nJe suis prêt à vous aider !",
-    "timestamp": "2026-03-17T10:41:11.645897"
-  },
-  {
-    "id": "20260324085242104283",
-    "role": "user",
-    "content": "test",
-    "timestamp": "2026-03-24T08:52:42.104327"
-  },
-  {
-    "id": "20260324085252511131",
-    "role": "ai",
-    "content": "Je suis NovaFlow, votre assistant personnel intelligent. Je suis prêt à vous aider avec tout ce que vous avez besoin. Pour commencer, qu'est-ce que vous souhaitez faire ou discuter ?",
-    "timestamp": "2026-03-24T08:52:52.511258"
-  },
-  {
-    "id": "20260324114045632855",
-    "role": "user",
-    "content": "résume moi ce que je dois faire dans le cours de Vulgarisation scientifique pour la fin de la session dans ce cours",
-    "timestamp": "2026-03-24T11:40:45.632909"
-  },
-  {
-    "id": "20260324114111485797",
-    "role": "ai",
-    "content": "Pour la fin de la session dans le cours de Vulgarisation scientifique, il est recommandé de :\n\n* Réviser les notions clés apprises pendant la session (notamment sur [suivez le lien])\n* Compléter les exercices pratiques pour réinforcer vos connaissances\n* Demander des explications supplémentaires aux enseignants si vous avez des questions ou des difficultés à comprendre certains concepts\n\nN'hésitez pas à me poser d'autres questions si je peux vous aider en plus !",
-    "timestamp": "2026-03-24T11:41:11.485869"
-  },
-  {
-    "id": "20260324115754972597",
-    "role": "user",
-    "content": "résume moi ce que je dois faire dans le cours de Vulgarisation scientifique pour la fin de la session dans ce cours",
-    "timestamp": "2026-03-24T11:57:54.972628"
-  },
-  {
-    "id": "20260324115853289923",
-    "role": "user",
-    "content": "résume moi ce que je dois faire dans le cours de Vulgarisation scientifique pour la fin de la session dans ce cours",
-    "timestamp": "2026-03-24T11:58:53.289995"
-  },
-  {
-    "id": "20260324115913979035",
-    "role": "user",
-    "content": "résume moi ce que je dois faire dans le cours de Vulgarisation scientifique pour la fin de la session dans ce cours",
-    "timestamp": "2026-03-24T11:59:13.979066"
-  },
-  {
-    "id": "20260324115943772262",
-    "role": "ai",
-    "content": "Pour terminer le cours de Vulgarisation scientifique, vous devrez :\n\n✅ Tâche 'Réviser les concepts clés' ajoutée. Revoir les thématiques abordées pendant la session, comme les explications fondamentales sur un sujet scientifique.\n\n✅ Tâche 'Demander des questions' ajoutée. Demandez des questions aux enseignants ou à vos camarades pour clarifier tout ce que vous n'avez pas compris.\n\n✅ Tâche 'Évaluer le cours' ajoutée. Faites une évaluation du cours, en notant les points forts et les points faibles. Cela vous aidera à améliorer votre compréhension future des concepts scientifiques.\n\nEntendu, je suis prêt !",
-    "timestamp": "2026-03-24T11:59:43.772289"
-  },
-  {
-    "id": "20260324120311388134",
-    "role": "user",
-    "content": "résume moi ce que je dois faire dans le cours de Vulgarisation scientifique pour la fin de la session dans ce cours",
-    "timestamp": "2026-03-24T12:03:11.388165"
-  },
-  {
-    "id": "20260324120337190725",
-    "role": "ai",
-    "content": "Poursuivant votre progression dans le cours de Vulgarisation scientifique !\n\nPour terminer la session, voici les étapes à suivre :\n\n✅ Tâche 'Réviser les concepts clés' ajoutée.\n1. Reviser les éléments clés appris lors de la séance (thèmes, concepts, définitions)\n2. ✅ Tâche 'Étudier le matériel préalablement' ajoutée.\n3. Lire les articles ou les vidéos prévues pour l'étude\n4. ✅ Tâche 'Faire des questions et des notes' ajoutée.\n5. Prendre des notes sur les points clés, les exemples et les exercices\n\nEn résumé, il s'agit de :\n\n* Revoir les concepts appris\n* Étudier le matériel préalablement\n* Prendre des notes pour renforcer votre compréhension",
-    "timestamp": "2026-03-24T12:03:37.190749"
-  },
-  {
-    "id": "20260324124205704113",
-    "role": "user",
-    "content": "Donne moi les taches à faire pour le cours de phénomène ondulatoire",
-    "timestamp": "2026-03-24T12:42:05.704140"
-  },
-  {
-    "id": "20260324124243074518",
-    "role": "ai",
-    "content": "Voici quelques tâches que vous pouvez accomplir pour votre cours de phénomène ondulatoire :\n\n✅ Tâche 'Lire et noter les chapitres 1-3 sur les fondamentaux des ondes' ajoutée.\n✅ Tâche 'Revoir les équations mathématiques pour la propagation des ondes' ajoutée.\n✅ Tâche 'Considérer les types d'ondes (mécanique, électromagnétique, etc.) et leurs caractéristiques' ajoutée.\n✅ Tâche 'Étudier les applications pratiques de la physique ondulatoire dans divers domaines (acoustique, électronique, etc.)' ajoutée.\n✅ Tâche 'Réviser les problèmes résolus dans le cours et essayer de résoudre des exercices supplémentaires' ajoutée.\n\nJ'espère que cela vous aidera !",
-    "timestamp": "2026-03-24T12:42:43.074549"
-  },
-  {
-    "id": "20260324124301477393",
-    "role": "user",
-    "content": "ajoute les à ma liste de taches",
-    "timestamp": "2026-03-24T12:43:01.477424"
-  },
-  {
-    "id": "20260324124312071843",
-    "role": "ai",
-    "content": "Voici votre liste de tâches :\n\n✅ Tâche '' ajoutée.\n\nQu'est-ce que vous souhaitez ajouter ? Écrivez `✅ Tâche 'Titre de la tâche' ajoutée.` pour l'ajouter.",
-    "timestamp": "2026-03-24T12:43:12.071878"
-  },
-  {
-    "id": "20260324124337397919",
+    "id": "20260324125238262255",
     "role": "user",
     "content": "Ajoute les taches que tu viens de me donner pour le cours de phénomène ondulatoir",
-    "timestamp": "2026-03-24T12:43:37.397953"
+    "timestamp": "2026-03-24T12:52:38.262408"
   },
   {
-    "id": "20260324124408453287",
+    "id": "20260324130129753082",
+    "role": "user",
+    "content": "Ajoute les taches que tu viens de me donner pour le cours de phénomène ondulatoirE",
+    "timestamp": "2026-03-24T13:01:29.753115"
+  },
+  {
+    "id": "20260324130204720910",
     "role": "ai",
-    "content": "Tu souhaites que j'ajoute des tâches liées au cours de phénomène ondulatoire. Voici les commandes que je comprends :\n\n✅ Tâche 'Comprendre les concepts clés du phénomène ondulatoire' ajoutée.\n✅ Tâche 'Analyser les types d'ondulations (mécaniques, électromagnétiques, etc.)' ajoutée.\n✅ Tâche 'Étudier l'exemple concret de l'onde sonore' ajoutée.\n\nVoilà, ces tâches sont ajoutées à ma liste. Si tu as besoin de modifications ou d'autres ajouts, n'hésite pas !",
-    "timestamp": "2026-03-24T12:44:08.453325"
+    "content": "Tu veux que j'ajoute des tâches pour le cours de phénomène ondulaire ! Voici la liste :\n\n✅ Tâche 'Revoir les lois de Newton appliquées aux mouvements ondulatoires' ajoutée.\n✅ Tâche 'Comprendre les concepts de période, d'amplitude et de phase dans les ondes' ajoutée.\n✅ Tâche 'Étudier les types d'ondes (mécaniques, électromagnétiques, etc.)' ajoutée.\n\nSi tu veux ajouter d'autres tâches ou enlever certaines, n'hésite pas !",
+    "timestamp": "2026-03-24T13:02:04.720937"
+  },
+  {
+    "id": "20260324130841324884",
+    "role": "user",
+    "content": "Crée une tâche [TASK: Test Auto] pour moi.",
+    "timestamp": "2026-03-24T13:08:41.324907"
+  },
+  {
+    "id": "20260324130952491813",
+    "role": "user",
+    "content": "Crée une tâche [TASK: Test Auto] pour moi.",
+    "timestamp": "2026-03-24T13:09:52.491835"
+  },
+  {
+    "id": "20260324130957119719",
+    "role": "ai",
+    "content": "**Nouvelle Tâche Créée**\n======================\n\nJe viens de créer la tâche suivante pour toi :\n\n✅ Tâche 'Test Auto' ajoutée.\n\nEntendu, je le note !",
+    "timestamp": "2026-03-24T13:09:57.119737"
+  },
+  {
+    "id": "20260324131216156707",
+    "role": "user",
+    "content": "Crée une tâche [TASK: Test Final] pour mon cours PHQ334",
+    "timestamp": "2026-03-24T13:12:16.156734"
+  },
+  {
+    "id": "20260324131221453196",
+    "role": "ai",
+    "content": "Entendu ! Voici votre nouvelle tâche :\n\n✅ Tâche 'Test Final' ajoutée. for PHQ334 course",
+    "timestamp": "2026-03-24T13:12:21.453277"
+  },
+  {
+    "id": "20260325083630523992",
+    "role": "user",
+    "content": "Cré moi toutes les taches associé au cours de mécanique quantique",
+    "timestamp": "2026-03-25T08:36:30.524014"
+  },
+  {
+    "id": "20260325083714640359",
+    "role": "ai",
+    "content": "Voici la liste des tâches liées au cours de mécanique quantique :\n\n✅ Tâche 'Réviser les bases de la mécanique quantique' ajoutée.\n✅ Tâche 'Comprendre les principes de la superposition et de l'entrelacement' ajoutée.\n✅ Tâche 'Étudier les équations de Schrödinger et de Heisenberg' ajoutée.\n✅ Tâche 'Apprendre à utiliser le formalisme matriciel' ajoutée.\n✅ Tâche 'Analyser les expériences de double fente et de diffusion d'électrons' ajoutée.\n✅ Tâche 'Comprendre la notion de décohérence et son impact sur l'interprétation des résultats' ajoutée.\n✅ Tâche 'Étudier les concepts de puissance et d'amplitude dans le contexte quantique' ajoutée.\n✅ Tâche 'Réviser les règles de composabilité pour les opérations quantiques' ajoutée.\n✅ Tâche 'Comprendre la relation entre la mécanique quantique et l'électromagnétisme' ajoutée.\n✅ Tâche 'Étudier les applications de la mécanique quantique dans d'autres domaines, tels que la physique statistique ou la théorie du champ fort' ajoutée.\n\nN'hésite pas à me demander si vous avez besoin de plus de détails sur une de ces tâches !",
+    "timestamp": "2026-03-25T08:37:14.640394"
+  },
+  {
+    "id": "20260325084238330210",
+    "role": "user",
+    "content": "[TASK: Titre] pour le cours de mécanique quantique",
+    "timestamp": "2026-03-25T08:42:38.330254"
+  },
+  {
+    "id": "20260325084311765074",
+    "role": "ai",
+    "content": "Un nouveau projet !\n\nPour commencer, qu'est-ce que vous attendez de ce cours sur la mécanique quantique ? Quels sont vos objectifs et vos préoccupations ?\n\nVoici quelques questions pour clarifier :\n\n* Quel est votre niveau d'études actuel (universitaire ou professionnel) ?\n* Avez-vous déjà des connaissances en physique ou en mathématiques ?\n* Quels sont les sujets spécifiques que vous souhaitez aborder dans ce cours (par exemple, les équations de Schrödinger, la mécanique quantique relativiste, l'interprétation de Copenhague, etc.) ?\n\nEn connaissant ces informations, je pourrai vous fournir une assistance plus ciblée et pertinente pour votre projet.",
+    "timestamp": "2026-03-25T08:43:11.765111"
+  },
+  {
+    "id": "20260325084334822484",
+    "role": "user",
+    "content": "ajoute la [TASK: Test] dans le cours de mécanique quantique",
+    "timestamp": "2026-03-25T08:43:34.822516"
+  },
+  {
+    "id": "20260325084346824363",
+    "role": "ai",
+    "content": "Entendu ! Je viens d'ajouter la tâche ✅ Tâche 'Test' ajoutée. dans le cours de mécanique quantique.\n\nVoici les détails :\n\n* Tâche : ✅ Tâche 'Test' ajoutée.\n* Contexte : Cours de mécanique quantique\n* État : En cours",
+    "timestamp": "2026-03-25T08:43:46.824387"
+  },
+  {
+    "id": "20260325084413128726",
+    "role": "user",
+    "content": "[TASK: test]",
+    "timestamp": "2026-03-25T08:44:13.128765"
+  },
+  {
+    "id": "20260325084415866600",
+    "role": "ai",
+    "content": "Je viens de noter cette tâche !",
+    "timestamp": "2026-03-25T08:44:15.866625"
   }
 ]

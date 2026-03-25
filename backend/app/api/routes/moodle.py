@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from app.services.moodle_service import sync_moodle_courses
 from app.services.moodle_browser import capture_moodle_token
+from app.services.rag_engine.ingest import get_ingested_files
 from app.core.config import settings
 
 router = APIRouter()
@@ -132,3 +133,34 @@ async def list_moodle_courses():
             })
             
     return courses
+
+@router.get("/moodle/courses/{course_id}/files")
+async def list_course_files(course_id: str):
+    """
+    Liste les fichiers d'un cours spécifique et leur état d'ingestion.
+    """
+    dest_dir = settings.MOODLE_DOWNLOADS_DESTINATION
+    course_path = os.path.join(dest_dir, course_id)
+    
+    if not os.path.exists(course_path) or not os.path.isdir(course_path):
+        return []
+        
+    # Récupérer les fichiers injectés dans ChromaDB pour ce cours
+    ingested_files = get_ingested_files(course_id)
+    
+    files_list = []
+    for root, dirs, filenames in os.walk(course_path):
+        for f in filenames:
+            # On ne liste que les types supportés par l'ingestion
+            if f.endswith((".pdf", ".txt", ".md")):
+                # On compare le nom du fichier (puisque ingest.py stocke le basename dans Chroma source si on compare ainsi)
+                is_ingested = f in ingested_files
+                
+                files_list.append({
+                    "name": f,
+                    "ingested": is_ingested,
+                    "size": os.path.getsize(os.path.join(root, f)),
+                    "path": os.path.relpath(os.path.join(root, f), course_path)
+                })
+                
+    return files_list

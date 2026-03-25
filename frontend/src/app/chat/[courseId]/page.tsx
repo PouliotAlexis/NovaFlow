@@ -1,18 +1,45 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useChat, Message } from "ai/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Send, BookOpen, Paperclip } from "lucide-react";
+import { ArrowLeft, Send, BookOpen, Paperclip, AlertTriangle, Loader2 } from "lucide-react";
 import Link from "next/link";
+
+interface CourseFile {
+  name: string;
+  ingested: boolean;
+  size: number;
+  path: string;
+}
 
 export default function CourseChatPage({ params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = React.use(params);
+  const [files, setFiles] = useState<CourseFile[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+
   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    api: "http://localhost:8000/api/v2/chat", // Point vers le backend FastAPI V2
+    api: "http://localhost:8000/api/v2/chat",
     body: { course_id: courseId, use_rag: true },
   });
+
+  useEffect(() => {
+    const fetchFiles = async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/api/v2/moodle/courses/${courseId}/files`);
+        if (res.ok) {
+          const data = await res.json();
+          setFiles(data);
+        }
+      } catch (err) {
+        console.error("Erreur lors de la récupération des fichiers:", err);
+      } finally {
+        setLoadingFiles(false);
+      }
+    };
+    fetchFiles();
+  }, [courseId]);
 
   return (
     <div className="nf-layout">
@@ -24,12 +51,42 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
         
         <div className="nf-sidebar__section">
           <h4 className="nf-sidebar__label">Documents du cours</h4>
-          <div className="nf-sidebar__list">
-            <div className="nf-sidebar__item nf-sidebar__item--active">
-              <BookOpen size={16} />
-              Syllabus.pdf
-            </div>
-            {/* Simulation de liste de fichiers */}
+          <div className="nf-sidebar__list" style={{ maxHeight: "calc(100vh - 200px)", overflowY: "auto" }}>
+            {loadingFiles ? (
+              <div className="nf-sidebar__item" style={{ opacity: 0.5 }}>
+                <Loader2 size={16} className="nf-animate-spin" />
+                Chargement...
+              </div>
+            ) : files.length === 0 ? (
+              <div className="nf-sidebar__item" style={{ opacity: 0.5, fontSize: "12px" }}>
+                Aucun document PDF trouvé.
+              </div>
+            ) : (
+              files.map((file, idx) => (
+                <div 
+                  key={idx} 
+                  className={`nf-sidebar__item ${idx === 0 ? 'nf-sidebar__item--active' : ''}`}
+                  title={!file.ingested ? "Ce document n'a pas encore été analysé par l'IA et ne peut pas servir de contexte." : file.name}
+                >
+                  <BookOpen size={16} style={{ minWidth: "16px" }} />
+                  <span style={{ 
+                    overflow: "hidden", 
+                    textOverflow: "ellipsis", 
+                    whiteSpace: "nowrap",
+                    flex: 1
+                  }}>
+                    {file.name}
+                  </span>
+                  {!file.ingested && (
+                    <AlertTriangle 
+                      size={14} 
+                      color="var(--nf-warning)" 
+                      style={{ minWidth: "14px" }} 
+                    />
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

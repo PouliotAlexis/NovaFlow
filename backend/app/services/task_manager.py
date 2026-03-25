@@ -21,7 +21,7 @@ class NovaFlowTask:
     def __init__(self, id: str, title: str, priority: str = "medium", meta: str = "NovaFlow", 
                  done: bool = False, parent_event_id: Optional[str] = None, created_at: Optional[str] = None,
                  external_id: Optional[str] = None, source: Optional[str] = "local", due_date: Optional[str] = None,
-                 description: Optional[str] = ""):
+                 description: Optional[str] = "", course_id: Optional[str] = None):
         self.id = id
         self.title = title
         self.priority = priority
@@ -33,6 +33,7 @@ class NovaFlowTask:
         self.source = source
         self.due_date = due_date
         self.description = description or ""
+        self.course_id = course_id
 
     def mark_done(self):
         self.done = True
@@ -53,6 +54,7 @@ class NovaFlowTask:
         if "source" in updates: self.source = updates["source"]
         if "due_date" in updates: self.due_date = updates["due_date"]
         if "description" in updates: self.description = updates["description"]
+        if "course_id" in updates: self.course_id = updates["course_id"]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -66,7 +68,8 @@ class NovaFlowTask:
             "external_id": self.external_id,
             "source": self.source,
             "due_date": self.due_date,
-            "description": self.description
+            "description": self.description,
+            "course_id": self.course_id
         }
 
     @classmethod
@@ -82,7 +85,8 @@ class NovaFlowTask:
             external_id=data.get("external_id"),
             source=data.get("source", "local"),
             due_date=data.get("due_date"),
-            description=data.get("description", "")
+            description=data.get("description", ""),
+            course_id=data.get("course_id")
         )
 
 class TaskManager:
@@ -127,7 +131,8 @@ class TaskManager:
 
     def add_task(self, title: str, priority: str = "medium", meta: str = "NovaFlow", 
                  parent_event_id: Optional[str] = None, external_id: Optional[str] = None, 
-                 source: Optional[str] = "local", due_date: Optional[str] = None) -> Dict[str, Any]:
+                 source: Optional[str] = "local", due_date: Optional[str] = None,
+                 course_id: Optional[str] = None) -> Dict[str, Any]:
         # Dedup check
         for t in self._tasks:
             # Si on a un external_id, c'est le facteur de dédoublonnage principal
@@ -135,11 +140,11 @@ class TaskManager:
                  return t.to_dict()
             
             # Sinon dédoublonnage classique (legacy)
-            if not external_id and t.title == title and t.meta == meta and t.parent_event_id == parent_event_id and not t.done:
+            if not external_id and t.title == title and t.meta == meta and t.parent_event_id == parent_event_id and t.course_id == course_id and not t.done:
                 return t.to_dict()
         
         new_task = NovaFlowTask(str(uuid.uuid4()), title, priority, meta, False, parent_event_id, 
-                                external_id=external_id, source=source, due_date=due_date)
+                                external_id=external_id, source=source, due_date=due_date, course_id=course_id)
         self._tasks.insert(0, new_task)
         self._save_tasks()
         return new_task.to_dict()
@@ -186,8 +191,8 @@ _manager = TaskManager.instance()
 def get_tasks() -> List[Dict[str, Any]]:
     return _manager.get_all_tasks()
 
-def add_task(title: str, priority: str = "medium", meta: str = "NovaFlow", parent_event_id: Optional[str] = None, due_date: Optional[str] = None) -> Dict[str, Any]:
-    return _manager.add_task(title, priority, meta, parent_event_id, due_date=due_date)
+def add_task(title: str, priority: str = "medium", meta: str = "NovaFlow", parent_event_id: Optional[str] = None, due_date: Optional[str] = None, course_id: Optional[str] = None) -> Dict[str, Any]:
+    return _manager.add_task(title, priority, meta, parent_event_id, due_date=due_date, course_id=course_id)
 
 def update_task(task_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return _manager.update_task(task_id, updates)

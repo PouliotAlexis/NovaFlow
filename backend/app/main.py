@@ -210,10 +210,6 @@ async def chat_endpoint(request: ChatRequest):
         if not course_id:
             course_id = EventManager.instance().find_course_id_by_text(prompt) or \
                         EventManager.instance().find_course_id_by_text(ai_response)
-        
-        parent_id = None
-        if course_id:
-            parent_id = EventManager.instance().get_or_create_course_event(course_id)
 
         # Remplacement robuste via regex
         def create_and_confirm_task(match):
@@ -225,7 +221,7 @@ async def chat_endpoint(request: ChatRequest):
                 title=task_title, 
                 priority="medium", 
                 meta=f"AI Generated ({course_id or 'Global'})",
-                parent_event_id=parent_id
+                course_id=course_id
             )
             
             # Envoyer une notification pour feedback immédiat
@@ -332,10 +328,6 @@ async def chat_stream_endpoint(request: ChatRequest):
             course_id = EventManager.instance().find_course_id_by_text(prompt) or \
                         EventManager.instance().find_course_id_by_text(processed)
 
-        parent_id = None
-        if course_id:
-            parent_id = EventManager.instance().get_or_create_course_event(course_id)
-
         # Remplacement robuste via regex
         def create_and_confirm_task_stream(match):
             task_title = match.group(1).strip()
@@ -346,7 +338,7 @@ async def chat_stream_endpoint(request: ChatRequest):
                 title=task_title, 
                 priority="medium", 
                 meta=f"AI Generated ({course_id or 'Global'})",
-                parent_event_id=parent_id
+                course_id=course_id
             )
             
             # Envoyer une notification pour feedback immédiat

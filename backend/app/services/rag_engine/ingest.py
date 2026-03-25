@@ -86,3 +86,39 @@ def query_rag(query: str, n_results: int = 3, course_id: str = None):
     results = vectorstore.similarity_search(query, **search_kwargs)
     context = "\n\n".join([doc.page_content for doc in results])
     return context
+
+def get_ingested_files(course_id: str):
+    """
+    Retourne la liste des noms de fichiers déjà ingérés pour un cours.
+    """
+    embeddings = get_embeddings()
+    vectorstore = Chroma(
+        persist_directory=CHROMA_DIR,
+        embedding_function=embeddings,
+        collection_name="novaflow_v2"
+    )
+    
+    # On récupère tous les documents filtrés par course_id
+    # Chroma ne permet pas facilement de récupérer uniquement les métadonnées sans les documents
+    # Mais on peut utiliser .get() avec un filtre
+    try:
+        data = vectorstore.get(
+            where={"course_id": str(course_id)},
+            include=["metadatas"]
+        )
+        
+        if not data or not data["metadatas"]:
+            return set()
+            
+        # Extraire les noms de fichiers uniques de la métadonnée 'source'
+        ingested_sources = set()
+        for meta in data["metadatas"]:
+            source_path = meta.get("source")
+            if source_path:
+                # On ne garde que le nom du fichier pour la comparaison
+                ingested_sources.add(os.path.basename(source_path))
+        
+        return ingested_sources
+    except Exception as e:
+        print(f"[RAG] Erreur get_ingested_files: {e}")
+        return set()

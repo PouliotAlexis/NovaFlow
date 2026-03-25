@@ -37,6 +37,7 @@ async def chat_endpoint(request: CourseChatRequest):
             # Recherche RAG avec filtre par cours
             context = query_rag(user_message, course_id=request.course_id)
         
+        task_pattern = r"\[TASK:\s*(.*?)\]"
         async def generate():
             full_response = ""
             try:
@@ -59,7 +60,7 @@ async def chat_endpoint(request: CourseChatRequest):
                         title=task_title, 
                         priority="medium", 
                         meta=f"AI Generated ({request.course_id})",
-                        parent_event_id=parent_id
+                        course_id=request.course_id
                     )
                     
                     # Envoyer une notification
@@ -70,8 +71,9 @@ async def chat_endpoint(request: CourseChatRequest):
                     )
                     
                     return f"✅ Tâche '{task_title}' ajoutée."
-
-                full_response = re.sub(task_pattern, create_and_confirm_task_v2, full_response, flags=re.IGNORECASE)
+                
+                # Déclencher la détection des tâches sur la réponse complète
+                re.sub(task_pattern, create_and_confirm_task_v2, full_response, flags=re.IGNORECASE)
                 
                 # On pourrait envoyer un message spécial "done" ou une annotation si le protocole le permet
                 # Pour l'instant on se contente de l'action côté serveur et l'utilisateur verra la confirmation au prochain refresh ou via un message final

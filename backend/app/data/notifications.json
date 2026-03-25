@@ -1,0 +1,170 @@
+[
+  {
+    "id": "bd35d307-4c25-4e07-96aa-e200aa57efd4",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Réviser régulièrement",
+    "type": "success",
+    "timestamp": "2026-03-25T08:54:37.666710",
+    "read": false
+  },
+  {
+    "id": "c1c5f1f3-42e6-4087-a3fd-9deca479a1d3",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Prendre note des dates importantes",
+    "type": "success",
+    "timestamp": "2026-03-25T08:54:37.665273",
+    "read": false
+  },
+  {
+    "id": "4b92dfad-837c-4a0e-bb77-242d345a342b",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Répondre à la question c) du devoir No. 1",
+    "type": "success",
+    "timestamp": "2026-03-25T08:54:37.663869",
+    "read": false
+  },
+  {
+    "id": "bef792ed-2541-4831-8404-62a063dde062",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Étudier la projection de l'état ψ(0)⟩",
+    "type": "success",
+    "timestamp": "2026-03-25T08:54:37.662393",
+    "read": false
+  },
+  {
+    "id": "a0099e79-3ac7-49f5-83dc-fed15bd83d27",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Étudier la formule de P(a)",
+    "type": "success",
+    "timestamp": "2026-03-25T08:54:37.661030",
+    "read": false
+  },
+  {
+    "id": "4bc727b3-167c-469a-b0cb-05b8c18cbc5e",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Lire la section sur le plagiat",
+    "type": "success",
+    "timestamp": "2026-03-25T08:54:37.659346",
+    "read": false
+  },
+  {
+    "id": "cf4d8580-857e-4a92-a6df-4cf76abe24df",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Comprendre le barème de notation",
+    "type": "success",
+    "timestamp": "2026-03-25T08:54:37.657734",
+    "read": false
+  },
+  {
+    "id": "b647484b-a2b5-4fd8-aa2e-fe7fe817ecff",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : test",
+    "type": "success",
+    "timestamp": "2026-03-25T08:44:40.757766",
+    "read": false
+  },
+  {
+    "id": "1f8d64c5-5dc4-4255-9b8c-4263e12ad4d0",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Test (Cours: 37353)",
+    "type": "success",
+    "timestamp": "2026-03-25T08:43:46.815912",
+    "read": false
+  },
+  {
+    "id": "19094dd5-8a40-440c-91ce-5cc6ba0f0f88",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Test (Cours: 37353)",
+    "type": "success",
+    "timestamp": "2026-03-25T08:43:46.814974",
+    "read": false
+  },
+  {
+    "id": "41be2627-e250-4c9c-93aa-020a75486b17",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Étudier les applications de la mécanique quantique dans d'autres domaines, tels que la physique statistique ou la théorie du champ fort",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.630405",
+    "read": false
+  },
+  {
+    "id": "da9a1a12-7b64-4bcc-9114-e53adc1b23e4",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Comprendre la relation entre la mécanique quantique et l'électromagnétisme",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.628366",
+    "read": false
+  },
+  {
+    "id": "5a6ff48b-242b-4463-9b7f-5ea7dc2133a7",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Réviser les règles de composabilité pour les opérations quantiques",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.626729",
+    "read": false
+  },
+  {
+    "id": "05a2cda6-dfcf-4f32-bdce-132cd141f8af",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Étudier les concepts de puissance et d'amplitude dans le contexte quantique",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.625257",
+    "read": false
+  },
+  {
+    "id": "dd40c524-e6bd-44b0-b8eb-7a51c779e2c4",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Comprendre la notion de décohérence et son impact sur l'interprétation des résultats",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.623851",
+    "read": false
+  },
+  {
+    "id": "cfa64d92-b0a9-4033-bb4c-aa71498a891c",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Analyser les expériences de double fente et de diffusion d'électrons",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.622352",
+    "read": false
+  },
+  {
+    "id": "52a7ec67-c81f-4013-a933-572ed5deb4f7",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Apprendre à utiliser le formalisme matriciel",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.621016",
+    "read": false
+  },
+  {
+    "id": "aa7c9758-9ca5-47ad-9e07-db514b3cee27",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Étudier les équations de Schrödinger et de Heisenberg",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.619728",
+    "read": false
+  },
+  {
+    "id": "38cfa870-6be1-4b1e-b5e1-fdefc9c8a29b",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Comprendre les principes de la superposition et de l'entrelacement",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.618241",
+    "read": false
+  },
+  {
+    "id": "d4ab3e84-c5c3-4d14-9991-54fd8bd5b054",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Réviser les bases de la mécanique quantique",
+    "type": "success",
+    "timestamp": "2026-03-25T08:37:14.616376",
+    "read": false
+  },
+  {
+    "id": "efdfaed5-de05-4d0d-90a6-f7d5d51f33c5",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Test Final (Cours: 37353)",
+    "type": "success",
+    "timestamp": "2026-03-24T13:12:21.450687",
+    "read": false
+  }
+]

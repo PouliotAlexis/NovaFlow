@@ -87,7 +87,7 @@ export default function CourseCard({ id, name, filesCount, onSync, onOpenChat }:
               <CheckSquare size={18} color="var(--nf-success)" />
               <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Tâches à faire</h4>
             </div>
-            <TaskList courseName={name} compact noWrapper={true} />
+            <TaskList courseName={name} courseId={id} compact noWrapper={true} />
           </div>
         </div>
       )}

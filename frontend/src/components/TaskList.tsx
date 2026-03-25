@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { CheckCircle, Clock, Calendar, Edit2, Trash2, Sparkles, AlertCircle } from "lucide-react";
+import { CheckCircle, Clock, Calendar, Edit2, Trash2, Sparkles, AlertCircle, Book } from "lucide-react";
 
 const API_URL = typeof window !== "undefined"
     ? (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000")
@@ -17,6 +17,7 @@ interface Task {
     parent_event_id?: string;
     description?: string;
     due_date?: string;
+    course_id?: string;
 }
 
 interface NovaEvent {
@@ -73,29 +74,30 @@ const EventSelector = ({ currentValue, options, onSelect }: { currentValue: stri
     };
 
     return (
-        <div ref={dropdownRef} style={{ position: "relative", width: "100%", maxWidth: "400px" }}>
+        <div ref={dropdownRef} style={{ position: "relative", width: "100%" }}>
             <div
                 className="nf-input"
                 onClick={() => setIsOpen(!isOpen)}
                 style={{
-                    cursor: "pointer",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    minHeight: "38px"
+                    cursor: "pointer",
+                    minHeight: "42px",
+                    padding: "0 12px"
                 }}
             >
                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedEvent ? (
-                        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
                             <span>{getSourceIcon(selectedEvent.source)}</span>
                             {selectedEvent.title}
                         </span>
                     ) : (
-                        <span style={{ color: "var(--nf-text-muted)" }}>-- Aucun événement (Standalone) --</span>
+                        <span style={{ color: "var(--nf-text-muted)", fontSize: "14px" }}>-- Aucun événement (Standalone) --</span>
                     )}
                 </div>
-                <span>{isOpen ? "▲" : "▼"}</span>
+                <span style={{ fontSize: "12px", opacity: 0.7 }}>{isOpen ? "▲" : "▼"}</span>
             </div>
 
             {isOpen && (
@@ -178,18 +180,138 @@ const EventSelector = ({ currentValue, options, onSelect }: { currentValue: stri
     );
 };
 
+const CourseSelector = ({ currentValue, options, onSelect }: { currentValue: string, options: any[], onSelect: (val: string) => void }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [filter, setFilter] = useState("");
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = options.filter(opt => 
+        (opt.fullname || opt.name || "").toLowerCase().includes(filter.toLowerCase())
+    );
+
+    const selectedCourse = options.find(opt => String(opt.id) === String(currentValue));
+
+    return (
+        <div ref={wrapperRef} style={{ position: "relative", width: "100%" }}>
+            <div 
+                className="nf-input"
+                onClick={() => setIsOpen(!isOpen)}
+                style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    minHeight: "42px",
+                    padding: "0 12px"
+                }}
+            >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Book size={16} color="var(--nf-accent)" />
+                    <span style={{ color: selectedCourse ? "var(--nf-text)" : "var(--nf-text-muted)", fontSize: "14px" }}>
+                        {selectedCourse ? (selectedCourse.fullname || selectedCourse.name) : "-- Sélectionner un cours --"}
+                    </span>
+                </div>
+                <span style={{ fontSize: "12px", opacity: 0.7 }}>{isOpen ? "▲" : "▼"}</span>
+            </div>
+
+            {isOpen && (
+                <div style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    zIndex: 1000,
+                    marginTop: "5px",
+                    background: "var(--nf-bg-card-solid)",
+                    border: "1px solid var(--nf-border)",
+                    borderRadius: "var(--nf-radius-sm)",
+                    boxShadow: "var(--nf-shadow-lg)",
+                    backdropFilter: "blur(20px)",
+                    maxHeight: "300px",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column"
+                }}>
+                    <div style={{ padding: "8px", borderBottom: "1px solid var(--nf-border)" }}>
+                        <input 
+                            autoFocus
+                            className="nf-input"
+                            placeholder="Filtrer les cours..."
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                            style={{ width: "100%" }}
+                        />
+                    </div>
+                    <div style={{ overflowY: "auto", flex: 1 }}>
+                        <div 
+                            style={{ 
+                                padding: "10px 12px", 
+                                cursor: "pointer", 
+                                fontSize: "13px",
+                                borderBottom: "1px solid var(--nf-border-dim)",
+                                color: currentValue === "" ? "var(--nf-accent)" : "var(--nf-text-muted)",
+                                background: currentValue === "" ? "var(--nf-bg-hover)" : "transparent"
+                            }}
+                            onClick={() => { onSelect(""); setIsOpen(false); }}
+                        >
+                            -- Aucun cours --
+                        </div>
+                        {filteredOptions.map(opt => (
+                            <div
+                                key={opt.id}
+                                style={{
+                                    padding: "10px 12px",
+                                    cursor: "pointer",
+                                    fontSize: "13px",
+                                    borderBottom: "1px solid var(--nf-border-dim)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    background: String(currentValue) === String(opt.id) ? "var(--nf-bg-hover)" : "transparent",
+                                    transition: "background 0.2s"
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = "var(--nf-bg-hover)"}
+                                onMouseLeave={(e) => e.currentTarget.style.background = String(currentValue) === String(opt.id) ? "var(--nf-bg-hover)" : "transparent"}
+                                onClick={() => { onSelect(String(opt.id)); setIsOpen(false); }}
+                            >
+                                <Book size={14} color="var(--nf-accent-dim)" />
+                                <span style={{ color: String(currentValue) === String(opt.id) ? "var(--nf-accent)" : "inherit" }}>
+                                    {opt.fullname || opt.name}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 interface TaskListProps {
     compact?: boolean;
     onNavigate?: (view: string) => void;
     courseName?: string;
+    courseId?: string;
     noWrapper?: boolean;
 }
 
-export default function TaskList({ compact = false, onNavigate, courseName, noWrapper = false }: TaskListProps) {
+export default function TaskList({ compact = false, onNavigate, courseName, courseId, noWrapper = false }: TaskListProps) {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [localEvents, setLocalEvents] = useState<NovaEvent[]>([]);
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+    const [courses, setCourses] = useState<any[]>([]);
 
     const fetchTasks = useCallback(async () => {
         try {
@@ -217,9 +339,22 @@ export default function TaskList({ compact = false, onNavigate, courseName, noWr
         }
     }, []);
 
+    const fetchCourses = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/v2/moodle/courses`);
+            if (res.ok) {
+                const data = await res.json();
+                setCourses(data || []);
+            }
+        } catch (error) {
+            console.error("Erreur fetch courses", error);
+        }
+    }, []);
+
     useEffect(() => {
         fetchTasks();
         fetchEvents();
+        fetchCourses();
 
         // Polling : rafraîchir les tâches toutes les 60s
         const pollInterval = setInterval(() => {
@@ -244,6 +379,20 @@ export default function TaskList({ compact = false, onNavigate, courseName, noWr
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
             console.error("Erreur toggle task", error);
+        }
+    };
+
+    const updateTaskCourse = async (taskId: string, courseId: string) => {
+        try {
+            await fetch(`${API_URL}/api/tasks/${taskId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ course_id: courseId || null })
+            });
+            await fetchTasks();
+            window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
+        } catch (error) {
+            console.error("Erreur update task course", error);
         }
     };
 
@@ -318,29 +467,37 @@ export default function TaskList({ compact = false, onNavigate, courseName, noWr
     
     // Filtrage par cours
     let filteredTasks = tasks;
-    if (courseName) {
-        const target = courseName.toLowerCase();
+    if (courseId || courseName) {
+        const target = courseName?.toLowerCase() || "";
         const targetCode = target.match(/[a-z]{3,4}-?\d{3,4}/)?.[0];
 
         filteredTasks = tasks.filter(t => {
-            if (!t.parent_event_id) return false;
-            const parentEvent = localEvents.find(e => e.id === t.parent_event_id || e.external_id === t.parent_event_id);
-            if (!parentEvent) return false;
-            
-            // Match direct via course_title du backend
-            if ((parentEvent as any).course_title === courseName) return true;
+            // Priority 1: Direct match via course_id
+            if (courseId && t.course_id === courseId) return true;
 
-            const title = parentEvent.title.toLowerCase();
-            const cat = ((parentEvent as any).category || "").toLowerCase();
+            // Priority 2: Legacy fallback via parent_event_id
+            if (t.parent_event_id) {
+                const parentEvent = localEvents.find(e => e.id === t.parent_event_id || e.external_id === t.parent_event_id);
+                if (!parentEvent) return false;
+                
+                // Match direct via course_title du backend (if available)
+                if ((parentEvent as any).course_title === courseName) return true;
 
-            // Match via code de cours
-            if (targetCode && (title.includes(targetCode) || cat.includes(targetCode))) return true;
+                const title = parentEvent.title.toLowerCase();
+                const cat = ((parentEvent as any).category || "").toLowerCase();
 
-            // Match via sous-chaîne (catégorie dans le nom du cours)
-            if (cat && cat.length > 3 && target.includes(cat)) return true;
+                // Match via code de cours
+                if (targetCode && (title.includes(targetCode) || cat.includes(targetCode))) return true;
 
-            // Fallback
-            return title.includes(target) || cat.includes(target);
+                // Match via sous-chaîne (catégorie dans le nom du cours)
+                if (cat && cat.length > 3 && target.includes(cat)) return true;
+
+                // Fallback via title match
+                if (target && title.includes(target)) return true;
+                if (target && cat && cat.includes(target)) return true;
+            }
+
+            return false;
         });
     }
 
@@ -391,6 +548,8 @@ export default function TaskList({ compact = false, onNavigate, courseName, noWr
                                 ? localEvents.find(e => e.id === task.parent_event_id || e.external_id === task.parent_event_id)
                                 : null;
                             const eventName = parentEvent ? parentEvent.title : '';
+                            const course = task.course_id ? courses.find(c => String(c.id) === String(task.course_id)) : null;
+                            const courseNameDisp = course ? (course.fullname || course.name) : '';
 
                             return (
                                 <div
@@ -412,6 +571,11 @@ export default function TaskList({ compact = false, onNavigate, courseName, noWr
                                         <div className="nf-task__meta" style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px" }}>
                                             {dueDate && <span style={{ color: "var(--nf-text-muted)", display: "flex", alignItems: "center", gap: "4px" }}><Clock size={12} /> {dueDate}</span>}
                                             {eventName && <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--nf-text-secondary)" }}><Calendar size={12} /> {eventName}</span>}
+                                            {courseNameDisp && !courseName && (
+                                                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--nf-accent)", fontSize: "11px", fontWeight: 500 }}>
+                                                    <Book size={12} /> {courseNameDisp}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -457,6 +621,8 @@ export default function TaskList({ compact = false, onNavigate, courseName, noWr
                                 ? localEvents.find(e => e.id === task.parent_event_id || e.external_id === task.parent_event_id)
                                 : null;
                             const eventName = parentEvent ? parentEvent.title : '';
+                            const course = task.course_id ? courses.find(c => String(c.id) === String(task.course_id)) : null;
+                            const courseNameDisp = course ? (course.fullname || course.name) : '';
 
                             return (
                                 <div
@@ -491,6 +657,11 @@ export default function TaskList({ compact = false, onNavigate, courseName, noWr
                                             <div className="nf-task__meta" style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px" }}>
                                                 {dueDate && <span style={{ color: "var(--nf-text-muted)" }}>🕒 {dueDate}</span>}
                                                 {eventName && <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--nf-text-secondary)" }}>📅 {eventName}</span>}
+                                                {courseNameDisp && !courseName && (
+                                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--nf-accent)", fontSize: "11px", fontWeight: 600 }}>
+                                                        <Book size={12} /> {courseNameDisp}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="nf-task__actions">
@@ -525,6 +696,15 @@ export default function TaskList({ compact = false, onNavigate, courseName, noWr
                                                     currentValue={task.parent_event_id || ""}
                                                     options={localEvents}
                                                     onSelect={(val) => updateTaskParentEvent(task.id, val)}
+                                                />
+                                            </div>
+
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                                                <label style={{ fontSize: "12px", color: "var(--nf-text-secondary)" }}>Cours associé :</label>
+                                                <CourseSelector
+                                                    currentValue={task.course_id || ""}
+                                                    options={courses}
+                                                    onSelect={(val) => updateTaskCourse(task.id, val)}
                                                 />
                                             </div>
 

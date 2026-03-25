@@ -297,6 +297,18 @@ body {
   gap: 8px;
   color: var(--nf-text);
 }
+.nf-animate-spin {
+  animation: nf-spin 1s linear infinite;
+}
+
+@keyframes nf-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 .nf-card__badge {
   font-size: 11px;

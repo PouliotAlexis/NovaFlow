@@ -203,37 +203,54 @@ class EventManager:
         # 1. Chercher un code de cours (ex: PHQ334, IFT-1000)
         import re
         code_match = re.search(r'([A-Za-z]{3,4}-?\d{3,4})', text)
-        if not code_match:
-            return None
+        target_code = code_match.group(1).upper() if code_match else None
         
-        target_code = code_match.group(1).upper()
-        
-        # 2. Charger les cours connus (Extension Moodle)
+        # 2. Charger les cours connus (Extension Moodle + dossier downloads)
+        all_courses = []
         from app.services.moodle_extension_service import _load_ext_courses
         try:
-            courses = _load_ext_courses()
-            for c in courses:
+            all_courses.extend(_load_ext_courses())
+        except: pass
+            
+        moodle_downloads = settings.MOODLE_DOWNLOADS_DESTINATION
+        if os.path.exists(moodle_downloads):
+            for cid in os.listdir(moodle_downloads):
+                info_path = os.path.join(moodle_downloads, cid, "course_info.json")
+                if os.path.exists(info_path):
+                    with open(info_path, "r", encoding="utf-8") as f:
+                        try:
+                            info = json.load(f)
+                            # Normaliser pour correspondre au format moodle_extension
+                            all_courses.append({
+                                "id": cid,
+                                "fullname": info.get("fullname") or info.get("name"),
+                                "shortname": info.get("shortname", "")
+                            })
+                        except: pass
+
+        # 3. Match via code (Priorité)
+        if target_code:
+            for c in all_courses:
                 shortname = (c.get("shortname") or "").upper()
                 fullname = (c.get("fullname") or "").upper()
                 if target_code in shortname or target_code in fullname:
                     return str(c.get("id"))
-        except Exception:
-            pass
+
+        # 4. Match via mots-clés (Fallback)
+        text_upper = text.upper()
+        for c in all_courses:
+            fullname = (c.get("fullname") or "").upper()
+            if not fullname or len(fullname) < 3: continue
             
-        # 3. Charger les cours via le dossier downloads
-        try:
-            moodle_downloads = settings.MOODLE_DOWNLOADS_DESTINATION
-            if os.path.exists(moodle_downloads):
-                for cid in os.listdir(moodle_downloads):
-                    info_path = os.path.join(moodle_downloads, cid, "course_info.json")
-                    if os.path.exists(info_path):
-                        with open(info_path, "r", encoding="utf-8") as f:
-                            info = json.load(f)
-                            name = (info.get("fullname") or info.get("name") or "").upper()
-                            if target_code in name:
-                                return cid
-        except Exception:
-            pass
+            # Si le nom du cours est long, on cherche des mots significatifs (min 4 lettres)
+            words = [w for w in fullname.split() if len(w) >= 4]
+            for word in words:
+                if word in text_upper:
+                    return str(c.get("id"))
+            
+            # Match exact sur le nom du cours si présent
+            if fullname in text_upper:
+                return str(c.get("id"))
             
         return None
 
