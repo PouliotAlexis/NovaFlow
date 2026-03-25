@@ -54,6 +54,7 @@ from app.services.automation import (
 )
 from app.services.chat_manager import load_chat_history, save_chat_message, clear_chat_history
 from app.services.notification_manager import NotificationManager
+from app.services.context_builder import ContextBuilder
 from app.api.routes import chat as chat_router
 from app.api.routes import moodle as moodle_router
 
@@ -156,37 +157,21 @@ async def chat_endpoint(request: ChatRequest):
     # Sauvegarder le message utilisateur dans l'historique
     save_chat_message("user", prompt)
 
-    # Recherche de contexte RAG dans les documents (Optimisation: n_results=2)
+    # Utilisation du ContextBuilder pour aggréger Tâches + Calendrier + RAG
+    context = ContextBuilder.build_global_context(
+        user_query=prompt,
+        include_tasks=True,
+        include_calendar=True
+    )
+
+    # RAG additionnel si demandé
     if request.use_rag:
         try:
-            context = get_relevant_context(prompt, n_results=2)
+            rag_ctx = get_relevant_context(prompt, n_results=5)
+            if rag_ctx:
+                context += f"\n\n## Contexte Documentaire\n{rag_ctx}"
         except Exception:
-            context = ""
-
-    # Si mode Cloud, sanitizer le message AVANT l'envoi
-    if active_mode == "cloud":
-        prompt, san_map = sanitize(prompt, request.sensitive_entities)
-        if context:
-            context, _ = sanitize(context)  # Sanitizer aussi le contexte
-        was_sanitized = True
-
-        # Récupération events Google Calendar (si connecté) - Optimisation: 7 jours max
-    if google_is_connected():
-        try:
-            # Réduire à 7 jours et 20 résultats max pour éviter de bloquer trop longtemps
-            events = get_upcoming_events(days=7, max_results=20)
-            if events:
-                cal_ctx = "\n\n## Mon Calendrier (7 prochains jours)\n"
-                for evt in events:
-                    start_str = f"{evt['start'].replace('T', ' ')}"
-                    end_str = f"{evt['end'].replace('T', ' ')}" if evt.get('end') else ""
-                    time_info = "Journée enitère" if evt.get('all_day') else f"{start_str} -> {end_str}"
-                    cal_ctx += f"- {evt['title']} ({time_info})\n"
-                    if evt.get('description'):
-                        cal_ctx += f"  Desc: {evt['description']}\n"
-                context += cal_ctx
-        except Exception as e:
-            print(f"Erreur injection calendrier: {e}")
+            pass
 
     try:
         # Envoyer à l'IA avec le contexte
@@ -266,36 +251,20 @@ async def chat_stream_endpoint(request: ChatRequest):
     context = ""
     prompt = request.message
 
-    # Recherche de contexte RAG
+    # Utilisation du ContextBuilder (Streaming)
+    context = ContextBuilder.build_global_context(
+        user_query=prompt,
+        include_tasks=True,
+        include_calendar=True
+    )
+
     if request.use_rag:
         try:
-            context = get_relevant_context(prompt, n_results=2)
+            rag_ctx = get_relevant_context(prompt, n_results=5)
+            if rag_ctx:
+                context += f"\n\n## Contexte Documentaire\n{rag_ctx}"
         except Exception:
-            context = ""
-
-    # Sanitization cloud
-    if active_mode == "cloud":
-        prompt, san_map = sanitize(prompt, request.sensitive_entities)
-        if context:
-            context, _ = sanitize(context)
-        was_sanitized = True
-
-    # Injection calendrier Google
-    if google_is_connected():
-        try:
-            events = get_upcoming_events(days=7, max_results=20)
-            if events:
-                cal_ctx = "\n\n## Mon Calendrier (7 prochains jours)\n"
-                for evt in events:
-                    start_str = f"{evt['start'].replace('T', ' ')}"
-                    end_str = f"{evt['end'].replace('T', ' ')}" if evt.get('end') else ""
-                    time_info = "Journée entière" if evt.get('all_day') else f"{start_str} -> {end_str}"
-                    cal_ctx += f"- {evt['title']} ({time_info})\n"
-                    if evt.get('description'):
-                        cal_ctx += f"  Desc: {evt['description']}\n"
-                context += cal_ctx
-        except Exception as e:
-            print(f"Erreur injection calendrier (stream): {e}")
+            pass
 
     save_chat_message("user", prompt if not was_sanitized else request.message)
 

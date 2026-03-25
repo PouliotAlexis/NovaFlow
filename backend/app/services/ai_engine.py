@@ -11,11 +11,10 @@ from typing import AsyncGenerator
 from app.core.config import settings
 
 
-def _build_system_prompt(system_prompt: str, context: str = "") -> str:
-    """Construit le system prompt avec injection de contexte RAG si disponible."""
     base = system_prompt or "Tu es NovaFlow, un assistant personnel intelligent et élégant. Réponds TOUJOURS en utilisant un formatage Markdown riche et structuré (listes à puces, texte en gras, tableaux si pertinent). Utilise des emojis avec parcimonie pour agrémenter la réponse. Sépare tes paragraphes par des sauts de ligne clairs."
     
     if context:
+        print(f"DEBUG AI: Context injected ({len(context)} chars). Preview: {context[:200]}...")
         return (
             f"{base}\n\n"
             "## Outils Disponibles\n"

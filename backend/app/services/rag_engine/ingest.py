@@ -110,6 +110,14 @@ def query_rag(query: str, n_results: int = 3, course_id: str = None, filenames: 
         search_kwargs["filter"] = {"$and": filters}
         
     results = vectorstore.similarity_search(query, **search_kwargs)
+    
+    # Log de debug
+    print(f"[RAG] Requete: '{query}' ({'filtré par cours' if course_id else 'global'})")
+    print(f"[RAG] {len(results)} résultats trouvés.")
+    for i, doc in enumerate(results):
+        filename = doc.metadata.get('filename') or os.path.basename(doc.metadata.get('source', 'Inconnu'))
+        print(f"  [{i+1}] {filename} -> {doc.page_content[:80]}...")
+        
     context = "\n\n".join([doc.page_content for doc in results])
     return context
 

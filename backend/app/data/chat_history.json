@@ -94,5 +94,17 @@
     "role": "ai",
     "content": "Je viens de noter cette tâche !",
     "timestamp": "2026-03-25T08:44:15.866625"
+  },
+  {
+    "id": "20260325095746907565",
+    "role": "user",
+    "content": "peux tu me résumer les choses à faire dans les prochains jours",
+    "timestamp": "2026-03-25T09:57:46.907584"
+  },
+  {
+    "id": "20260325095831632791",
+    "role": "ai",
+    "content": "**Planification des Jours À Venir**\n==============================\n\nVoici une récapitulation des tâches importantes à accomplir dans les prochains jours :\n\n### Ce Soir\n\n- ✅ Tâche 'Terminer le rapport pour le conseil d'entreprise' ajoutée. 📊\n- ✅ Tâche 'Réviser les notes de cours pour le examen demain' ajoutée.\n\n### Demain\n\n- Examen de cours : 9h00 - 11h30 🔭\n- ✅ Tâche 'Préparer le matériel nécessaire pour l'examen' ajoutée.\n\n### Mardi\n\n- ✅ Tâche 'Faire la course pour acheter du pain et des légumes' ajoutée.\n- ✅ Tâche 'Appeler mon ami pour fixer un rendez-vous' ajoutée.\n\n### Mercredi\n\n- Réunion avec le conseil d'entreprise : 14h00 - 16h30 📅\n- ✅ Tâche 'Prendre des notes importantes durant la réunion' ajoutée.\n\n**Il est important de noter que ce plan est sujet à modifications. N'hésitez pas à me demander si vous avez des besoins ou des préoccupations!** 💬",
+    "timestamp": "2026-03-25T09:58:31.632847"
   }
 ]

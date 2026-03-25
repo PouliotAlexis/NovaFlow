@@ -1,5 +1,53 @@
 [
   {
+    "id": "b1eea44d-9e3a-46a0-9b5d-d41ff0bdb1c2",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Prendre des notes importantes durant la réunion (Cours: 36577)",
+    "type": "success",
+    "timestamp": "2026-03-25T09:58:31.623195",
+    "read": true
+  },
+  {
+    "id": "fd9f787e-e8cb-44c3-9117-344dfd26a56b",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Appeler mon ami pour fixer un rendez-vous (Cours: 36577)",
+    "type": "success",
+    "timestamp": "2026-03-25T09:58:31.621039",
+    "read": false
+  },
+  {
+    "id": "d4c128eb-1afa-41be-b98f-06885db87647",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Faire la course pour acheter du pain et des légumes (Cours: 36577)",
+    "type": "success",
+    "timestamp": "2026-03-25T09:58:31.618157",
+    "read": false
+  },
+  {
+    "id": "2f62eaaa-056f-43e5-a041-b7c0182bc982",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Préparer le matériel nécessaire pour l'examen (Cours: 36577)",
+    "type": "success",
+    "timestamp": "2026-03-25T09:58:31.615831",
+    "read": false
+  },
+  {
+    "id": "21170b54-67f0-4d7b-807c-78ef9797293c",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Réviser les notes de cours pour le examen demain (Cours: 36577)",
+    "type": "success",
+    "timestamp": "2026-03-25T09:58:31.613818",
+    "read": false
+  },
+  {
+    "id": "27bc747e-cc2c-4f8e-8af4-06e7577b4134",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Terminer le rapport pour le conseil d'entreprise (Cours: 36577)",
+    "type": "success",
+    "timestamp": "2026-03-25T09:58:31.611452",
+    "read": false
+  },
+  {
     "id": "ad06d4c9-a7fe-4fa6-aff5-2a214dd24a73",
     "title": "Nouvelle tâche (Cours)",
     "content": "Tâche créée : Chercher des exemples d'utilisation de la méthode",

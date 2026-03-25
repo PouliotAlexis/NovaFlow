@@ -7,9 +7,9 @@ import re
 import os
 from app.services.rag_engine.ingest import query_rag
 from app.services.ai_engine import chat_stream
-from app.core.config import settings
 from app.services.task_manager import TaskManager
-from app.services.event_manager import EventManager
+from app.services.event_manager import get_or_create_course_event
+from app.services.context_builder import ContextBuilder
 from app.services.notification_manager import NotificationManager
 
 router = APIRouter()
@@ -33,10 +33,12 @@ async def chat_endpoint(request: CourseChatRequest):
         # Le SDK Vercel AI envoie une liste 'messages'
         user_message = request.messages[-1].content if request.messages else ""
         
-        context = ""
-        if request.use_rag and user_message:
-            # Recherche RAG avec filtre par cours et par fichiers sélectionnés
-            context = query_rag(user_message, course_id=request.course_id, filenames=request.filenames)
+        # Utilisation du ContextBuilder pour le Second Brain
+        context = ContextBuilder.build_course_context(
+            course_id=request.course_id,
+            user_query=user_message,
+            filenames=request.filenames
+        )
         
         task_pattern = r"\[TASK:\s*(.*?)\]"
         async def generate():
