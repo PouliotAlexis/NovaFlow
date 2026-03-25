@@ -5,6 +5,17 @@ Gère les tâches de fond comme l'analyse automatique des documents et événeme
 pour en extraire des tâches ou des informations pertinentes.
 """
 
+import sys
+import asyncio
+
+# Fix pour Windows : Nécessaire pour Playwright (sous-processus)
+if sys.platform == "win32":
+    try:
+        if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy):
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
+
 import json
 import os
 import re
@@ -22,6 +33,7 @@ from .event_manager import EventManager, NovaFlowEvent
 import datetime
 import asyncio
 import uuid
+from .moodle_sync_service import moodle_service
 
 # Logging setup
 LOG_FILE = os.path.join(
@@ -734,6 +746,40 @@ async def sync_google_tasks():
             
     except Exception as e:
         log_auto(f"❌ Erreur Sync Google Tasks : {e}")
+
+async def sync_moodle_native_v2():
+    """
+    Tâche de fond : Synchronisation profonde de Moodle via Playwright.
+    """
+    log_auto("🔄 Sync Moodle Native v2 : Démarrage...")
+    try:
+        result = await moodle_service.run_sync()
+        status = result.get("status")
+        
+        if status == "SUCCESS":
+            log_auto(f"✅ Sync Moodle terminée: {result.get('courses_scanned')} cours scannés.")
+        elif status == "MOODLE_DISCONNECTED":
+            log_auto("⚠️ Sync Moodle avortée: session expirée ou invalide.")
+        else:
+            log_auto(f"❌ Erreur Sync Moodle: {result.get('message')}")
+            
+        return result
+    except Exception as e:
+        import traceback
+        err_msg = traceback.format_exc()
+        log_auto(f"❌ Erreur critique Sync Moodle:\n{err_msg}")
+        
+        # Alerte utilisateur via notification NovaFlow si possible
+        msg = str(e)
+        if "Target page, context or browser has been closed" in msg or "used by another process" in msg:
+            from .notification_manager import NotificationManager
+            NotificationManager.instance().add_notification(
+                title="Erreur Moodle",
+                content="Impossible de lancer la synchro : Ferme Chrome et réessaie.",
+                type="error"
+            )
+
+        return {"status": "ERROR", "message": str(e), "trace": err_msg}
 
 async def analyze_and_link_tasks(new_tasks: list):
     """

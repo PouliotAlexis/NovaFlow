@@ -52,35 +52,39 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
     setError("");
 
     try {
-      const body: any = { url };
-      if (authMode === "token") {
-        body.token = token.trim();
-      } else {
-        body.username = username.trim();
-        body.password = password;
+      // Nettoyage de l'URL pour n'avoir que la racine (ex: https://moodle.usherbrooke.ca)
+      let normalizedUrl = url.trim();
+      try {
+        const parsed = new URL(normalizedUrl);
+        normalizedUrl = `${parsed.protocol}//${parsed.hostname}${parsed.port ? ':' + parsed.port : ''}`;
+      } catch (e) {
+        // En cas d'URL invalide, on laisse tel quel pour le backend
       }
 
-      const res = await fetch(`${API_URL}/api/v2/moodle/sync`, {
+      const body: any = { url: normalizedUrl };
+      const isNative = authMode === "credentials";
+
+      if (!isNative) {
+        body.token = token.trim();
+      }
+      // Les credentials ne sont plus nécessaires pour le mode natif (Playwright utilise le profil Chrome)
+
+      const endpoint = !isNative 
+        ? `${API_URL}/api/v2/moodle/sync` 
+        : `${API_URL}/api/v2/moodle/sync/native`;
+      
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: isNative ? undefined : JSON.stringify(body),
       });
 
       if (res.ok) {
-        const cleanUrl = url.trim();
-        if (isCalendarFeedUrl(cleanUrl)) {
-          await fetch(`${API_URL}/api/settings/moodle`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: cleanUrl }),
-          });
-          window.dispatchEvent(new CustomEvent("novaflow-account-changed"));
-        }
         onSyncStarted();
         onClose();
       } else {
         const data = await res.json();
-        setError(data.detail || "Erreur de synchronisation");
+        setError(data.detail || data.message || "Erreur de synchronisation");
       }
     } catch (err) {
       setError("Impossible de contacter le serveur.");
@@ -157,7 +161,7 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
               onClick={() => setAuthMode("credentials")}
               style={{ flex: 1 }}
             >
-              Identifiants
+              Mode Natif (Recommandé)
             </button>
             <button
               type="button"
@@ -165,7 +169,7 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
               onClick={() => setAuthMode("token")}
               style={{ flex: 1 }}
             >
-              Jeton (SSO Ready)
+              Manuellement
             </button>
           </div>
 
@@ -182,30 +186,33 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
           </div>
 
           {authMode === "credentials" ? (
-            <>
+            <div className="nf-animate-in">
+              <p style={{ fontSize: "13px", color: "var(--nf-text-secondary)", marginBottom: "12px" }}>
+                Le mode natif utilise votre session Chrome actuelle pour explorer les cours et devoirs.
+              </p>
+              
               <div className="nf-form-group">
-                <label className="nf-label"><User size={14} /> Identifiant (CIP)</label>
+                <label className="nf-label"><Globe size={14} /> URL Moodle</label>
                 <input
-                  type="text"
+                  type="url"
                   className="nf-input"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  placeholder="pous1234"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://moodle.usherbrooke.ca"
                 />
+                {isCalendarFeedUrl(url) && (
+                  <p style={{ fontSize: "11px", color: "var(--nf-warning)", marginTop: "4px" }}>
+                    ⚠️ Ceci semble être un lien de calendrier. NovaFlow extraira automatiquement la racine (https://moodle.usherbrooke.ca) pour la synchro des fichiers.
+                  </p>
+                )}
               </div>
 
-              <div className="nf-form-group">
-                <label className="nf-label"><Lock size={14} /> Mot de passe</label>
-                <input
-                  type="password"
-                  className="nf-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+              <div style={{ padding: "12px", background: "var(--nf-accent-glow)", borderRadius: "var(--nf-radius-sm)", border: "1px solid var(--nf-accent-dim)", marginTop: "8px" }}>
+                 <p style={{ fontSize: "12px", color: "var(--nf-accent)", fontWeight: 600, margin: 0 }}>
+                    ✨ Synchro Intelligente : NovaFlow détectera automatiquement vos cours et téléchargera les ressources.
+                 </p>
               </div>
-            </>
+            </div>
           ) : (
             <div className="nf-form-group">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -213,14 +220,25 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                 <button
                   type="button"
                   className="nf-button nf-button--sm nf-button--ghost"
-                  onClick={handleCapture}
+                  onClick={async () => {
+                    setCapturing(true);
+                    try {
+                      const res = await fetch(`${API_URL}/api/v2/moodle/login`, { method: "POST" });
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data.success) {
+                          setCaptureSuccess(true);
+                        }
+                      }
+                    } catch (e) {} finally { setCapturing(false); }
+                  }}
                   disabled={capturing}
                   style={{ fontSize: "11px", gap: "4px", display: "flex", alignItems: "center" }}
                 >
                   {capturing ? (
-                    <><RefreshCw size={12} className="nf-spin" /> Connexion en cours...</>
+                    <><RefreshCw size={12} className="nf-spin" /> Connexion...</>
                   ) : (
-                    <><Cpu size={12} /> Capturer via navigateur</>
+                    <><Globe size={12} /> Ouvrir Navigateur</>
                   )}
                 </button>
               </div>
@@ -229,18 +247,18 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                 className="nf-input"
                 value={token}
                 onChange={(e) => handleTokenChange(e.target.value)}
-                required
-                placeholder="Cliquez sur 'Capturer' ou collez le jeton ici"
+                required={authMode === "token" && !captureSuccess}
+                placeholder="Le jeton sera détecté après connexion"
                 style={captureSuccess ? { borderColor: "var(--nf-success, #22c55e)" } : undefined}
               />
               {captureSuccess && (
                 <p style={{ fontSize: "11px", color: "var(--nf-success, #22c55e)", marginTop: "4px" }}>
-                  ✓ Token capturé automatiquement.
+                  ✓ Session détectée et active.
                 </p>
               )}
               {capturing && (
                 <p style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginTop: "4px" }}>
-                  Un navigateur Chromium s'est ouvert — connectez-vous avec Microsoft SSO. Il se fermera automatiquement.
+                  Une fenêtre Chrome s'est ouverte — connectez-vous. Elle se fermera une fois sur le dashboard.
                 </p>
               )}
             </div>

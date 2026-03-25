@@ -7,8 +7,21 @@ export default function MoodleDashboard() {
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSyncDialogOpen, setIsSyncDialogOpen] = useState(false);
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/v2/moodle/session/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setIsConnected(data.connected);
+      }
+    } catch (err) {
+      setIsConnected(false);
+    }
+  };
 
   const fetchCourses = async () => {
     setLoading(true);
@@ -27,9 +40,13 @@ export default function MoodleDashboard() {
 
   useEffect(() => {
     fetchCourses();
+    fetchStatus();
     
-    // Refresh every 30s to see sync progress
-    const interval = setInterval(fetchCourses, 30000);
+    // Refresh every 60s
+    const interval = setInterval(() => {
+      fetchCourses();
+      fetchStatus();
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -48,6 +65,47 @@ export default function MoodleDashboard() {
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <GraduationCap size={28} color="var(--nf-accent)" />
           <h2 className="nf-page-header__title" style={{ margin: 0 }}>Mes Cours Moodle Docs</h2>
+          {isConnected === false && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px" }}>
+              <span className="nf-badge nf-badge--error" style={{ fontSize: "11px" }}>
+                Session expirée
+              </span>
+              <button 
+                className="nf-btn nf-btn--primary nf-btn--sm" 
+                onClick={async (e) => {
+                  const btn = e.currentTarget;
+                  btn.disabled = true;
+                  btn.innerHTML = '<span class="nf-spin">⏳</span>...';
+                  try {
+                    const res = await fetch(`${API_URL}/api/v2/moodle/login`, { method: "POST" });
+                    const data = await res.json();
+                    if (data.success) {
+                      await fetchStatus();
+                    } else if (data.error) {
+                      alert(`Erreur de connexion : ${data.error}`);
+                    } else {
+                      alert("Échec de la connexion. Assure-toi que Chrome est fermé.");
+                    }
+                  } catch (e: any) {
+                    console.error("Login call failed", e);
+                    alert("Erreur de communication avec le serveur.");
+                  } finally {
+                    btn.disabled = false;
+                    btn.innerText = "Connecter";
+                  }
+                }}
+                style={{ fontSize: "10px", height: "24px", padding: "0 10px", borderRadius: "12px" }}
+                title="Ouvre une fenêtre pour rafraîchir la session Chrome"
+              >
+                Connecter
+              </button>
+            </div>
+          )}
+          {isConnected === true && (
+            <span className="nf-badge nf-badge--success" style={{ marginLeft: "8px", fontSize: "12px" }}>
+              Moodle : Connecté
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
           <button 

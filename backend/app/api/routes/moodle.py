@@ -8,6 +8,7 @@ from app.services.moodle_service import sync_moodle_courses
 from app.services.moodle_browser import capture_moodle_token
 from app.services.rag_engine.ingest import get_ingested_files
 from app.core.config import settings
+from app.services.automation import sync_moodle_native_v2, start_job
 
 router = APIRouter()
 
@@ -97,6 +98,57 @@ async def trigger_moodle_sync(
     )
     
     return {"status": "started", "message": "La synchronisation Moodle a été lancée en arrière-plan."}
+
+@router.post("/moodle/sync/native")
+async def trigger_native_moodle_sync():
+    """
+    Déclenche la nouvelle synchronisation native (Playwright) via le job d'automatisation.
+    """
+    job_id = await start_job("Sync Moodle Native V2", sync_moodle_native_v2())
+    if not job_id:
+        return {"status": "already_running", "message": "Une synchronisation Moodle est déjà en cours."}
+    
+    return {"status": "started", "job_id": job_id, "message": "Synchronisation native lancée."}
+
+@router.get("/moodle/session/status")
+async def get_moodle_session_status():
+    """
+    Vérifie si la session Chrome permet d'accéder à Moodle (version cachée).
+    """
+    from app.services.moodle_sync_service import moodle_service
+    
+    try:
+        is_valid = await moodle_service.check_session_validity_cached(None)
+        return {"connected": is_valid}
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
+
+@router.post("/moodle/login")
+async def trigger_moodle_login():
+    """
+    Ouvre une fenêtre Chrome pour que l'utilisateur se connecte manuellement.
+    """
+    from app.services.moodle_sync_service import moodle_service
+    import traceback
+    import logging
+    
+    logger = logging.getLogger("moodle_api")
+    try:
+        logger.info("[LOGIN] Déclenchement connexion interactive...")
+        result = await moodle_service.login_interactively()
+        logger.info(f"[LOGIN] Résultat: {result}")
+        
+        if isinstance(result, dict):
+            return result
+        
+        return {
+            "success": result, 
+            "message": "Connexion réussie" if result else "Échec de la connexion"
+        }
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        logger.error(f"[LOGIN] CRASH: {e}\n{error_trace}")
+        return {"success": False, "error": str(e), "trace": error_trace}
 
 @router.get("/moodle/courses")
 async def list_moodle_courses():

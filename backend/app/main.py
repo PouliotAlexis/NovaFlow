@@ -1,14 +1,19 @@
-"""
-NovaFlow API - Point d'entrée principal
-
-Ce fichier définit toutes les routes de l'API FastAPI.
-"""
-
 import sys
+import asyncio
+
+# Fix pour Windows : Nécessaire pour Playwright (sous-processus)
+# DOIT ÊTRE APPELÉ AVANT TOUT AUTRE IMPORT OU CRÉATION DE LOOP
+if sys.platform == "win32":
+    try:
+        if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy):
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            print("[WINDOWS FIX] ProactorEventLoopPolicy appliqué avec succès.")
+    except Exception as e:
+        print(f"[WINDOWS FIX] Erreur lors de l'application de la politique: {e}")
+
 import os
 import shutil
 from datetime import datetime
-import asyncio
 import json
 
 
@@ -677,11 +682,16 @@ async def get_all_tasks():
     """Récupère toutes les tâches."""
     # ⚡ AUTOMATION — Déclencher l'analyse périodique (Tasks) si nécessaire
     try:
-        from app.services.automation import should_trigger_periodic_sync, analyze_all_calendars, get_active_jobs, start_job
+        from app.services.automation import should_trigger_periodic_sync, analyze_all_calendars, sync_moodle_native_v2, get_active_jobs, start_job
         existing_jobs = get_active_jobs()
-        is_running = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
-        if not is_running and should_trigger_periodic_sync():
-             await start_job("Analyse Calendrier", analyze_all_calendars(days=30))
+        is_running_cal = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
+        is_running_moodle = any(job["name"] == "Sync Moodle Native V2" for job in existing_jobs)
+        
+        if should_trigger_periodic_sync():
+             if not is_running_cal:
+                 await start_job("Analyse Calendrier", analyze_all_calendars(days=30))
+             if not is_running_moodle:
+                 await start_job("Sync Moodle Native V2", sync_moodle_native_v2())
     except Exception as e:
         print(f"Erreur déclenchement sync depuis tasks api: {e}")
         

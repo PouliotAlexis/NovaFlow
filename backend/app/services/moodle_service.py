@@ -6,9 +6,11 @@ from urllib.parse import urlparse, urlunparse, urlencode, parse_qsl
 from app.services.rag_engine.ingest import ingest_document
 from app.core.config import settings
 
+from .moodle_utils import normalize_moodle_url
+
 class MoodleService:
     def __init__(self, base_url: str, username: str = None, password: str = None, token: str = None):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = normalize_moodle_url(base_url)
         self.username = username
         self.password = password
         self.token = token

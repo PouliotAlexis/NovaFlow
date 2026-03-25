@@ -23,3 +23,6 @@ python-dateutil
 bs4
 icalendar
 playwright
+python-docx
+python-pptx
+PyMuPDF
