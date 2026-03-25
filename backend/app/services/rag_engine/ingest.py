@@ -103,27 +103,59 @@ def query_rag(query: str, n_results: int = 3, course_id: str = None, filenames: 
     # Normalisation des noms de fichiers demandés
     norm_filenames = [normalize_text(f) for f in (filenames or [])]
 
-    if norm_filenames:
-        if len(norm_filenames) == 1:
-            filters.append({"filename": norm_filenames[0]})
-        else:
-            filters.append({"filename": {"$in": norm_filenames}})
-            
-    # Construction du dictionnaire de filtres pour Chroma
-    search_kwargs = {"k": n_results}
-    if len(filters) == 1:
-        search_kwargs["filter"] = filters[0]
-    elif len(filters) > 1:
-        search_kwargs["filter"] = {"$and": filters}
-        
-    # 2. Première tentative de recherche
-    results = vectorstore.similarity_search(query, **search_kwargs)
+    # --- Stratégie de recherche en 3 passes ---
+    # Chroma ne supporte pas $or ni $regex, on fait donc des tentatives séquentielles.
     
-    # 3. STRATÉGIE DE FALLBACK
-    # Si on ne trouve rien avec le filtre par fichier, on tente sans le filtre fichier (mais avec le cours)
-    if not results and norm_filenames and course_id:
-        print(f"[RAG] Aucun résultat avec le filtre fichier. Tentative de recherche large sur le cours {course_id}...")
+    def _build_filter(course_filter, file_field, file_values):
+        """Construit un filtre Chroma compatible."""
+        parts = []
+        if course_filter:
+            parts.append({"course_id": str(course_filter)})
+        if file_values:
+            if len(file_values) == 1:
+                parts.append({file_field: file_values[0]})
+            else:
+                parts.append({file_field: {"$in": file_values}})
+        if len(parts) == 1:
+            return parts[0]
+        elif len(parts) > 1:
+            return {"$and": parts}
+        return None
+
+    results = []
+    
+    # Passe 1 : Chercher par champ 'filename' (le plus propre)
+    if norm_filenames:
+        filt = _build_filter(course_id, "filename", norm_filenames)
+        if filt:
+            results = vectorstore.similarity_search(query, k=n_results, filter=filt)
+            if results:
+                print(f"[RAG] Passe 1 (filename) : {len(results)} résultats.")
+    
+    # Passe 2 : Chercher par champ 'source' (pour les docs ingérés AVANT l'ajout du champ 'filename')
+    if not results and norm_filenames:
+        print(f"[RAG] Passe 1 échouée. Tentative Passe 2 (source basename)...")
+        # On récupère les docs du cours et on filtre manuellement par basename du source
+        course_filter = {"course_id": str(course_id)} if course_id else None
+        if course_filter:
+            all_course_results = vectorstore.similarity_search(query, k=n_results * 3, filter=course_filter)
+            # Normalisation : remplacer les \ par / pour que basename() fonctionne sur les chemins Windows mixtes
+            results = [
+                doc for doc in all_course_results
+                if normalize_text(os.path.basename(doc.metadata.get("source", "").replace("\\", "/"))) in norm_filenames
+            ][:n_results]
+            if results:
+                print(f"[RAG] Passe 2 (source basename) : {len(results)} résultats.")
+
+    # Passe 3 : Fallback - tout le cours sans filtre fichier
+    if not results and course_id:
+        print(f"[RAG] Aucun résultat ciblé. Fallback sur tout le cours {course_id}...")
         results = vectorstore.similarity_search(query, k=n_results, filter={"course_id": str(course_id)})
+    
+    # Passe 4 : Recherche globale (dernier recours)
+    if not results:
+        print(f"[RAG] Aucun résultat même au niveau cours. Recherche globale...")
+        results = vectorstore.similarity_search(query, k=n_results)
 
     # Log de debug
     print(f"[RAG] Requete: '{query}' ({'filtré par cours' if course_id else 'global'})")
@@ -155,13 +187,18 @@ def get_ingested_files(course_id: str):
         if not data or not data["metadatas"]:
             return set()
             
-        # Extraire les noms de fichiers uniques de la métadonnée 'source'
+        # Extraire les noms de fichiers uniques
         ingested_sources = set()
         for meta in data["metadatas"]:
-            source_path = meta.get("source")
-            if source_path:
-                # On ne garde que le nom du fichier pour la comparaison
-                ingested_sources.add(os.path.basename(source_path))
+            # On stocke les noms normalisés pour que le frontend envoie des noms qui matchent
+            source_path = meta.get("source", "")
+            filename = meta.get("filename", "")
+            
+            if filename:
+                ingested_sources.add(normalize_text(filename))
+            elif source_path:
+                # Normaliser les séparateurs de chemin mixtes (Windows)
+                ingested_sources.add(normalize_text(os.path.basename(source_path.replace("\\", "/"))))
         
         return ingested_sources
     except Exception as e:

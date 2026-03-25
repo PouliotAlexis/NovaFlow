@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 import json
 import re
 import os
+from app.core.config import settings
 from app.services.rag_engine.ingest import query_rag
 from app.services.ai_engine import chat_stream
 from app.services.task_manager import TaskManager

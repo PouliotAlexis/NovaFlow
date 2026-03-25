@@ -1,5 +1,21 @@
 [
   {
+    "id": "1becabf1-38e8-48b8-8379-26ac2cf1f731",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Rechercher des informations sur le sujet",
+    "type": "success",
+    "timestamp": "2026-03-25T10:44:28.157491",
+    "read": false
+  },
+  {
+    "id": "088727c9-bff4-4c23-89ba-340f3ea1183c",
+    "title": "Nouvelle tâche (Cours)",
+    "content": "Tâche créée : Chercher des exemples d'utilisation de la méthode",
+    "type": "success",
+    "timestamp": "2026-03-25T10:44:28.155794",
+    "read": false
+  },
+  {
     "id": "24af175b-3758-49a8-9943-1a67afaa8ce4",
     "title": "Nouvelle tâche",
     "content": "L'IA a créé la tâche : Répondre à la question c) du devoir No. 1",

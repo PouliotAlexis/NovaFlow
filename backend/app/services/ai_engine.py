@@ -15,8 +15,8 @@ def _build_system_prompt(system_prompt: str, context: str = "") -> str:
     base = system_prompt or "Tu es NovaFlow, un assistant personnel intelligent et élégant. Réponds TOUJOURS en utilisant un formatage Markdown riche et structuré (listes à puces, texte en gras, tableaux si pertinent). Utilise des emojis avec parcimonie pour agrémenter la réponse. Sépare tes paragraphes par des sauts de ligne clairs."
     
     if context:
-        print(f"DEBUG AI: Context injected ({len(context)} chars). Preview: {context[:200]}...")
-        return (
+        print(f"DEBUG AI: Context injected ({len(context)} chars).")
+        res = (
             f"{base}\n\n"
             "## Outils Disponibles\n"
             "Tu peux effectuer des actions sur le système en utilisant des commandes spécifiques.\n"
@@ -24,10 +24,10 @@ def _build_system_prompt(system_prompt: str, context: str = "") -> str:
             "  Exemple : 'Entendu, je le note.\n[TASK: Acheter du pain]'\n\n"
             "## Contexte documentaire\n"
             "Voici des extraits pertinents des documents de l'utilisateur. "
-            "Utilise ces informations pour répondre de manière précise et contextualisée. "
-            "Cite les sources quand c'est pertinent.\n\n"
-            f"{context}"
+            f"IMPORTANT: Utilise UNIQUEMENT ces informations si elles permettent de répondre, sinon complète avec tes connaissances.\n"
+            f"----------------\n{context}\n----------------\n\n"
         )
+        return res
     else:
         # Même sans contexte RAG, on veut que l'IA sache utiliser les outils
         return (
@@ -117,22 +117,30 @@ async def chat_local_stream(
         {"role": "system", "content": full_system},
         {"role": "user", "content": prompt},
     ]
-    async with httpx.AsyncClient(timeout=600.0) as client:
+    payload = {"model": settings.OLLAMA_MODEL, "messages": messages, "stream": True}
+    print(f"[AI] Calling local model: {settings.OLLAMA_MODEL} at {settings.OLLAMA_HOST} (Timeout: 300s)")
+    
+    async with httpx.AsyncClient(timeout=300.0) as client:
         async with client.stream(
             "POST",
             f"{settings.OLLAMA_HOST}/api/chat",
-            json={"model": settings.OLLAMA_MODEL, "messages": messages, "stream": True},
+            json=payload,
         ) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
                 if not line:
                     continue
                 try:
+                    # Debug : On log CHAQUE ligne brute reçue
+                    # print(f"[RAW OLLAMA] {line}")
                     data = json.loads(line)
                     token = data.get("message", {}).get("content", "")
                     if token:
+                        # Log discret pour ne pas polluer mais voir que ça avance
+                        # print(".", end="", flush=True) 
                         yield token
                     if data.get("done"):
+                        print(f"\n[AI] Local stream finished. (Total response length: {data.get('total_duration', 0)}ns)")
                         break
                 except json.JSONDecodeError:
                     continue
@@ -181,6 +189,7 @@ async def chat_stream(
 ) -> AsyncGenerator[str, None]:
     """Point d'entrée streaming — sélectionne local ou cloud."""
     active_mode = mode or settings.AI_MODE
+    print(f"[AI] Starting stream in mode: {active_mode}")
     if active_mode == "local":
         async for token in chat_local_stream(prompt, system_prompt, context):
             yield token
