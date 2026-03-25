@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useChat, Message } from "ai/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -92,6 +92,12 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
     };
     fetchFiles();
   }, [courseId]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [messages]);
 
   const sidebarRef = React.useRef<HTMLDivElement>(null);
 
@@ -315,6 +321,7 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
               </div>
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         <form className="nf-chat__input-container" onSubmit={handleSubmit}>

@@ -34,7 +34,7 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     }, [messages]);
 
     React.useEffect(() => {
