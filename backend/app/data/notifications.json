@@ -1,5 +1,29 @@
 [
   {
+    "id": "24af175b-3758-49a8-9943-1a67afaa8ce4",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Répondre à la question c) du devoir No. 1",
+    "type": "success",
+    "timestamp": "2026-03-25T10:14:41.080206",
+    "read": false
+  },
+  {
+    "id": "1ce4f74f-8bba-49e1-9c0f-70edbc2a46d6",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Prendre note des dates importantes",
+    "type": "success",
+    "timestamp": "2026-03-25T10:14:41.078388",
+    "read": false
+  },
+  {
+    "id": "2c9c0a23-46e2-43b9-8b3d-9175e98033c1",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Réviser régulièrement",
+    "type": "success",
+    "timestamp": "2026-03-25T10:14:41.075612",
+    "read": false
+  },
+  {
     "id": "b1eea44d-9e3a-46a0-9b5d-d41ff0bdb1c2",
     "title": "Nouvelle tâche",
     "content": "L'IA a créé la tâche : Prendre des notes importantes durant la réunion (Cours: 36577)",

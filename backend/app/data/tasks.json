@@ -1,5 +1,47 @@
 [
   {
+    "id": "a07589d2-8404-43e8-b857-b319c187679e",
+    "title": "Répondre à la question c) du devoir No. 1",
+    "priority": "medium",
+    "meta": "AI Generated (Global)",
+    "done": false,
+    "parent_event_id": null,
+    "created_at": "2026-03-25T10:14:41.079325",
+    "external_id": null,
+    "source": "local",
+    "due_date": null,
+    "description": "",
+    "course_id": null
+  },
+  {
+    "id": "bc7e2d12-e85a-48fc-a80d-a0d8429a3ee2",
+    "title": "Prendre note des dates importantes",
+    "priority": "medium",
+    "meta": "AI Generated (Global)",
+    "done": false,
+    "parent_event_id": null,
+    "created_at": "2026-03-25T10:14:41.077172",
+    "external_id": null,
+    "source": "local",
+    "due_date": null,
+    "description": "",
+    "course_id": null
+  },
+  {
+    "id": "0c12121d-8b93-4752-9712-0fa94bac7d05",
+    "title": "Réviser régulièrement",
+    "priority": "medium",
+    "meta": "AI Generated (Global)",
+    "done": false,
+    "parent_event_id": null,
+    "created_at": "2026-03-25T10:14:41.074593",
+    "external_id": null,
+    "source": "local",
+    "due_date": null,
+    "description": "",
+    "course_id": null
+  },
+  {
     "id": "ae777015-32f1-44a9-b088-0122acaebeb6",
     "title": "Prendre des notes importantes durant la réunion",
     "priority": "medium",

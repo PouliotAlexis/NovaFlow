@@ -6,6 +6,13 @@ from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import OllamaEmbeddings
 from app.core.config import settings
+import unicodedata
+
+def normalize_text(text: str) -> str:
+    """Normalise le texte en NFC pour éviter les problèmes d'accents (NFD vs NFC)."""
+    if not text:
+        return ""
+    return unicodedata.normalize('NFC', text)
 
 # Configuration des dossiers
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
@@ -61,7 +68,7 @@ def ingest_document(file_path: str, course_id: str = None):
     if course_id:
         for chunk in chunks:
             chunk.metadata["course_id"] = str(course_id)
-            chunk.metadata["filename"] = os.path.basename(file_path)
+            chunk.metadata["filename"] = normalize_text(os.path.basename(file_path))
 
     # 4. Stockage
     vectorstore = get_vectorstore()
@@ -88,32 +95,41 @@ def query_rag(query: str, n_results: int = 3, course_id: str = None, filenames: 
         
     vectorstore = get_vectorstore()
     
-    # Gestion du filtrage complexe
-    search_kwargs = {"k": n_results}
-    
+    # 1. Préparation des filtres
     filters = []
     if course_id:
         filters.append({"course_id": str(course_id)})
     
-    if filenames and len(filenames) > 0:
-        # On filtre par le champ 'filename' qu'on vient d'ajouter
-        # Pour les anciens docs, on peut aussi essayer de matcher 'source' 
-        # mais le plus propre est d'utiliser 'filename'
-        if len(filenames) == 1:
-            filters.append({"filename": filenames[0]})
+    # Normalisation des noms de fichiers demandés
+    norm_filenames = [normalize_text(f) for f in (filenames or [])]
+
+    if norm_filenames:
+        if len(norm_filenames) == 1:
+            filters.append({"filename": norm_filenames[0]})
         else:
-            filters.append({"filename": {"$in": filenames}})
+            filters.append({"filename": {"$in": norm_filenames}})
             
+    # Construction du dictionnaire de filtres pour Chroma
+    search_kwargs = {"k": n_results}
     if len(filters) == 1:
         search_kwargs["filter"] = filters[0]
     elif len(filters) > 1:
         search_kwargs["filter"] = {"$and": filters}
         
+    # 2. Première tentative de recherche
     results = vectorstore.similarity_search(query, **search_kwargs)
     
+    # 3. STRATÉGIE DE FALLBACK
+    # Si on ne trouve rien avec le filtre par fichier, on tente sans le filtre fichier (mais avec le cours)
+    if not results and norm_filenames and course_id:
+        print(f"[RAG] Aucun résultat avec le filtre fichier. Tentative de recherche large sur le cours {course_id}...")
+        results = vectorstore.similarity_search(query, k=n_results, filter={"course_id": str(course_id)})
+
     # Log de debug
     print(f"[RAG] Requete: '{query}' ({'filtré par cours' if course_id else 'global'})")
     print(f"[RAG] {len(results)} résultats trouvés.")
+    
+    # ...
     for i, doc in enumerate(results):
         filename = doc.metadata.get('filename') or os.path.basename(doc.metadata.get('source', 'Inconnu'))
         print(f"  [{i+1}] {filename} -> {doc.page_content[:80]}...")
