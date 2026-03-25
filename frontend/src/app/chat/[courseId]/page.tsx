@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useChat, Message } from "ai/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Send, BookOpen, Paperclip, AlertTriangle, Loader2, ExternalLink, CheckSquare, Square } from "lucide-react";
+import { ArrowLeft, Send, BookOpen, Paperclip, AlertTriangle, Loader2, ExternalLink, CheckSquare, Square, Sparkles, User } from "lucide-react";
 import Link from "next/link";
 
 interface CourseFile {
@@ -300,8 +300,11 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
             </div>
           )}
           {messages.map((m: Message) => (
-            <div key={m.id} className={`nf-chat__message nf-chat__message--${m.role}`}>
-              <div className={`nf-chat__message-content ${m.role === 'assistant' ? 'nf-markdown' : ''}`}>
+            <div key={m.id} className={`nf-chat__message nf-chat__message--${m.role === 'assistant' ? 'ai' : 'user'}`}>
+              <div className={`nf-chat__avatar nf-chat__avatar--${m.role === 'assistant' ? 'ai' : 'user'}`}>
+                {m.role === 'assistant' ? <Sparkles size={16} color="white" /> : <User size={16} />}
+              </div>
+              <div className={`nf-chat__bubble nf-chat__bubble--${m.role === 'assistant' ? 'ai' : 'user'} ${m.role === 'assistant' ? 'nf-markdown' : ''}`}>
                 {m.role === 'assistant' ? (
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {m.content}

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MessageSquare, Zap, User, Trash2, Loader2, AlertCircle, Send } from "lucide-react";
+import { MessageSquare, Sparkles, User, Trash2, Loader2, AlertCircle, Send } from "lucide-react";
 
 interface Message {
     id: string;
@@ -89,7 +89,7 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                 body: JSON.stringify({
                     message: userMsg.content,
                     system_prompt:
-                        "Tu es NovaFlow, un assistant personnel intelligent. Réponds de manière concise et utile en français.",
+                        "Tu es NovaFlow, un assistant personnel intelligent et élégant. Réponds TOUJOURS en utilisant un formatage Markdown riche et structuré (listes à puces, texte en gras, tableaux si pertinent). Utilise des emojis avec parcimonie pour agrémenter la réponse. Sépare tes paragraphes par des sauts de ligne clairs.",
                     course_id: courseId,
                 }),
             });
@@ -187,7 +187,7 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                                 display: "flex", alignItems: "center", justifyContent: "center",
                                 background: msg.role === "ai" ? "var(--nf-accent-gradient)" : "var(--nf-bg-tertiary)",
                             }}>
-                                {msg.role === "ai" ? <Zap size={14} color="white" /> : <User size={14} />}
+                                {msg.role === "ai" ? <Sparkles size={14} color="white" /> : <User size={14} />}
                             </div>
                             <div className={`nf-chat__bubble nf-chat__bubble--${msg.role} ${msg.role === "ai" ? "nf-markdown" : ""}`} style={{
                                 padding: "6px 10px", borderRadius: "10px",
@@ -263,7 +263,7 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                         <div key={msg.id}
                             className={`nf-chat__message nf-chat__message--${msg.role}`}>
                             <div className={`nf-chat__avatar nf-chat__avatar--${msg.role}`}>
-                                {msg.role === "ai" ? <Zap size={16} color="white" /> : <User size={16} />}
+                                {msg.role === "ai" ? <Sparkles size={16} color="white" /> : <User size={16} />}
                             </div>
                             <div className={`nf-chat__bubble nf-chat__bubble--${msg.role} ${msg.role === "ai" ? "nf-markdown" : ""}`}>
                                 {msg.role === "ai" ? (
