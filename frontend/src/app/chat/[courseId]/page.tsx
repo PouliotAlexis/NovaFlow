@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useChat, Message } from "ai/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,6 +19,48 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
   const [files, setFiles] = useState<CourseFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [selectedFilenames, setSelectedFilenames] = useState<Set<string>>(new Set());
+  
+  // États pour le redimensionnement de la barre latérale
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback((e: MouseEvent) => {
+    if (isResizing) {
+      const newWidth = e.clientX;
+      if (newWidth > 240 && newWidth < 600) {
+        setSidebarWidth(newWidth);
+      }
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener("mousemove", resize);
+      window.addEventListener("mouseup", stopResizing);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    } else {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
+    }
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
+    };
+  }, [isResizing, resize, stopResizing]);
 
   const filenamesArray = useMemo(() => Array.from(selectedFilenames), [selectedFilenames]);
 
@@ -51,6 +93,46 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
     fetchFiles();
   }, [courseId]);
 
+  const sidebarRef = React.useRef<HTMLDivElement>(null);
+
+  const handleDoubleClick = useCallback(() => {
+    if (!sidebarRef.current) return;
+    
+    const sidebar = sidebarRef.current;
+    
+    // 1. On enlève le overflow: hidden des spans pour que le texte prenne sa taille naturelle
+    const spans = sidebar.querySelectorAll('.nf-sidebar__item span');
+    const originalSpanStyles: string[] = [];
+    spans.forEach((span, i) => {
+      const el = span as HTMLElement;
+      originalSpanStyles[i] = el.style.cssText;
+      el.style.overflow = "visible";
+      el.style.textOverflow = "clip";
+    });
+
+    // 2. Sauvegarder les styles du sidebar
+    const origCSS = sidebar.style.cssText;
+    
+    // 3. On retire le sidebar du flux flex et on le force à prendre sa taille minimale
+    sidebar.style.position = "absolute";
+    sidebar.style.width = "min-content";
+    sidebar.style.minWidth = "0";
+
+    // 4. On mesure la largeur naturelle du contenu
+    const naturalWidth = sidebar.offsetWidth;
+
+    // 5. On restaure tout
+    sidebar.style.cssText = origCSS;
+    spans.forEach((span, i) => {
+      const el = span as HTMLElement;
+      el.style.cssText = originalSpanStyles[i];
+    });
+
+    // 6. On applique la largeur mesurée (entre 260px et 600px)
+    const finalWidth = Math.min(Math.max(naturalWidth + 4, 260), 600);
+    setSidebarWidth(finalWidth);
+  }, [files]);
+
   const toggleFileSelection = (filename: string) => {
     const newSelection = new Set(selectedFilenames);
     if (newSelection.has(filename)) {
@@ -71,7 +153,11 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
 
   return (
     <div className="nf-layout">
-      <div className="nf-sidebar">
+      <div 
+        ref={sidebarRef}
+        className="nf-sidebar" 
+        style={{ width: `${sidebarWidth}px`, flexBasis: `${sidebarWidth}px` }}
+      >
         <Link href="/?view=courses" className="nf-sidebar__item">
           <ArrowLeft size={20} />
           Retour aux cours
@@ -182,6 +268,23 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
           </div>
         </div>
       </div>
+
+      {/* Barre de redimensionnement */}
+      <div 
+        onMouseDown={startResizing}
+        onDoubleClick={handleDoubleClick}
+        style={{
+          width: "4px",
+          height: "100%",
+          cursor: "col-resize",
+          background: isResizing ? "var(--nf-accent)" : "transparent",
+          transition: "background 0.2s",
+          zIndex: 10,
+          marginLeft: "-2px"
+        }}
+        onMouseOver={(e) => !isResizing && (e.currentTarget.style.background = "var(--nf-border)")}
+        onMouseOut={(e) => !isResizing && (e.currentTarget.style.background = "transparent")}
+      />
 
       <main className="nf-main nf-chat-layout">
         <header className="nf-header">
