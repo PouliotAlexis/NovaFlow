@@ -1,73 +1,73 @@
-# ⚡ Master Plan de Migration : NovaFlow Cloud-Hybrid
+# 🧩 Context for AI: NovaFlow Cloud Migration (v1.2.0)
 
-Ce plan guide la migration complète de NovaFlow : du stockage local (JSON/Local Files) vers une architecture Cloud (Supabase/Drive) + IA Locale (Ollama).
-
----
-
-## 🛠️ BLOC 1 : Migration de la Persistance (SQL)
-**Objectif :** Créer le nouveau système de stockage qui remplacera les fichiers `.json` locaux.
-
-**Prompt pour l'IA :**
-> "Je migre NovaFlow d'un stockage JSON local vers Supabase. Génère un script SQL pour configurer la base de données :
-> 1. Active `pgvector`.
-> 2. Crée `profiles` (id, user_id, ollama_url, model_name).
-> 3. Crée `tasks` (id, user_id, title, status, due_date) - cela remplacera `tasks.json`.
-> 4. Crée `documents` (id, user_id, google_drive_id, file_name, summary, embedding vector(768)).
-> 5. Active le RLS : `auth.uid() = user_id` sur toutes les tables pour isoler les données des utilisateurs.
-> 6. Crée un trigger pour initialiser un profil par défaut lors d'un nouvel 'Auth Signup'."
+## 📖 1. Project Overview & Identity
+**NovaFlow** is a privacy-first personal assistant designed for students and professionals.
+* **Current State:** Local-first architecture (Ollama for LLM, SQLite for metadata, ChromaDB for RAG, local JSON files for configurations).
+* **Target State:** Cloud-Hybrid architecture. High availability, multi-device sync, and scalable processing.
+* **Core Constraint:** Strict "Privacy-First" approach. No PII (Personally Identifiable Information) should ever reach the cloud LLMs without being redacted by the local Sanitizer layer.
 
 ---
 
-## 🐍 BLOC 2 : Refactoring Backend - Suppression du Local
-**Objectif :** Remplacer toute la logique de lecture/écriture de fichiers par des appels API Supabase.
-
-**Prompt pour l'IA :**
-> "Analyse mon `database_service.py` actuel qui utilise des fichiers JSON. Réécris-le entièrement pour utiliser `supabase-py`. 
-> 1. Supprime toute logique liée aux fichiers `.json` ou dossiers `/data`.
-> 2. Implémente un middleware FastAPI qui valide le JWT de l'utilisateur (Bearer Token) envoyé par le frontend.
-> 3. Toutes les fonctions (get_tasks, add_task, etc.) doivent désormais utiliser le client Supabase et filtrer par `user_id` récupéré via le token."
-
----
-
-## 📂 BLOC 3 : Refactoring RAG - Adieu ChromaDB & Local PDFs
-**Objectif :** Basculer la recherche vectorielle vers Supabase (pgvector) et le stockage vers Google Drive.
-
-**Prompt pour l'IA :**
-> "Je veux supprimer la dépendance à ChromaDB et au stockage local des PDF. Modifie le pipeline RAG :
-> 1. Crée un `google_drive_service.py` pour lire les PDF via l'API Google (avec `access_token`).
-> 2. Modifie le script d'ingestion : au lieu de sauvegarder dans un dossier local, upload le PDF sur Google Drive, extrait le texte, génère les embeddings et sauvegarde-les dans la table `documents` de Supabase (pgvector).
-> 3. La fonction de recherche doit maintenant faire un appel SQL `match_documents` sur Supabase au lieu de requêter ChromaDB."
+## 🏗️ 2. Technical Stack Evolution
+| Component          | Current (Local)            | Target (Cloud/Hybrid)                   |
+| :----------------- | :------------------------- | :-------------------------------------- |
+| **Backend** | FastAPI (Python 3.11+)     | FastAPI (Containerized/Docker)          |
+| **Database** | SQLite / Local JSON        | PostgreSQL (Supabase or AWS RDS)        |
+| **Vector Store** | ChromaDB (Local)           | Pinecone or MongoDB Atlas Vector Search |
+| **LLM Engine** | Ollama (Llama 3)           | OpenAI (GPT-4o) / Azure OpenAI          |
+| **Privacy Layer** | Local processing           | `services/sanitizer.py` (Redaction)     |
+| **Authentication** | None / Local               | OAuth2 (Google/GitHub via Supabase)     |
 
 ---
 
-## 🌐 BLOC 4 : Frontend - Système d'Auth & Profil Cloud
-**Objectif :** Gérer l'identité utilisateur et ses préférences cloud.
-
-**Prompt pour l'IA :**
-> "Installe `@supabase/auth-helpers-nextjs` et modifie le frontend :
-> 1. Remplace la logique d'accès 'invité' par un vrai Login/Register Supabase (Email ou Google).
-> 2. Crée une page 'Paramètres' pour sauvegarder l'URL locale de l'IA (ex: http://localhost:11434) dans la table `profiles` de Supabase.
-> 3. À la connexion, charge ces préférences dans un store global (Zustand/Context) pour que l'app sache où trouver Ollama."
-
----
-
-## 🧠 BLOC 5 : Frontend - Le Connecteur IA Hybride
-**Objectif :** Finaliser la boucle : données du Cloud ➡️ Intelligence Locale.
-
-**Prompt pour l'IA :**
-> "Modifie le composant `Chat.tsx` pour l'architecture hybride :
-> 1. Le frontend appelle le backend pour récupérer le contexte (les chunks de Supabase).
-> 2. Une fois le contexte reçu, le frontend fait un `fetch` DIRECT vers l'instance locale Ollama (`profile.ollama_url`).
-> 3. Le prompt envoyé à Ollama doit inclure : [Contexte Supabase] + [Question User].
-> 4. Gère les erreurs de connexion (CORS) avec un message pédagogique sur `OLLAMA_ORIGINS`."
+## 📂 3. Repository Structure & Key Files
+* `backend/app.py`: FastAPI entry point.
+* `backend/services/ai_engine.py`: Handles LLM logic (Target for Cloud API refactor).
+* `backend/services/rag_manager.py`: Manages embeddings and context retrieval.
+* `backend/services/sanitizer.py`: Logic for anonymizing/de-anonymizing data.
+* `backend/models/`: SQL Alchemy/Pydantic models (Needs migration to PG schema).
+* `scripts/`: Utilities for data ingestion.
 
 ---
 
-## 🚀 BLOC 6 : Déploiement Cloud (Production)
-**Objectif :** Préparer les fichiers pour Vercel (Front) et Render (Back).
+## 🛠️ 4. Detailed Migration Roadmap
 
-**Prompt pour l'IA :**
-> "Prépare le déploiement :
-> 1. Génère un `Dockerfile` pour le backend FastAPI sans aucune dépendance à SQLite ou ChromaDB.
-> 2. Crée un `vercel.json` pour le frontend.
-> 3. Rédige un `README_DEPLOY.md` listant toutes les variables d'environnement nécessaires (SUPABASE_URL, GOOGLE_CLIENT_ID, etc.) et explique comment configurer les CORS sur le backend pour autoriser le domaine de production."
+### Phase 1: Database & Persistence
+* **Objective:** Replace SQLite with a robust PostgreSQL schema.
+* **Task:** Create a `migrate_db.py` script to map existing JSON/SQLite records to a new SQL schema.
+* **Feature:** Add a `sync_status` column to track records successfully pushed to the cloud.
+
+### Phase 2: Cloud RAG Integration
+* **Objective:** Move from local ChromaDB to a cloud Vector DB.
+* **Task:** Refactor `rag_manager.py` to support remote providers.
+* **Constraint:** If the embedding model changes (e.g., from `all-MiniLM-L6-v2` to `text-embedding-3-small`), provide a script to re-index all documents.
+
+### Phase 3: The "Sanitizer" Wrapper
+* **Objective:** Ensure zero data leaks to OpenAI/Azure.
+* **Logic Flow:**
+    1.  User Query -> `sanitizer.redact(query)` -> Replaces "Alexis" with "[USER_1]".
+    2.  Redacted Query -> Cloud LLM -> Response.
+    3.  Response -> `sanitizer.restore(response)` -> Replaces "[USER_1]" with "Alexis".
+* **Task:** Refactor `ai_engine.py` to make this flow mandatory for all cloud calls.
+
+### Phase 4: Hybrid Mode & Fallback
+* **Objective:** Keep the "Local" soul of NovaFlow alive.
+* **Task:** Implement a `toggle_mode()` in the backend. If `CLOUD_API_KEY` is missing or the server is offline, the system must automatically fallback to the local `Ollama` instance.
+
+---
+
+## ⚠️ 5. Constraints & Edge Cases
+1.  **Token Limits:** Cloud LLMs have context windows. Implement smart trimming in the RAG pipeline.
+2.  **SSE Streaming:** All cloud responses must use Server-Sent Events (streaming) to ensure a high-quality UX.
+3.  **Data Sovereignty:** Users must be able to choose which "collections" stay 100% local and which go to the cloud.
+
+---
+
+## 🤖 AI Instructions for Implementation
+1.  **Analyze** the current `backend/` files to map existing functions.
+2.  **Refactor** code iteratively: Start with the Database, then the AI Engine, then the RAG.
+3.  **Maintain Type Safety:** Use Pydantic models for all data transfers.
+4.  **Error Handling:** Implement robust retry logic for Cloud API timeouts (429/500 errors).
+
+---
+*Status: Ready for Migration v1.2.0*
