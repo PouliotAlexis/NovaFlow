@@ -38,7 +38,8 @@ export default function RegisterPage() {
       }
 
       // 2. Connexion automatique après inscription
-      const loginResponse = await fetch("/api/auth/login", {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const loginResponse = await fetch(`${apiBaseUrl}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
