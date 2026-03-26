@@ -1,31 +1,24 @@
 """
-NovaFlow - Service Event Manager (OOP Version)
+NovaFlow - Service Event Manager (SQLAlchemy Version)
 
-Manages NovaFlow events (Source of Truth) using Object-Oriented Principles.
-A NovaFlowEvent is a persistent object linking an external event (Google, Outlook, etc.)
-to its internal child tasks.
+Manages NovaFlow events using SQLAlchemy and PostgreSQL/SQLite.
+A Event in DB links to its internal child tasks via the Task.parent_event_id relation.
 """
 
-import json
-import os
 import uuid
 import datetime
+import os
+import json
 from typing import List, Dict, Optional, Any
 from app.core.config import settings
-
-from app.services.task_manager import TaskManager
-
-
-# Chemin du fichier de données
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-EVENTS_FILE = os.path.join(DATA_DIR, "events.json")
-
-def _ensure_data_dir():
-    os.makedirs(DATA_DIR, exist_ok=True)
+from app.db.database import SessionLocal
+from app.db.models import Event as DBEvent, Task as DBTask, MoodleExtCourse as DBMoodleCourse
+from sqlalchemy.orm import Session
 
 class NovaFlowEvent:
     def __init__(self, id: str, external_id: str, source: str, title: str, 
-                 start: str, updated: str, desc_hash: str, task_ids: List[str] = None, created_at: str = None):
+                 start: str, updated: str, desc_hash: str, task_ids: List[str] = None, 
+                 created_at: str = None, category: str = None):
         self.id = id
         self.external_id = external_id
         self.source = source
@@ -34,33 +27,8 @@ class NovaFlowEvent:
         self.updated = updated
         self.desc_hash = desc_hash
         self.task_ids = task_ids or []
-        self.created_at = created_at or datetime.datetime.now().isoformat()
-
-    def add_task(self, task_id: str):
-        if task_id not in self.task_ids:
-            self.task_ids.append(task_id)
-
-    def remove_task(self, task_id: str):
-        if task_id in self.task_ids:
-            self.task_ids.remove(task_id)
-
-    def clear_tasks(self) -> int:
-        """Removes and deletes all child tasks."""
-        count = 0
-        tm = TaskManager.instance()
-        for tid in list(self.task_ids): # Copy list to iterate safely
-            if tm.delete_task(tid):
-                count += 1
-        self.task_ids = []
-        return count
-
-    def update(self, updates: Dict[str, Any]):
-        if "title" in updates: self.title = updates["title"]
-        if "updated" in updates: self.updated = updates["updated"]
-        if "start" in updates: self.start = updates["start"]
-        if "desc_hash" in updates: self.desc_hash = updates["desc_hash"]
-        # task_ids managed separately via add/remove methods usually, but can be set here if needed
-        if "task_ids" in updates: self.task_ids = updates["task_ids"]
+        self.created_at = created_at
+        self.category = category
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -72,29 +40,32 @@ class NovaFlowEvent:
             "updated": self.updated,
             "desc_hash": self.desc_hash,
             "task_ids": self.task_ids,
-            "created_at": self.created_at
+            "created_at": self.created_at,
+            "category": self.category
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NovaFlowEvent':
+    def from_db(cls, db_event: DBEvent) -> 'NovaFlowEvent':
+        # On récupère les IDs des tâches associées
+        tids = [t.id for t in db_event.tasks]
         return cls(
-            id=data["id"],
-            external_id=data["external_id"],
-            source=data["source"],
-            title=data["title"],
-            start=data["start"],
-            updated=data["updated"],
-            desc_hash=data["desc_hash"],
-            task_ids=data.get("task_ids", []),
-            created_at=data.get("created_at")
+            id=db_event.id,
+            external_id=db_event.external_id,
+            source=db_event.source,
+            title=db_event.title,
+            start=db_event.start,
+            updated=db_event.updated,
+            desc_hash=db_event.desc_hash,
+            task_ids=tids,
+            created_at=db_event.created_at.isoformat() if db_event.created_at else None,
+            category=db_event.category
         )
 
 class EventManager:
     _instance = None
 
     def __init__(self):
-        self._events: Dict[str, NovaFlowEvent] = {}
-        self._load_events()
+        pass
 
     @classmethod
     def instance(cls):
@@ -102,184 +73,154 @@ class EventManager:
             cls._instance = cls()
         return cls._instance
 
-    def _load_events(self):
-        if not os.path.exists(EVENTS_FILE):
-             self._events = {}
-             return
-        try:
-            with open(EVENTS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                # data is dict id -> event_dict
-                self._events = {eid: NovaFlowEvent.from_dict(edata) for eid, edata in data.items()}
-        except (json.JSONDecodeError, FileNotFoundError):
-            self._events = {}
-
     def reload(self):
-        """Recharge les données depuis le disque (utile après un reset)."""
-        self._load_events()
+        pass
 
-    def _save_events(self):
-        _ensure_data_dir()
-        data = {eid: evt.to_dict() for eid, evt in self._events.items()}
-        temp_file = EVENTS_FILE + ".tmp"
-        with open(temp_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(temp_file, EVENTS_FILE)
-
-    def get_all_events(self) -> List[NovaFlowEvent]:
-        return list(self._events.values())
+    def get_all_events(self, user_id: str = None) -> List[NovaFlowEvent]:
+        with SessionLocal() as db:
+            query = db.query(DBEvent)
+            if user_id:
+                query = query.filter(DBEvent.user_id == user_id)
+            else:
+                query = query.filter(DBEvent.user_id == None)
+            events = query.all()
+            return [NovaFlowEvent.from_db(e) for e in events]
 
     def get_event(self, event_id: str) -> Optional[NovaFlowEvent]:
-        return self._events.get(event_id)
+        with SessionLocal() as db:
+            db_event = db.query(DBEvent).filter(DBEvent.id == event_id).first()
+            return NovaFlowEvent.from_db(db_event) if db_event else None
 
     def get_event_by_external_id(self, external_id: str, source: str) -> Optional[NovaFlowEvent]:
-        for evt in self._events.values():
-            if evt.external_id == external_id and evt.source == source:
-                return evt
-        return None
+        with SessionLocal() as db:
+            db_event = db.query(DBEvent).filter(DBEvent.external_id == external_id, DBEvent.source == source).first()
+            return NovaFlowEvent.from_db(db_event) if db_event else None
 
-    def create_event(self, external_id: str, source: str, title: str, start: str, updated: str, desc_hash: str) -> NovaFlowEvent:
-        existing = self.get_event_by_external_id(external_id, source)
-        if existing:
-            return existing
+    def create_event(self, external_id: str, source: str, title: str, start: str, updated: str, desc_hash: str, user_id: str = None) -> NovaFlowEvent:
+        with SessionLocal() as db:
+            existing = db.query(DBEvent).filter(DBEvent.external_id == external_id, DBEvent.source == source).first()
+            if existing:
+                return NovaFlowEvent.from_db(existing)
 
-        new_id = str(uuid.uuid4())
-        new_event = NovaFlowEvent(new_id, external_id, source, title, start, updated, desc_hash)
-        self._events[new_id] = new_event
-        self._save_events()
-        return new_event
+            new_id = str(uuid.uuid4())
+            db_event = DBEvent(
+                id=new_id,
+                external_id=external_id,
+                source=source,
+                title=title,
+                start=start,
+                updated=updated,
+                desc_hash=desc_hash,
+                user_id=user_id
+            )
+            db.add(db_event)
+            db.commit()
+            db.refresh(db_event)
+            return NovaFlowEvent.from_db(db_event)
 
     def update_event(self, event_id: str, updates: Dict[str, Any]) -> Optional[NovaFlowEvent]:
-        evt = self.get_event(event_id)
-        if evt:
-            evt.update(updates)
-            self._save_events()
-            return evt
-        return None
+        with SessionLocal() as db:
+            db_event = db.query(DBEvent).filter(DBEvent.id == event_id).first()
+            if db_event:
+                if "title" in updates: db_event.title = updates["title"]
+                if "updated" in updates: db_event.updated = updates["updated"]
+                if "start" in updates: db_event.start = updates["start"]
+                if "desc_hash" in updates: db_event.desc_hash = updates["desc_hash"]
+                if "category" in updates: db_event.category = updates["category"]
+                
+                db.commit()
+                db.refresh(db_event)
+                return NovaFlowEvent.from_db(db_event)
+            return None
 
     def delete_event(self, event_id: str) -> bool:
-        evt = self.get_event(event_id)
-        if not evt:
-            print(f"DEBUG: Delete failed - Event {event_id} not found")
-            return False
-        
-        count_deleted = evt.clear_tasks()
-        print(f"🗑️ Event {evt.title} supprimé avec {count_deleted} tâches enfants. (Internal ID: {event_id})")
-        
-        del self._events[event_id]
-        self._save_events()
-        print(f"DEBUG: Event deleted and saved.")
-        return True
+        with SessionLocal() as db:
+            db_event = db.query(DBEvent).filter(DBEvent.id == event_id).first()
+            if not db_event:
+                return False
+            
+            # Supprimer les tâches d'abord (ou laisser cascade si configuré)
+            # Ici on le fait explicitement par sécurité
+            db.query(DBTask).filter(DBTask.parent_event_id == event_id).delete()
+            
+            db.delete(db_event)
+            db.commit()
+            return True
 
     def add_task_to_event(self, event_id: str, task_id: str) -> bool:
-        evt = self.get_event(event_id)
-        if evt:
-            evt.add_task(task_id)
-            self._save_events()
-            return True
-        return False
+        with SessionLocal() as db:
+            db_task = db.query(DBTask).filter(DBTask.id == task_id).first()
+            if db_task:
+                db_task.parent_event_id = event_id
+                db.commit()
+                return True
+            return False
     
     def remove_task_from_event(self, event_id: str, task_id: str) -> bool:
-        evt = self.get_event(event_id)
-        if evt:
-            evt.remove_task(task_id)
-            self._save_events()
-            return True
-        return False
+        with SessionLocal() as db:
+            db_task = db.query(DBTask).filter(DBTask.id == task_id, DBTask.parent_event_id == event_id).first()
+            if db_task:
+                db_task.parent_event_id = None
+                db.commit()
+                return True
+            return False
 
     def clear_event_tasks(self, event_id: str) -> int:
-        evt = self.get_event(event_id)
-        if evt:
-            count = evt.clear_tasks()
-            self._save_events()
+        with SessionLocal() as db:
+            count = db.query(DBTask).filter(DBTask.parent_event_id == event_id).delete()
+            db.commit()
             return count
-        return 0
 
     def find_course_id_by_text(self, text: str) -> Optional[str]:
-        """Tente de trouver un ID de cours mentionné dans un texte (via code ou nom)."""
         if not text:
             return None
         
-        # 1. Chercher un code de cours (ex: PHQ334, IFT-1000)
         import re
         code_match = re.search(r'([A-Za-z]{3,4}-?\d{3,4})', text)
         target_code = code_match.group(1).upper() if code_match else None
         
-        # 2. Charger les cours connus (Extension Moodle + dossier downloads)
-        all_courses = []
-        from app.services.moodle_extension_service import _load_ext_courses
-        try:
-            all_courses.extend(_load_ext_courses())
-        except: pass
+        # Charger les cours depuis la DB (migrés depuis JSON précédemment)
+        with SessionLocal() as db:
+            all_courses = db.query(DBMoodleCourse).all()
             
-        moodle_downloads = settings.MOODLE_DOWNLOADS_DESTINATION
-        if os.path.exists(moodle_downloads):
-            for cid in os.listdir(moodle_downloads):
-                info_path = os.path.join(moodle_downloads, cid, "course_info.json")
-                if os.path.exists(info_path):
-                    with open(info_path, "r", encoding="utf-8") as f:
-                        try:
-                            info = json.load(f)
-                            # Normaliser pour correspondre au format moodle_extension
-                            all_courses.append({
-                                "id": cid,
-                                "fullname": info.get("fullname") or info.get("name"),
-                                "shortname": info.get("shortname", "")
-                            })
-                        except: pass
+            # 1. Match via code
+            if target_code:
+                for c in all_courses:
+                    short = (c.shortname or "").upper()
+                    full = (c.fullname or "").upper()
+                    if target_code in short or target_code in full:
+                        return c.id
 
-        # 3. Match via code (Priorité)
-        if target_code:
+            # 2. Match via mots-clés
+            text_upper = text.upper()
             for c in all_courses:
-                shortname = (c.get("shortname") or "").upper()
-                fullname = (c.get("fullname") or "").upper()
-                if target_code in shortname or target_code in fullname:
-                    return str(c.get("id"))
-
-        # 4. Match via mots-clés (Fallback)
-        text_upper = text.upper()
-        for c in all_courses:
-            fullname = (c.get("fullname") or "").upper()
-            if not fullname or len(fullname) < 3: continue
-            
-            # Si le nom du cours est long, on cherche des mots significatifs (min 4 lettres)
-            words = [w for w in fullname.split() if len(w) >= 4]
-            for word in words:
-                if word in text_upper:
-                    return str(c.get("id"))
-            
-            # Match exact sur le nom du cours si présent
-            if fullname in text_upper:
-                return str(c.get("id"))
+                full = (c.fullname or "").upper()
+                if not full or len(full) < 3: continue
+                words = [w for w in full.split() if len(w) >= 4]
+                for word in words:
+                    if word in text_upper:
+                        return c.id
+                if full in text_upper:
+                    return c.id
             
         return None
 
     def get_or_create_course_event(self, course_id: str) -> Optional[str]:
-        """Trouve ou crée un événement pivot pour associer les tâches d'un cours."""
         if not course_id:
             return None
         
         ext_id = f"moodle_course_{course_id}"
-        
-        # 1. Vérifier si l'événement existe déjà
         existing = self.get_event_by_external_id(ext_id, "moodle_ai") or self.get_event_by_external_id(ext_id, "moodle")
         if existing:
             return existing.id
         
-        # 2. Sinon, essayer de trouver le nom du cours
+        # Tenter de trouver le nom
         course_name = f"Cours {course_id}"
-        try:
-            # Tenter de lire le dossier de téléchargement Moodle
-            moodle_dir = os.path.join(settings.MOODLE_DOWNLOADS_DESTINATION, str(course_id))
-            info_path = os.path.join(moodle_dir, "course_info.json")
-            if os.path.exists(info_path):
-                with open(info_path, "r", encoding="utf-8") as f:
-                    info = json.load(f)
-                    course_name = info.get("fullname") or info.get("name") or course_name
-        except Exception as e:
-            print(f"⚠️ Erreur récupération nom du cours {course_id}: {e}")
+        with SessionLocal() as db:
+            c = db.query(DBMoodleCourse).filter(DBMoodleCourse.id == course_id).first()
+            if c:
+                course_name = c.fullname
 
-        # 3. Créer l'événement pivot
         now_iso = datetime.datetime.now().isoformat()
         new_event = self.create_event(
             external_id=ext_id,
@@ -289,18 +230,15 @@ class EventManager:
             updated=now_iso,
             desc_hash="ai_pivot_event"
         )
-        # On ajoute une catégorie pour le filtrage frontend
         self.update_event(new_event.id, {"category": course_name})
-        
-        print(f"📌 Pivot event created: {new_event.id} ({course_name}) with source 'moodle_ai'")
         return new_event.id
 
 # --- Module Wrapper Functions ---
 
 _manager = EventManager.instance()
 
-def get_all_events() -> List[Dict[str, Any]]:
-    return [e.to_dict() for e in _manager.get_all_events()]
+def get_all_events(user_id: str = None) -> List[Dict[str, Any]]:
+    return [e.to_dict() for e in _manager.get_all_events(user_id=user_id)]
 
 def get_event(event_id: str) -> Optional[Dict[str, Any]]:
     evt = _manager.get_event(event_id)
@@ -310,8 +248,8 @@ def get_event_by_external_id(external_id: str, source: str) -> Optional[Dict[str
     evt = _manager.get_event_by_external_id(external_id, source)
     return evt.to_dict() if evt else None
 
-def create_event(external_id: str, source: str, title: str, start: str, updated: str, desc_hash: str) -> Dict[str, Any]:
-    return _manager.create_event(external_id, source, title, start, updated, desc_hash).to_dict()
+def create_event(external_id: str, source: str, title: str, start: str, updated: str, desc_hash: str, user_id: str = None) -> Dict[str, Any]:
+    return _manager.create_event(external_id, source, title, start, updated, desc_hash, user_id=user_id).to_dict()
 
 def update_event(event_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     evt = _manager.update_event(event_id, updates)

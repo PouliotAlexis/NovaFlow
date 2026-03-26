@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { BarChart3 } from "lucide-react";
+import { api } from "@/services/api";
 
 export default function DailySummary() {
     const [stats, setStats] = useState({ total: 0, completed: 0, tasks: 0, ticks: 0 });
 
     const fetchStats = useCallback(async () => {
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-            const res = await fetch(`${API_URL}/api/tasks`);
+            const res = await api.get("/api/tasks");
             if (res.ok) {
                 const tasks = await res.json();
                 const total = tasks.length;

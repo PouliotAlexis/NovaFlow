@@ -20,7 +20,7 @@ const INITIAL_MESSAGES: Message[] = [
     },
 ];
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { api } from "@/services/api";
 
 interface ChatPanelProps {
     compact?: boolean;
@@ -51,7 +51,7 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
     React.useEffect(() => {
         const fetchHistory = async () => {
             try {
-                const response = await fetch(`${API_URL}/api/chat/history`);
+                const response = await api.get("/api/chat/history");
                 if (response.ok) {
                     const data = await response.json();
                     if (data.history && data.history.length > 0) {
@@ -68,7 +68,7 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
     const clearHistory = async () => {
         if (!confirm("Clear all chat history?")) return;
         try {
-            const response = await fetch(`${API_URL}/api/chat/history`, { method: "DELETE" });
+            const response = await api.delete("/api/chat/history");
             if (response.ok) {
                 setMessages(INITIAL_MESSAGES);
             }
@@ -94,15 +94,11 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
         setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: "" }]);
 
         try {
-            const response = await fetch(`${API_URL}/api/chat/stream`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    message: userMsg.content,
-                    system_prompt:
-                        "Tu es NovaFlow, un assistant personnel intelligent et élégant. Réponds TOUJOURS en utilisant un formatage Markdown riche et structuré (listes à puces, texte en gras, tableaux si pertinent). Utilise des emojis avec parcimonie pour agrémenter la réponse. Sépare tes paragraphes par des sauts de ligne clairs.",
-                    course_id: courseId,
-                }),
+            const response = await api.stream("/api/chat/stream", {
+                message: userMsg.content,
+                system_prompt:
+                    "Tu es NovaFlow, un assistant personnel intelligent et élégant. Réponds TOUJOURS en utilisant un formatage Markdown riche et structuré (listes à puces, texte en gras, tableaux si pertinent). Utilise des emojis avec parcimonie pour agrémenter la réponse. Sépare tes paragraphes par des sauts de ligne clairs.",
+                course_id: courseId,
             });
 
             if (!response.ok || !response.body) throw new Error("API Error");

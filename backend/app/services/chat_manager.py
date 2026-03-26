@@ -1,55 +1,63 @@
-import json
-import os
-from datetime import datetime
 from typing import List, Dict
+from datetime import datetime
+from app.db.database import SessionLocal
+from app.db.models import ChatMessage as DBChatMessage
 
-# Chemin vers le fichier de stockage
-CHAT_HISTORY_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "chat_history.json"
-)
-
-def load_chat_history() -> List[Dict]:
-    """Charge l'historique complet depuis le fichier JSON."""
-    if not os.path.exists(CHAT_HISTORY_FILE):
-        return []
-    
-    try:
-        with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Erreur chargement historique: {e}")
-        return []
-
-def save_chat_message(role: str, content: str):
-    """Ajoute un message à l'historique et sauvegarde."""
-    history = load_chat_history()
-    
-    new_message = {
-        "id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
-        "role": role,
-        "content": content,
-        "timestamp": datetime.now().isoformat()
-    }
-    
-    history.append(new_message)
-    
-    # Limiter l'historique aux 50 derniers messages pour garder le fichier léger
-    if len(history) > 50:
-        history = history[-50:]
+def load_chat_history(user_id: str = None) -> List[Dict]:
+    """Charge l'historique de l'utilisateur depuis la base de données."""
+    with SessionLocal() as db:
+        query = db.query(DBChatMessage)
+        if user_id:
+            query = query.filter(DBChatMessage.user_id == user_id)
+        else:
+            query = query.filter(DBChatMessage.user_id == None)
         
-    try:
-        os.makedirs(os.path.dirname(CHAT_HISTORY_FILE), exist_ok=True)
-        with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"Erreur sauvegarde historique: {e}")
+        messages = query.order_by(DBChatMessage.timestamp.asc()).all()
+        return [
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "timestamp": m.timestamp.isoformat() if m.timestamp else None
+            }
+            for m in messages
+        ]
 
-def clear_chat_history():
-    """Efface l'historique complet."""
-    if os.path.exists(CHAT_HISTORY_FILE):
-        try:
-            os.remove(CHAT_HISTORY_FILE)
-        except Exception as e:
-            print(f"Erreur suppression historique: {e}")
+def save_chat_message(role: str, content: str, user_id: str = None):
+    """Ajoute un message à l'historique (Base de données)."""
+    with SessionLocal() as db:
+        new_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        db_message = DBChatMessage(
+            id=new_id,
+            role=role,
+            content=content,
+            user_id=user_id
+        )
+        db.add(db_message)
+        
+        # Limiter l'historique de l'utilisateur aux 50 derniers messages
+        query = db.query(DBChatMessage)
+        if user_id:
+            query = query.filter(DBChatMessage.user_id == user_id)
+        else:
+            query = query.filter(DBChatMessage.user_id == None)
+        
+        history_count = query.count()
+        if history_count >= 50:
+            # Supprimer les plus vieux de cet utilisateur
+            oldest = query.order_by(DBChatMessage.timestamp.asc()).limit(history_count - 49).all()
+            for old in oldest:
+                db.delete(old)
+        
+        db.commit()
+
+def clear_chat_history(user_id: str = None):
+    """Efface l'historique de l'utilisateur en base de données."""
+    with SessionLocal() as db:
+        query = db.query(DBChatMessage)
+        if user_id:
+            query = query.filter(DBChatMessage.user_id == user_id)
+        else:
+            query = query.filter(DBChatMessage.user_id == None)
+        query.delete()
+        db.commit()

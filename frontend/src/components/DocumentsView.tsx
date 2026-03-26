@@ -6,7 +6,7 @@ import {
     Trash2, ExternalLink, Filter, FolderOpen 
 } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { api } from "@/services/api";
 
 interface Document {
     id: string;
@@ -73,7 +73,7 @@ export default function DocumentsView() {
 
     const fetchDocuments = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/documents`);
+            const res = await api.get("/api/documents");
             if (!res.ok) throw new Error("API Error");
             const data = await res.json();
 
@@ -127,7 +127,7 @@ export default function DocumentsView() {
 
     const handleDelete = async (docId: string) => {
         try {
-            const res = await fetch(`${API_URL}/api/documents/${docId}`, { method: "DELETE" });
+            const res = await api.delete(`/api/documents/${docId}`);
             if (res.ok) {
                 setDocuments((prev) => prev.filter((d) => d.id !== docId));
             }
@@ -137,7 +137,8 @@ export default function DocumentsView() {
     };
 
     const handleOpen = (docId: string) => {
-        window.open(`${API_URL}/api/documents/${docId}/download`, "_blank");
+        const token = localStorage.getItem("nf_token");
+        window.open(`http://localhost:8000/api/documents/${docId}/download?token=${token}`, "_blank");
     };
 
     const filteredDocs = documents.filter((doc) => {

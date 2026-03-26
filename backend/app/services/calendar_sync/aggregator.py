@@ -42,7 +42,7 @@ def _merge_tasks(existing_tasks: list, new_tasks: list) -> list:
     return merged
 
 
-def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
+def get_unified_events(days: int = 30, user_id: str = None) -> List[Dict[str, Any]]:
     """
     Récupère et unifie les événements de toutes les sources (Google, Outlook, local, etc.)
     et y injecte les tâches associées.
@@ -50,14 +50,14 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
     """
     # 1. Récupérer les événements Google
     try:
-        google_events = get_upcoming_events(days=days)
+        google_events = get_upcoming_events(days=days) or []
     except Exception as e:
         print(f"Erreur récupération Google: {e}")
         google_events = []
 
     # 2. Récupérer les événements Outlook
     try:
-        outlook_events = get_outlook_events(days=days)
+        outlook_events = get_outlook_events(days=days) or []
     except Exception as e:
         print(f"Erreur récupération Outlook: {e}")
         outlook_events = []
@@ -80,7 +80,9 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
                 for moodle_url in urls:
                     if moodle_url:
                         try:
-                            moodle_events.extend(get_moodle_events(moodle_url, days=days))
+                            res = get_moodle_events(moodle_url, days=days)
+                            if res:
+                                moodle_events.extend(res)
                         except Exception as e:
                             print(f"Erreur Moodle URL {moodle_url[:50]}: {e}")
         except Exception as e:
@@ -89,17 +91,17 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
     # 4. Récupérer les événements de l'Extension Naviguateur Moodle
     moodle_ext_events = []
     try:
-        moodle_ext_events = get_moodle_extension_events()
+        moodle_ext_events = get_moodle_extension_events(user_id=user_id) or []
     except Exception as e:
         print(f"Erreur Moodle Extension: {e}")
+        moodle_ext_events = []
 
     # 4.5 Récupérer les événements locaux (AI, etc.)
     local_nf_events = []
     try:
         em = EventManager.instance()
-        # On ne prend que les events locaux/AI qui ne sont pas déjà des miroirs de Google/Outlook
-        # (ceux-ci sont déjà gérés via les API respectives et le lien parent_event_id)
-        all_em_events = em.get_all_events()
+        # On ne prend que les events locaux/AI appartenant à l'utilisateur
+        all_em_events = em.get_all_events(user_id=user_id)
         for e in all_em_events:
             # On exclut les sources distantes car elles sont récupérées via leurs API respectives
             # SAUF si c'est un événement pivot de cours (moodle_course_...) créé par l'IA de NovaFlow
@@ -150,10 +152,10 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
                 except Exception:
                     continue
 
-    # 5. Récupérer toutes les tâches NovaFlow
+    # 5. Récupérer toutes les tâches NovaFlow de l'utilisateur
     tm = TaskManager.instance()
     em = EventManager.instance()
-    all_tasks = tm.get_all_tasks()
+    all_tasks = tm.get_all_tasks(user_id=user_id)
     
     # 6. Organiser les tâches par parent_event_id pour un accès rapide
     # On supporte l'ID externe (préféré) ET l'ID interne (fallback pour robustesse)
@@ -322,8 +324,8 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
     # 9.5 Enrichir les événements avec le titre complet du cours pour l'IA
     full_course_names = set(course_code_to_name.values())
     for evt in unified_events:
-        title = evt.get("title", "")
-        cat = evt.get("category", "")
+        title = evt.get("title") or ""
+        cat = evt.get("category") or ""
         
         if cat in full_course_names:
             evt["course_title"] = cat

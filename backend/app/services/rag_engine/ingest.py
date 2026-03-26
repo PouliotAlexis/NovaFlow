@@ -1,82 +1,107 @@
 import os
-from typing import List
+from typing import List, Optional
 from langchain_community.document_loaders import (
     PyPDFLoader, TextLoader, UnstructuredMarkdownLoader, 
     Docx2txtLoader, UnstructuredPowerPointLoader, UnstructuredExcelLoader, CSVLoader
 )
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import OllamaEmbeddings
+from langchain_postgres import PGVector
+from langchain_community.vectorstores import Chroma
 from app.core.config import settings
 import unicodedata
+import psycopg
 
 def normalize_text(text: str) -> str:
-    """Normalise le texte en NFC pour éviter les problèmes d'accents (NFD vs NFC)."""
+    """Normalise le texte en NFC pour éviter les problèmes d'accents."""
     if not text:
         return ""
     return unicodedata.normalize('NFC', text)
 
-# Configuration des dossiers
+# Configuration
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
-CHROMA_DIR = os.path.join(DATA_DIR, "chromadb_v2")
+CHROMA_DIR = os.path.join(DATA_DIR, "chromadb_v3") # On change de dossier pour éviter les conflits si fallback
 
 def get_embeddings():
-    """Retourne le modèle d'embeddings selon la configuration."""
-    if settings.AI_MODE == "cloud" and settings.OPENAI_API_KEY:
-        return OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
+    """Retourne le modèle d'embeddings selon la configuration (Hybrid: Cloud/Ollama)."""
+    # Si mode cloud et clé OpenAI présente -> OpenAI (plus performant pour le cloud)
+    if settings.AI_MODE == "cloud" and os.getenv("OPENAI_API_KEY"):
+        return OpenAIEmbeddings(model="text-embedding-3-small")
+    # Sinon -> Ollama (Local/Gratuit/Privé)
     else:
         return OllamaEmbeddings(base_url=settings.OLLAMA_HOST, model=settings.OLLAMA_MODEL)
 
 _vectorstore = None
 
 def get_vectorstore():
+    """Initialise et retourne le vectorstore (Supabase PGVector ou Chroma fallback)."""
     global _vectorstore
-    if _vectorstore is None:
-        print(f"[RAG] Initialisation du vectorstore Chroma à {CHROMA_DIR}")
-        _vectorstore = Chroma(
-            persist_directory=CHROMA_DIR,
-            embedding_function=get_embeddings(),
-            collection_name="novaflow_v2"
-        )
+    if _vectorstore is not None:
+        return _vectorstore
+
+    # On vérifie si on a une URL de DB PostgreSQL (Supabase)
+    db_url = settings.DATABASE_URL
+    
+    # Langchain-postgres a besoin d'un format postgresql:// (pas sqlite)
+    if db_url and db_url.startswith("postgresql"):
+        print(f"[RAG] Initialisation du vectorstore Cloud (Supabase PGVector)")
+        try:
+            # S'assurer que le format est compatible avec psycopg
+            # Supabase donne souvent postgresql://...
+            custom_url = db_url.replace("postgres://", "postgresql://")
+            
+            # Note: langchain-postgres gère la création de la table automatiquement.
+            _vectorstore = PGVector(
+                embeddings=get_embeddings(),
+                collection_name="novaflow_docs",
+                connection=custom_url,
+                use_jsonb=True, # Plus performant pour les métadonnées
+            )
+            return _vectorstore
+        except Exception as e:
+            print(f"[RAG] Erreur lors de l'initialisation PGVector: {e}. Fallback sur Chroma.")
+
+    # Fallback sur ChromaDB Local
+    print(f"[RAG] Initialisation du vectorstore Local (Chroma) à {CHROMA_DIR}")
+    _vectorstore = Chroma(
+        persist_directory=CHROMA_DIR,
+        embedding_function=get_embeddings(),
+        collection_name="novaflow_v3"
+    )
     return _vectorstore
 
-def ingest_document(file_path: str, course_id: str = None):
+def ingest_document(file_path: str, course_id: str = None, user_id: str = None):
     """
-    Ingère un document (PDF, TXT, MD) dans ChromaDB.
+    Ingère un document dans le Vector Store (Supabase ou Chroma).
     """
     ext = os.path.splitext(file_path)[1].lower()
     
-    # 1. Chargement selon l'extension
     print(f"[RAG] Ingestion: {file_path} (ext={ext})", flush=True)
-    if ext == ".pdf" or ext == ".PDF":
-        loader = PyPDFLoader(file_path)
-    elif ext == ".txt":
-        loader = TextLoader(file_path, encoding="utf-8")
-    elif ext == ".md":
-        loader = UnstructuredMarkdownLoader(file_path)
-    elif ext in [".docx", ".doc"]:
-        print(f"[RAG] Using Docx2txtLoader for {file_path}", flush=True)
-        loader = Docx2txtLoader(file_path)
-    elif ext in [".pptx", ".ppt"]:
-        print(f"[RAG] Using UnstructuredPowerPointLoader for {file_path}", flush=True)
-        loader = UnstructuredPowerPointLoader(file_path)
-    elif ext in [".xlsx", ".xls"]:
-        print(f"[RAG] Using UnstructuredExcelLoader for {file_path}", flush=True)
-        loader = UnstructuredExcelLoader(file_path)
-    elif ext == ".csv":
-        loader = CSVLoader(file_path, encoding="utf-8")
-    elif ext in [".jpg", ".jpeg", ".png", ".gif", ".svg"]:
-        print(f"[RAG] Image skipped for text ingestion: {file_path}", flush=True)
-        # Pour les images, on ne fait pas d'OCR pour l'instant
-        # On retourne un succès vide pour ne pas bloquer la sync
-        return {"status": "skipped", "reason": "image_not_indexed"}
-    else:
-        raise ValueError(f"Format de fichier non supporté : {ext}")
+    try:
+        if ext == ".pdf":
+            loader = PyPDFLoader(file_path)
+        elif ext == ".txt":
+            loader = TextLoader(file_path, encoding="utf-8")
+        elif ext == ".md":
+            loader = UnstructuredMarkdownLoader(file_path)
+        elif ext in [".docx", ".doc"]:
+            loader = Docx2txtLoader(file_path)
+        elif ext in [".pptx", ".ppt"]:
+            loader = UnstructuredPowerPointLoader(file_path)
+        elif ext in [".xlsx", ".xls"]:
+            loader = UnstructuredExcelLoader(file_path)
+        elif ext == ".csv":
+            loader = CSVLoader(file_path, encoding="utf-8")
+        elif ext in [".jpg", ".jpeg", ".png", ".gif", ".svg"]:
+            return {"status": "skipped", "reason": "image_not_indexed"}
+        else:
+            raise ValueError(f"Format non supporté : {ext}")
 
-    documents = loader.load()
-    print(f"[RAG] Loaded {len(documents)} document objects from {file_path}", flush=True)
-
+        documents = loader.load()
+    except Exception as e:
+        print(f"[RAG] Erreur chargement {file_path}: {e}")
+        return {"status": "error", "message": str(e)}
 
     # 2. Découpage
     text_splitter = RecursiveCharacterTextSplitter(
@@ -86,160 +111,165 @@ def ingest_document(file_path: str, course_id: str = None):
     )
     chunks = text_splitter.split_documents(documents)
 
-    # 3. Enrichissement des métadonnées
-    if course_id:
-        for chunk in chunks:
+    # 3. Enrichissement
+    for chunk in chunks:
+        if course_id:
             chunk.metadata["course_id"] = str(course_id)
-            chunk.metadata["filename"] = normalize_text(os.path.basename(file_path))
+        if user_id:
+            chunk.metadata["user_id"] = str(user_id)
+        chunk.metadata["filename"] = normalize_text(os.path.basename(file_path))
+        chunk.metadata["source"] = normalize_text(file_path)
 
     # 4. Stockage
     vectorstore = get_vectorstore()
     vectorstore.add_documents(chunks)
     
-    # On reset le singleton pour forcer une recharge si nécessaire (optionnel selon implementation Chroma)
-    # Mais add_documents s'en occupe généralement.
-    
     return {
         "status": "success",
         "chunks": len(chunks),
-        "doc_id": os.path.basename(file_path),
-        "course_id": course_id
+        "file_name": os.path.basename(file_path),
+        "course_id": course_id,
+        "mode": "cloud" if isinstance(vectorstore, PGVector) else "local",
+        "doc_id": os.path.basename(file_path) # Pour la compatibilité avec l'automation
     }
 
-def query_rag(query: str, n_results: int = 3, course_id: str = None, filenames: List[str] = None):
+def query_rag(query: str, n_results: int = 5, course_id: str = None, filenames: List[str] = None, user_id: str = None):
     """
-    Interroge le moteur RAG pour obtenir le contexte, avec filtrage optionnel par cours et fichiers.
+    Recherche sémantique avec filtres (Compatible PGVector & Chroma).
     """
-    if course_id:
-        print(f"[RAG] Recherche contextuelle filtrée pour le cours {course_id}")
-    if filenames:
-        print(f"[RAG] Filtre par fichiers : {filenames}")
-        
     vectorstore = get_vectorstore()
     
-    # 1. Préparation des filtres
-    filters = []
+    # Construction du filtre
+    filter_dict = {}
     if course_id:
-        filters.append({"course_id": str(course_id)})
+        filter_dict["course_id"] = str(course_id)
+    if user_id:
+        filter_dict["user_id"] = str(user_id)
     
-    # Normalisation des noms de fichiers demandés
-    norm_filenames = [normalize_text(f) for f in (filenames or [])]
-
-    # --- Stratégie de recherche en 3 passes ---
-    # Chroma ne supporte pas $or ni $regex, on fait donc des tentatives séquentielles.
+    # Note: PGVector et Chroma ont des syntaxes de filtres légèrement différentes via Langchain
+    # mais Langchain unifie souvent via un dict simple ou un objet metadata.
     
-    def _build_filter(course_filter, file_field, file_values):
-        """Construit un filtre Chroma compatible."""
-        parts = []
-        if course_filter:
-            parts.append({"course_id": str(course_filter)})
-        if file_values:
-            if len(file_values) == 1:
-                parts.append({file_field: file_values[0]})
-            else:
-                parts.append({file_field: {"$in": file_values}})
-        if len(parts) == 1:
-            return parts[0]
-        elif len(parts) > 1:
-            return {"$and": parts}
-        return None
-
     results = []
     
-    # Passe 1 : Chercher par champ 'filename' (le plus propre)
-    if norm_filenames:
-        filt = _build_filter(course_id, "filename", norm_filenames)
-        if filt:
-            results = vectorstore.similarity_search(query, k=n_results, filter=filt)
-            if results:
-                print(f"[RAG] Passe 1 (filename) : {len(results)} résultats.")
-    
-    # Passe 2 : Pour les docs sans champ 'filename' (ingérés avant la migration)
-    # On utilise .get() pour récupérer TOUS les chunks du cours, puis on filtre manuellement par basename du source
-    if not results and norm_filenames and course_id:
-        print(f"[RAG] Passe 1 échouée. Tentative Passe 2 (get + basename filter)...")
+    # Tentative avec filtre filenames si présent
+    if filenames:
+        norm_filenames = [normalize_text(f) for f in filenames]
+        # Dans Langchain, bcp de vectorstores supportent $in
+        filter_with_files = {**filter_dict, "filename": {"$in": norm_filenames}}
         try:
-            # Récupérer TOUS les chunks du cours avec leurs métadonnées et leur contenu
-            all_data = vectorstore.get(
-                where={"course_id": str(course_id)},
-                include=["metadatas", "documents"]
-            )
-            
-            if all_data and all_data.get("documents"):
-                # Filtrer manuellement par basename du source
-                matching_docs = []
-                for i, meta in enumerate(all_data["metadatas"]):
-                    source = meta.get("source", "")
-                    # Normaliser les séparateurs de chemin mixtes Windows
-                    basename = normalize_text(os.path.basename(source.replace("\\", "/")))
-                    if basename in norm_filenames:
-                        matching_docs.append(all_data["documents"][i])
-                
-                if matching_docs:
-                    # On crée des objets simples avec un attribut page_content
-                    class SimpleDoc:
-                        def __init__(self, content, metadata=None):
-                            self.page_content = content
-                            self.metadata = metadata or {}
-                    results = [SimpleDoc(doc) for doc in matching_docs[:n_results]]
-                    print(f"[RAG] Passe 2 (get + basename) : {len(results)} résultats sur {len(matching_docs)} chunks totaux.")
-        except Exception as e:
-            print(f"[RAG] Erreur Passe 2: {e}")
+            results = vectorstore.similarity_search(query, k=n_results, filter=filter_with_files)
+        except:
+            # Fallback simple si $in n'est pas supporté par l'implémentation
+            results = vectorstore.similarity_search(query, k=n_results, filter=filter_dict)
+            # Filtrage manuel
+            results = [doc for doc in results if doc.metadata.get("filename") in norm_filenames]
+    else:
+        results = vectorstore.similarity_search(query, k=n_results, filter=filter_dict)
 
-    # Passe 3 : Fallback - tout le cours sans filtre fichier
-    if not results and course_id:
-        print(f"[RAG] Aucun résultat ciblé. Fallback sur tout le cours {course_id}...")
-        results = vectorstore.similarity_search(query, k=n_results, filter={"course_id": str(course_id)})
+    print(f"[RAG] Query: {query} | Results: {len(results)}")
     
-    # Passe 4 : Recherche globale (dernier recours)
-    if not results:
-        print(f"[RAG] Aucun résultat même au niveau cours. Recherche globale...")
-        results = vectorstore.similarity_search(query, k=n_results)
-
-    # Log de debug
-    print(f"[RAG] Requete: '{query}' ({'filtré par cours' if course_id else 'global'})")
-    print(f"[RAG] {len(results)} résultats trouvés.")
-    
-    # ...
-    for i, doc in enumerate(results):
-        filename = doc.metadata.get('filename') or os.path.basename(doc.metadata.get('source', 'Inconnu'))
-        print(f"  [{i+1}] {filename} -> {doc.page_content[:80]}...")
-        
     context = "\n\n".join([doc.page_content for doc in results])
     return context
 
-def get_ingested_files(course_id: str):
+def extract_text(file_path: str) -> list[dict]:
     """
-    Retourne la liste des noms de fichiers déjà ingérés pour un cours.
+    Extrait le texte d'un fichier (page par page si possible).
+    Retourne une liste de dicts {'page': int, 'text': str}.
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    try:
+        if ext == ".pdf":
+            loader = PyPDFLoader(file_path)
+        elif ext == ".txt":
+            loader = TextLoader(file_path, encoding="utf-8")
+        elif ext == ".md":
+            loader = UnstructuredMarkdownLoader(file_path)
+        else:
+            return []
+            
+        docs = loader.load()
+        return [{"page": i+1, "text": d.page_content} for i, d in enumerate(docs)]
+    except Exception as e:
+        print(f"[RAG] Erreur extract_text: {e}")
+        return []
+
+UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
+
+def list_documents() -> list[dict]:
+    """Liste tous les documents ingérés (Compatible Chroma/PGVector)."""
+    vectorstore = get_vectorstore()
+    try:
+        # Pour Chroma
+        if isinstance(vectorstore, Chroma):
+            all_data = vectorstore.get(include=["metadatas"])
+            docs = {}
+            for metadata in all_data["metadatas"]:
+                doc_id = metadata.get("doc_id") or metadata.get("filename")
+                if not doc_id: continue
+                if doc_id not in docs:
+                    docs[doc_id] = {
+                        "doc_id": doc_id,
+                        "file_name": metadata.get("filename") or metadata.get("file_name", "Inconnu"),
+                        "file_ext": metadata.get("file_ext", ""),
+                        "chunks": 0,
+                    }
+                docs[doc_id]["chunks"] += 1
+            return list(docs.values())
+        
+        # Pour PGVector (langchain-postgres)
+        # On peut essayer de récupérer les métadonnées via une recherche vide ou un get si implémenté
+        # Comme l'API est limitée, on se base sur ce qui est stocké.
+        return [] # À améliorer si besoin d'une liste exhaustive sur Cloud
+    except Exception as e:
+        print(f"[RAG] Erreur list_documents: {e}")
+        return []
+
+def delete_document(doc_id: str) -> bool:
+    """Supprime un document (via filename ou doc_id)."""
+    vectorstore = get_vectorstore()
+    try:
+        # Tenter par filename si c'est ce qu'on stocke comme doc_id
+        if isinstance(vectorstore, Chroma):
+            # Chroma permet de filter
+            existing = vectorstore.get(where={"filename": doc_id})
+            if existing and existing["ids"]:
+                vectorstore.delete(ids=existing["ids"])
+                return True
+        else:
+            # PGVector
+            # Suppression via filtre
+            # langchain-postgres supporte vectorstore.delete(ids=...)
+            # Mais on doit trouver les IDs d'abord.
+            pass
+        return False
+    except Exception as e:
+        print(f"[RAG] Erreur delete_document: {e}")
+        return False
+
+def get_ingested_files(course_id: str = None, user_id: str = None) -> List[str]:
+    """
+    Retourne la liste des noms de fichiers déjà présents dans le vectorstore pour un cours/utilisateur donné.
     """
     vectorstore = get_vectorstore()
-    
-    # On récupère tous les documents filtrés par course_id
-    # Chroma ne permet pas facilement de récupérer uniquement les métadonnées sans les documents
-    # Mais on peut utiliser .get() avec un filtre
     try:
-        data = vectorstore.get(
-            where={"course_id": str(course_id)},
-            include=["metadatas"]
-        )
+        filter_dict = {}
+        if course_id:
+            filter_dict["course_id"] = str(course_id)
+        if user_id:
+            filter_dict["user_id"] = str(user_id)
+
+        if isinstance(vectorstore, Chroma):
+            # Pour Chroma, on peut récupérer les métadonnées filtrées
+            results = vectorstore.get(where=filter_dict, include=["metadatas"])
+            filenames = set()
+            for meta in results["metadatas"]:
+                if "filename" in meta:
+                    filenames.add(meta["filename"])
+            return list(filenames)
         
-        if not data or not data["metadatas"]:
-            return set()
-            
-        # Extraire les noms de fichiers uniques
-        ingested_sources = set()
-        for meta in data["metadatas"]:
-            # On stocke les noms normalisés pour que le frontend envoie des noms qui matchent
-            source_path = meta.get("source", "")
-            filename = meta.get("filename", "")
-            
-            if filename:
-                ingested_sources.add(normalize_text(filename))
-            elif source_path:
-                # Normaliser les séparateurs de chemin mixtes (Windows)
-                ingested_sources.add(normalize_text(os.path.basename(source_path.replace("\\", "/"))))
-        
-        return ingested_sources
+        # Pour PGVector, on fait une recherche ou on utilise le client direct si besoin
+        # Fallback simple pour l'instant: recherche sémantique factice ou retour vide
+        return []
     except Exception as e:
         print(f"[RAG] Erreur get_ingested_files: {e}")
-        return set()
+        return []

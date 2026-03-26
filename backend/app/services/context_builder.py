@@ -13,13 +13,16 @@ from app.services.rag_engine.ingest import query_rag
 
 class ContextBuilder:
     @staticmethod
-    def build_global_context(user_query: str, include_tasks: bool = True, include_calendar: bool = True, include_rag: bool = True) -> str:
+    def build_global_context(user_query: str, include_tasks: bool = True, include_calendar: bool = True, include_rag: bool = True, user_id: str = None) -> str:
         """Construit le contexte pour le Chat Global."""
         context_parts = []
         
-        # 1. Tâches
+        # 1. Tâches de l'utilisateur
         if include_tasks:
-            tasks = TaskManager.instance().get_all_tasks()
+            tasks = TaskManager.instance().get_all_tasks(user_id=user_id)
+            # Fallback migration pour l'IA
+            if not tasks and user_id:
+                tasks = TaskManager.instance().get_all_tasks(user_id=None)
             # Filtrer les tâches non terminées
             pending_tasks = [t for t in tasks if not t.get("done", False)]
             if pending_tasks:
@@ -31,9 +34,12 @@ class ContextBuilder:
                     task_ctx += f"- {t['title']} (Priorité: {priority}, Échéance: {due}, Cours: {course})\n"
                 context_parts.append(task_ctx)
 
-        # 2. Événements (via EventManager aggrégé)
+        # 2. Événements de l'utilisateur
         if include_calendar:
-            events = EventManager.instance().get_all_events()
+            events = EventManager.instance().get_all_events(user_id=user_id)
+            # Fallback migration
+            if not events and user_id:
+                events = EventManager.instance().get_all_events(user_id=None)
             now = datetime.datetime.now()
             future_events = []
             for e in events:
@@ -41,7 +47,7 @@ class ContextBuilder:
                     # Gestion robuste de la date (isoformat ou autre)
                     start_str = e.start if isinstance(e.start, str) else str(e.start)
                     start_dt = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00').split('.')[0])
-                    if now - datetime.timedelta(hours=24) <= start_dt <= now + datetime.timedelta(days=14):
+                    if now - datetime.timedelta(days=7) <= start_dt <= now + datetime.timedelta(days=14):
                         future_events.append(e)
                 except Exception as ex:
                     # En cas d'erreur de parsing date, on l'ignore silencieusement pour ne pas bloquer
@@ -65,12 +71,12 @@ class ContextBuilder:
         return final_context
 
     @staticmethod
-    def build_course_context(course_id: Optional[str], user_query: str, filenames: Optional[List[str]] = None) -> str:
+    def build_course_context(course_id: Optional[str], user_query: str, filenames: Optional[List[str]] = None, user_id: str = None) -> str:
         """Construit le contexte spécifique pour un cours (Second Brain)."""
         context_parts = []
         
         # 1. RAG (Documents du cours) - On repasse à 5 pour la précision
-        rag_context = query_rag(user_query, n_results=5, course_id=course_id, filenames=filenames)
+        rag_context = query_rag(user_query, n_results=5, course_id=course_id, filenames=filenames, user_id=user_id)
         if rag_context:
             context_parts.append(f"## Extraits des documents du cours\n{rag_context}")
         else:
@@ -81,7 +87,7 @@ class ContextBuilder:
 
         # 2. Tâches liées au cours
         try:
-            tasks = TaskManager.instance().get_all_tasks()
+            tasks = TaskManager.instance().get_all_tasks(user_id=user_id)
             course_tasks = [t for t in tasks if str(t.get("course_id", "")) == str(course_id) and not t.get("done")]
             if course_tasks:
                 task_ctx = "## Tâches liées à ce cours\n"
@@ -93,7 +99,7 @@ class ContextBuilder:
 
         # 3. Événements liés au cours
         try:
-            events = EventManager.instance().get_all_events()
+            events = EventManager.instance().get_all_events(user_id=user_id)
             course_events = [e for e in events if str(getattr(e, 'course_id', '')) == str(course_id) or (course_id and course_id in e.external_id)]
             if course_events:
                 cal_ctx = "## Événements liés à ce cours\n"

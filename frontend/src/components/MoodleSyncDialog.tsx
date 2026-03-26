@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { X, Lock, Globe, User, RefreshCw, Key } from "lucide-react";
+import { api } from "@/services/api";
 
 interface MoodleSyncDialogProps {
   isOpen: boolean;
@@ -17,12 +18,11 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   // Pré-remplir avec l'URL Moodle depuis les settings (normalisée automatiquement)
   useEffect(() => {
     if (!isOpen) return;
-    fetch(`${API_URL}/api/settings/moodle`)
+    api.get("/api/settings/moodle")
       .then((r) => r.json())
       .then((data) => {
         const first = data.urls?.[0] || data.url || "";
@@ -57,9 +57,7 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
 
       if (authMode === "sso") {
         // Mode SSO : utilise le token capturé via le bouton "Connecter" du dashboard
-        const res = await fetch(`${API_URL}/api/v2/moodle/sync/native`, {
-          method: "POST",
-        });
+        const res = await api.post("/api/v2/moodle/sync/native");
         if (res.ok) {
           onSyncStarted();
           onClose();
@@ -75,11 +73,7 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
           return;
         }
         const body = { url: normalizedUrl, username, password };
-        const res = await fetch(`${API_URL}/api/v2/moodle/sync`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
+        const res = await api.post("/api/v2/moodle/sync", body);
         if (res.ok) {
           onSyncStarted();
           onClose();

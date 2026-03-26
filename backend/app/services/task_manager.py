@@ -1,23 +1,18 @@
 """
-NovaFlow - Service Task Manager (OOP Version)
+NovaFlow - Service Task Manager (SQLAlchemy Version)
 
-manage storage and manipulation of tasks (Todo List) using Object-Oriented Principles.
+Manage storage and manipulation of tasks (Todo List) using SQLAlchemy and PostgreSQL/SQLite.
 """
 
-import json
-import os
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-
-# Chemin du fichier de données
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-TASKS_FILE = os.path.join(DATA_DIR, "tasks.json")
-
-def _ensure_data_dir():
-    os.makedirs(DATA_DIR, exist_ok=True)
+from sqlalchemy.orm import Session
+from app.db.database import SessionLocal
+from app.db.models import Task as DBTask
 
 class NovaFlowTask:
+    """Modèle de données pour une tâche (conserve la compatibilité avec l'ancien code)."""
     def __init__(self, id: str, title: str, priority: str = "medium", meta: str = "NovaFlow", 
                  done: bool = False, parent_event_id: Optional[str] = None, created_at: Optional[str] = None,
                  external_id: Optional[str] = None, source: Optional[str] = "local", due_date: Optional[str] = None,
@@ -28,33 +23,12 @@ class NovaFlowTask:
         self.meta = meta
         self.done = done
         self.parent_event_id = parent_event_id
-        self.created_at = created_at or datetime.now().isoformat()
+        self.created_at = created_at
         self.external_id = external_id
         self.source = source
         self.due_date = due_date
         self.description = description or ""
         self.course_id = course_id
-
-    def mark_done(self):
-        self.done = True
-
-    def mark_undone(self):
-        self.done = False
-
-    def toggle_status(self):
-        self.done = not self.done
-
-    def update(self, updates: Dict[str, Any]):
-        if "title" in updates: self.title = updates["title"]
-        if "priority" in updates: self.priority = updates["priority"]
-        if "meta" in updates: self.meta = updates["meta"]
-        if "done" in updates: self.done = updates["done"]
-        if "parent_event_id" in updates: self.parent_event_id = updates["parent_event_id"]
-        if "external_id" in updates: self.external_id = updates["external_id"]
-        if "source" in updates: self.source = updates["source"]
-        if "due_date" in updates: self.due_date = updates["due_date"]
-        if "description" in updates: self.description = updates["description"]
-        if "course_id" in updates: self.course_id = updates["course_id"]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -73,28 +47,28 @@ class NovaFlowTask:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'NovaFlowTask':
+    def from_db(cls, db_task: DBTask) -> 'NovaFlowTask':
         return cls(
-            id=data["id"],
-            title=data["title"],
-            priority=data.get("priority", "medium"),
-            meta=data.get("meta", "NovaFlow"),
-            done=data.get("done", False),
-            parent_event_id=data.get("parent_event_id"),
-            created_at=data.get("created_at"),
-            external_id=data.get("external_id"),
-            source=data.get("source", "local"),
-            due_date=data.get("due_date"),
-            description=data.get("description", ""),
-            course_id=data.get("course_id")
+            id=db_task.id,
+            title=db_task.title,
+            priority=db_task.priority,
+            meta=db_task.meta,
+            done=db_task.done,
+            parent_event_id=db_task.parent_event_id,
+            created_at=db_task.created_at.isoformat() if db_task.created_at else None,
+            external_id=db_task.external_id,
+            source=db_task.source,
+            due_date=db_task.due_date,
+            description=db_task.description,
+            course_id=db_task.course_id
         )
 
 class TaskManager:
     _instance = None
 
     def __init__(self):
-        self._tasks: List[NovaFlowTask] = []
-        self._load_tasks()
+        # On ne garde plus de liste en mémoire, on interroge la DB
+        pass
 
     @classmethod
     def instance(cls):
@@ -102,84 +76,114 @@ class TaskManager:
             cls._instance = cls()
         return cls._instance
 
-    def _load_tasks(self):
-        if not os.path.exists(TASKS_FILE):
-            self._tasks = []
-            return
-        try:
-            with open(TASKS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                self._tasks = [NovaFlowTask.from_dict(t) for t in data]
-        except (json.JSONDecodeError, FileNotFoundError):
-            self._tasks = []
-
     def reload(self):
-        """Recharge les données depuis le disque (utile après un reset)."""
-        self._load_tasks()
+        """Inutile maintenant que la DB est la source de vérité directe."""
+        pass
 
-    def _save_tasks(self):
-        _ensure_data_dir()
-        data = [t.to_dict() for t in self._tasks]
-        with open(TASKS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-
-    def get_all_tasks(self) -> List[Dict[str, Any]]:
-        return [t.to_dict() for t in self._tasks]
+    def get_all_tasks(self, user_id: str = None) -> List[Dict[str, Any]]:
+        with SessionLocal() as db:
+            query = db.query(DBTask)
+            if user_id:
+                query = query.filter(DBTask.user_id == user_id)
+            else:
+                query = query.filter(DBTask.user_id == None)
+            tasks = query.order_by(DBTask.created_at.desc()).all()
+            return [NovaFlowTask.from_db(t).to_dict() for t in tasks]
 
     def get_task_object(self, task_id: str) -> Optional[NovaFlowTask]:
-        return next((t for t in self._tasks if t.id == task_id), None)
+        with SessionLocal() as db:
+            db_task = db.query(DBTask).filter(DBTask.id == task_id).first()
+            return NovaFlowTask.from_db(db_task) if db_task else None
 
     def add_task(self, title: str, priority: str = "medium", meta: str = "NovaFlow", 
                  parent_event_id: Optional[str] = None, external_id: Optional[str] = None, 
                  source: Optional[str] = "local", due_date: Optional[str] = None,
-                 course_id: Optional[str] = None) -> Dict[str, Any]:
-        # Dedup check
-        for t in self._tasks:
-            # Si on a un external_id, c'est le facteur de dédoublonnage principal
-            if external_id and t.external_id == external_id and t.source == source:
-                 return t.to_dict()
+                 course_id: Optional[str] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
+        with SessionLocal() as db:
+            # Dédoublonnage
+            if external_id:
+                existing = db.query(DBTask).filter(DBTask.external_id == external_id, DBTask.source == source).first()
+                if existing:
+                    return NovaFlowTask.from_db(existing).to_dict()
+            else:
+                existing = db.query(DBTask).filter(
+                    DBTask.title == title, 
+                    DBTask.meta == meta, 
+                    DBTask.parent_event_id == parent_event_id, 
+                    DBTask.course_id == course_id,
+                    DBTask.user_id == user_id,
+                    DBTask.done == False
+                ).first()
+                if existing:
+                    return NovaFlowTask.from_db(existing).to_dict()
             
-            # Sinon dédoublonnage classique (legacy)
-            if not external_id and t.title == title and t.meta == meta and t.parent_event_id == parent_event_id and t.course_id == course_id and not t.done:
-                return t.to_dict()
-        
-        new_task = NovaFlowTask(str(uuid.uuid4()), title, priority, meta, False, parent_event_id, 
-                                external_id=external_id, source=source, due_date=due_date, course_id=course_id)
-        self._tasks.insert(0, new_task)
-        self._save_tasks()
-        return new_task.to_dict()
+            new_id = str(uuid.uuid4())
+            db_task = DBTask(
+                id=new_id,
+                title=title,
+                priority=priority,
+                meta=meta,
+                done=False,
+                parent_event_id=parent_event_id,
+                external_id=external_id,
+                source=source,
+                due_date=due_date,
+                course_id=course_id,
+                user_id=user_id,
+                sync_status="local"
+            )
+            db.add(db_task)
+            db.commit()
+            db.refresh(db_task)
+            return NovaFlowTask.from_db(db_task).to_dict()
 
     def update_task(self, task_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        task = self.get_task_object(task_id)
-        if task:
-            task.update(updates)
-            self._save_tasks()
-            return task.to_dict()
-        return None
+        with SessionLocal() as db:
+            db_task = db.query(DBTask).filter(DBTask.id == task_id).first()
+            if db_task:
+                if "title" in updates: db_task.title = updates["title"]
+                if "priority" in updates: db_task.priority = updates["priority"]
+                if "meta" in updates: db_task.meta = updates["meta"]
+                if "done" in updates: db_task.done = updates["done"]
+                if "parent_event_id" in updates: db_task.parent_event_id = updates["parent_event_id"]
+                if "external_id" in updates: db_task.external_id = updates["external_id"]
+                if "source" in updates: db_task.source = updates["source"]
+                if "due_date" in updates: db_task.due_date = updates["due_date"]
+                if "description" in updates: db_task.description = updates["description"]
+                if "course_id" in updates: db_task.course_id = updates["course_id"]
+                
+                db_task.sync_status = "pending" # Marquer pour sync cloud future
+                
+                db.commit()
+                db.refresh(db_task)
+                return NovaFlowTask.from_db(db_task).to_dict()
+            return None
 
     def delete_task(self, task_id: str) -> bool:
-        initial_len = len(self._tasks)
-        self._tasks = [t for t in self._tasks if t.id != task_id]
-        if len(self._tasks) < initial_len:
-            self._save_tasks()
-            return True
-        return False
+        with SessionLocal() as db:
+            db_task = db.query(DBTask).filter(DBTask.id == task_id).first()
+            if db_task:
+                db.delete(db_task)
+                db.commit()
+                return True
+            return False
 
     def delete_tasks_by_event(self, event_id: str) -> int:
-        initial_len = len(self._tasks)
-        self._tasks = [t for t in self._tasks if t.parent_event_id != event_id]
-        count = initial_len - len(self._tasks)
-        if count > 0:
-            self._save_tasks()
-        return count
+        with SessionLocal() as db:
+            count = db.query(DBTask).filter(DBTask.parent_event_id == event_id).delete()
+            db.commit()
+            return count
 
     def toggle_task(self, task_id: str) -> Optional[Dict[str, Any]]:
-        task = self.get_task_object(task_id)
-        if task:
-            task.toggle_status()
-            self._save_tasks()
-            return task.to_dict()
-        return None
+        with SessionLocal() as db:
+            db_task = db.query(DBTask).filter(DBTask.id == task_id).first()
+            if db_task:
+                db_task.done = not db_task.done
+                db_task.sync_status = "pending"
+                db.commit()
+                db.refresh(db_task)
+                return NovaFlowTask.from_db(db_task).to_dict()
+            return None
 
     def link_task_to_event(self, task_id: str, event_id: str) -> Optional[Dict[str, Any]]:
         return self.update_task(task_id, {"parent_event_id": event_id})
@@ -188,11 +192,11 @@ class TaskManager:
 
 _manager = TaskManager.instance()
 
-def get_tasks() -> List[Dict[str, Any]]:
-    return _manager.get_all_tasks()
+def get_tasks(user_id: str = None) -> List[Dict[str, Any]]:
+    return _manager.get_all_tasks(user_id=user_id)
 
-def add_task(title: str, priority: str = "medium", meta: str = "NovaFlow", parent_event_id: Optional[str] = None, due_date: Optional[str] = None, course_id: Optional[str] = None) -> Dict[str, Any]:
-    return _manager.add_task(title, priority, meta, parent_event_id, due_date=due_date, course_id=course_id)
+def add_task(title: str, priority: str = "medium", meta: str = "NovaFlow", parent_event_id: Optional[str] = None, due_date: Optional[str] = None, course_id: Optional[str] = None, user_id: str = None) -> Dict[str, Any]:
+    return _manager.add_task(title, priority, meta, parent_event_id, due_date=due_date, course_id=course_id, user_id=user_id)
 
 def update_task(task_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return _manager.update_task(task_id, updates)

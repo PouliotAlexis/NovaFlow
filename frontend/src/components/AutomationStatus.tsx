@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Activity } from 'lucide-react';
+import { api } from "@/services/api";
 
 type Job = {
     id: string;
@@ -17,12 +18,10 @@ export default function AutomationStatus() {
     const prevJobCount = useRef(0);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const logsRes = await fetch(`${API_URL}/api/automation/logs`);
+                const logsRes = await api.get("/api/automation/logs");
                 if (logsRes.ok) {
                     const data = await logsRes.json();
                     const newLogs = data.logs || [];
@@ -34,7 +33,7 @@ export default function AutomationStatus() {
                     }
                 }
 
-                const jobsRes = await fetch(`${API_URL}/api/automation/jobs`);
+                const jobsRes = await api.get("/api/automation/jobs");
                 if (jobsRes.ok) {
                     const jobsData = await jobsRes.json();
                     setJobs(jobsData);
@@ -69,7 +68,7 @@ export default function AutomationStatus() {
         e.stopPropagation();
         if (!confirm("Stop this process?")) return;
         try {
-            await fetch(`${API_URL}/api/automation/jobs/${jobId}`, { method: 'DELETE' });
+            await api.delete(`/api/automation/jobs/${jobId}`);
             setJobs(jobs.filter(j => j.id !== jobId));
         } catch (err) {
             alert("Error stopping process");

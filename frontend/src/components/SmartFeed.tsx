@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
+import { useAuth } from "./AuthProvider";
 
 export default function SmartFeed() {
+    const { user } = useAuth();
     const [greeting, setGreeting] = useState("");
     const [dateStr, setDateStr] = useState("");
 
@@ -33,7 +35,7 @@ export default function SmartFeed() {
                 Smart Feed
             </div>
             <div className="nf-smart-feed__greeting">
-                {greeting || "Bonjour"}, Alexis
+                {greeting || "Bonjour"}{user?.full_name ? `, ${user.full_name}` : user?.email ? `, ${user.email.split('@')[0]}` : ""}
             </div>
             <p className="nf-smart-feed__summary">
                 {dateStr

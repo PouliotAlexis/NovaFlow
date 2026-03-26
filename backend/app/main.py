@@ -14,10 +14,11 @@ if sys.platform == "win32":
 import os
 import shutil
 from datetime import datetime
+import traceback
 import json
 
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
@@ -27,9 +28,9 @@ from typing import Optional, List
 from app.core.config import settings
 from app.services.sanitizer import sanitize, desanitize, SanitizationMap
 from app.services.ai_engine import chat, chat_stream
-from app.services.document_processor import (
+from app.services.rag_engine.ingest import (
     ingest_document,
-    get_relevant_context,
+    query_rag,
     list_documents,
     delete_document,
     UPLOADS_DIR,
@@ -60,10 +61,20 @@ from app.services.automation import (
 from app.services.chat_manager import load_chat_history, save_chat_message, clear_chat_history
 from app.services.notification_manager import NotificationManager
 from app.services.context_builder import ContextBuilder
+from app.services.cloud_storage import CloudStorageService
+from app.db.database import SessionLocal
+from app.api.routes import auth as auth_router
 from app.api.routes import chat as chat_router
 from app.api.routes import moodle as moodle_router
+from app.services.auth_service import get_current_user
+from app.db.models import User # Pour les indexation futures
 
-# === App Setup ===
+# === App Setup & Database Initialization ===
+
+from app.db.database import engine, SessionLocal
+from app.db.models import Base, MoodleConfig
+# Création automatique des tables (Similaire à une migration légère)
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -71,22 +82,58 @@ app = FastAPI(
     description="NovaFlow - Votre Life OS intelligent et privé.",
 )
 
+# CORS au Sommet pour tout intercepter
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.middleware("http")
+async def cors_debug_middleware(request: Request, call_next):
+    origin = request.headers.get("origin")
+    if origin:
+        print(f"[CORS DEBUG] Request from Origin: {origin} for {request.method} {request.url.path}")
+    response = await call_next(request)
+    return response
+
 # Inclusion des nouveaux routers
 app.include_router(chat_router.router, prefix="/api/v2", tags=["Chat V2"])
 app.include_router(moodle_router.router, prefix="/api/v2", tags=["Moodle V2"])
+app.include_router(auth_router.router)
 
 # Managers Instances
 task_manager = TaskManager.instance()
 notif_manager = NotificationManager.instance()
 
-# CORS - Permettre au Frontend Next.js de communiquer avec le Backend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Exception handler pour s'assurer que les erreurs ont aussi les headers CORS
+from fastapi.responses import JSONResponse
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    response = JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+    # Les middlewares s'occuperont d'ajouter les headers CORS si on utilise dispatch
+    return response
+
+@app.exception_handler(Exception)
+async def debug_exception_handler(request: Request, exc: Exception):
+    error_msg = f"[ERROR] Global exception: {exc}\n{traceback.format_exc()}"
+    print(error_msg)
+    with open("backend_crash.log", "a", encoding="utf-8") as f:
+        f.write(f"--- {datetime.now()} ---\n{error_msg}\n")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "msg": str(exc)},
+    )
+
+# Handlers déjà définis au sommet
 
 
 # === Modèles de données (Pydantic) ===
@@ -143,9 +190,13 @@ def health_check():
     """Vérifie que le serveur est en marche."""
     return HealthCheck()
 
+@app.get("/api/ping")
+def ping_auth(current_user: User = Depends(get_current_user)):
+    return {"status": "ok", "user": current_user.email}
+
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
     """
     Endpoint principal de chat avec l'IA.
     
@@ -160,13 +211,14 @@ async def chat_endpoint(request: ChatRequest):
     prompt = request.message
     
     # Sauvegarder le message utilisateur dans l'historique
-    save_chat_message("user", prompt)
+    save_chat_message("user", prompt, user_id=current_user.id)
 
     # Utilisation du ContextBuilder pour aggréger Tâches + Calendrier + RAG
     context = ContextBuilder.build_global_context(
         user_query=prompt,
         include_tasks=True,
-        include_calendar=True
+        include_calendar=True,
+        user_id=current_user.id
     )
 
     # RAG additionnel si demandé
@@ -226,7 +278,7 @@ async def chat_endpoint(request: ChatRequest):
         ai_response = re.sub(task_pattern, create_and_confirm_task, ai_response, flags=re.IGNORECASE)
 
         # Sauvegarder la réponse IA dans l'historique
-        save_chat_message("ai", ai_response)
+        save_chat_message("ai", ai_response, user_id=current_user.id)
 
         return ChatResponse(
             response=ai_response,
@@ -244,7 +296,7 @@ async def chat_endpoint(request: ChatRequest):
 
 
 @app.post("/api/chat/stream")
-async def chat_stream_endpoint(request: ChatRequest):
+async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
     """
     Endpoint de chat avec réponse en streaming (Server-Sent Events).
     Envoie les tokens au fur et à mesure, puis un événement 'done' final
@@ -260,7 +312,8 @@ async def chat_stream_endpoint(request: ChatRequest):
     context = ContextBuilder.build_global_context(
         user_query=prompt,
         include_tasks=True,
-        include_calendar=True
+        include_calendar=True,
+        user_id=current_user.id
     )
 
     if request.use_rag:
@@ -271,7 +324,7 @@ async def chat_stream_endpoint(request: ChatRequest):
         except Exception:
             pass
 
-    save_chat_message("user", prompt if not was_sanitized else request.message)
+    save_chat_message("user", prompt if not was_sanitized else request.message, user_id=current_user.id)
 
     async def generate():
         full_response = ""
@@ -286,7 +339,9 @@ async def chat_stream_endpoint(request: ChatRequest):
                 yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            err_trace = traceback.format_exc()
+            print(f"💥 CHAT STREAM ERROR: {e}\n{err_trace}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'traceback': err_trace})}\n\n"
             return
 
         # Post-traitement sur la réponse complète
@@ -326,7 +381,7 @@ async def chat_stream_endpoint(request: ChatRequest):
 
         processed = re.sub(task_pattern, create_and_confirm_task_stream, processed, flags=re.IGNORECASE)
 
-        save_chat_message("ai", processed)
+        save_chat_message("ai", processed, user_id=current_user.id)
 
         yield f"data: {json.dumps({'type': 'done', 'response': processed, 'mode_used': active_mode, 'context_used': bool(context)})}\n\n"
 
@@ -343,14 +398,15 @@ async def chat_stream_endpoint(request: ChatRequest):
 # === Endpoints Chat History ===
 
 @app.get("/api/chat/history")
-def get_chat_history():
-    """Récupère l'historique des conversations."""
-    return {"history": load_chat_history()}
+def get_chat_history(current_user: User = Depends(get_current_user)):
+    """Récupère l'historique des conversations de l'utilisateur."""
+    from app.services.chat_manager import load_chat_history
+    return {"history": load_chat_history(user_id=current_user.id)}
 
 @app.delete("/api/chat/history")
-def delete_chat_history():
+def delete_chat_history(current_user: User = Depends(get_current_user)):
     """Efface l'historique des conversations."""
-    clear_chat_history()
+    clear_chat_history(user_id=current_user.id)
     return {"status": "cleared"}
 
 
@@ -359,7 +415,8 @@ def delete_chat_history():
 @app.post("/api/upload")
 async def upload_document(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Upload et ingère un document.
@@ -387,14 +444,31 @@ async def upload_document(
         raise HTTPException(status_code=500, detail=f"Erreur lors de la sauvegarde : {str(e)}")
     
     # Ingérer le document
-    result = ingest_document(file_path, file.filename or "uploaded_file")
+    result = ingest_document(file_path) # Utilise le nom du fichier par défaut
+    
+    # ⚡ CLOUD SYNC: Enregistrer et uploader vers Google Drive
+    db = SessionLocal()
+    try:
+        CloudStorageService.register_and_upload(file_path, db)
+        # Assigner à l'utilisateur
+        from app.db.models import CloudFile
+        cloud_file = db.query(CloudFile).filter(CloudFile.id == file.filename).first()
+        if cloud_file:
+            cloud_file.user_id = current_user.id
+            db.commit()
+    finally:
+        db.close()
+
+    # Correction pour que le résultat contienne ce que l'automation attend
+    if result["status"] == "success":
+        result["status"] = "analyzed"
     
     # ⚡ AUTOMATION: Lancer l'analyse en tant que Job tracké
     if result["status"] == "analyzed":
         await start_job(
             f"Analyse doc: {result['file_name']}",
             analyze_document_for_tasks(
-                doc_id=result["doc_id"], 
+                doc_id=result["file_name"], # On utilise le nom comme ID stable
                 file_name=result["file_name"]
             )
         )
@@ -403,18 +477,42 @@ async def upload_document(
 
 
 @app.get("/api/documents")
-def get_documents():
-    """Liste tous les documents ingérés."""
-    return {"documents": list_documents()}
-
+def get_documents(current_user: User = Depends(get_current_user)):
+    """Liste tous les documents de l'utilisateur."""
+    # Note: list_documents() actuel est global, on devrait le filtrer par la DB
+    db = SessionLocal()
+    try:
+        from app.db.models import CloudFile
+        docs = db.query(CloudFile).filter(CloudFile.user_id == current_user.id).all()
+        # Fallback pour les fichiers déjà là
+        if not docs:
+             docs = db.query(CloudFile).filter(CloudFile.user_id == None).all()
+        return {"documents": docs}
+    finally:
+        db.close()
 
 @app.delete("/api/documents/{doc_id}")
-def remove_document(doc_id: str):
-    """Supprime un document de la base vectorielle."""
-    success = delete_document(doc_id)
-    if success:
-        return {"status": "deleted", "doc_id": doc_id}
-    raise HTTPException(status_code=404, detail="Document non trouvé.")
+def remove_document(doc_id: str, current_user: User = Depends(get_current_user)):
+    """Supprime un document (vérifie d'abord l'appartenance)."""
+    db = SessionLocal()
+    try:
+        from app.db.models import CloudFile
+        doc = db.query(CloudFile).filter(CloudFile.id == doc_id, CloudFile.user_id == current_user.id).first()
+        if not doc:
+             # Fallback migration
+             doc = db.query(CloudFile).filter(CloudFile.id == doc_id, CloudFile.user_id == None).first()
+        
+        if not doc:
+             raise HTTPException(status_code=404, detail="Document non trouvé ou accès refusé.")
+             
+        success = delete_document(doc_id)
+        if success:
+            db.delete(doc)
+            db.commit()
+            return {"status": "deleted", "doc_id": doc_id}
+        raise HTTPException(status_code=500, detail="Erreur lors de la suppression vectorielle.")
+    finally:
+        db.close()
 
 
 @app.get("/api/documents/{doc_id}/download")
@@ -426,8 +524,16 @@ def download_document(doc_id: str):
         raise HTTPException(status_code=404, detail="Document non trouvé.")
     
     file_path = os.path.join(UPLOADS_DIR, doc["file_name"])
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Fichier non trouvé sur le disque.")
+    
+    # ⚡ CLOUD SYNC: S'assurer que le fichier est disponible localement (Multi-Device)
+    db = SessionLocal()
+    try:
+        if not os.path.exists(file_path):
+            success = CloudStorageService.ensure_local_copy(doc["file_name"], file_path, db)
+            if not success:
+                 raise HTTPException(status_code=404, detail="Fichier non trouvé localement et échec du téléchargement Cloud.")
+    finally:
+        db.close()
     
     return FileResponse(
         path=file_path,
@@ -449,28 +555,27 @@ def get_settings():
     }
 
 
-# === Moodle Settings ===
-
-MOODLE_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "moodle_settings.json")
+# === Moodle Settings (DB Version) ===
 
 def _load_moodle_urls() -> list:
-    """Charge les URLs Moodle. Compatible ancien format {url} et nouveau {urls}."""
-    if os.path.exists(MOODLE_SETTINGS_FILE):
-        try:
-            with open(MOODLE_SETTINGS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if "urls" in data:
-                    return [u for u in data["urls"] if u]
-                old_url = data.get("url", "")
-                if old_url:
-                    return [old_url]
-        except Exception:
-            pass
-    return []
+    """Charge les URLs Moodle depuis la base de données."""
+    with SessionLocal() as db:
+        configs = db.query(MoodleConfig).filter(MoodleConfig.is_active == True).all()
+        return [c.url for c in configs]
 
 def _save_moodle_urls(urls: list):
-    with open(MOODLE_SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump({"urls": urls}, f, indent=2)
+    """Met à jour les URLs Moodle en base de données."""
+    with SessionLocal() as db:
+        # On désactive les anciennes URLs non présentes dans la nouvelle liste
+        db.query(MoodleConfig).filter(MoodleConfig.url.notin_(urls)).update({"is_active": False}, synchronize_session=False)
+        
+        for url in urls:
+            existing = db.query(MoodleConfig).filter(MoodleConfig.url == url).first()
+            if existing:
+                existing.is_active = True
+            else:
+                db.add(MoodleConfig(url=url, is_active=True))
+        db.commit()
 
 @app.get("/api/settings/moodle")
 def get_moodle_settings():
@@ -678,29 +783,16 @@ async def cancel_automation_job(job_id: str):
 # === Endpoints Tâches ===
 
 @app.get("/api/tasks")
-async def get_all_tasks():
-    """Récupère toutes les tâches."""
-    # ⚡ AUTOMATION — Déclencher l'analyse périodique (Tasks) si nécessaire
-    try:
-        from app.services.automation import should_trigger_periodic_sync, analyze_all_calendars, sync_moodle_native_v2, get_active_jobs, start_job
-        existing_jobs = get_active_jobs()
-        is_running_cal = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
-        is_running_moodle = any(job["name"] == "Sync Moodle Native V2" for job in existing_jobs)
-        
-        if should_trigger_periodic_sync():
-             if not is_running_cal:
-                 await start_job("Analyse Calendrier", analyze_all_calendars(days=30))
-             if not is_running_moodle:
-                 await start_job("Sync Moodle Native V2", sync_moodle_native_v2())
-    except Exception as e:
-        print(f"Erreur déclenchement sync depuis tasks api: {e}")
-        
-    return task_manager.get_all_tasks()
+def get_all_tasks(current_user: User = Depends(get_current_user)):
+    from app.services.task_manager import TaskManager
+    tm = TaskManager.instance()
+    # Utiliser directly from_db pour garantir que TOUS les champs (id, course_id, etc.) sont présents
+    return tm.get_all_tasks(user_id=current_user.id)
 
 @app.post("/api/tasks")
-def create_new_task(task: TaskRequest):
-    """Crée une nouvelle tâche."""
-    return task_manager.add_task(task.title, priority="medium", meta="Utilisateur")
+def create_new_task(task: TaskRequest, current_user = Depends(get_current_user)):
+    """Crée une nouvelle tâche pour l'utilisateur actuel."""
+    return task_manager.add_task(task.title, priority="medium", meta="Utilisateur", user_id=current_user.id)
 
 @app.patch("/api/tasks/{task_id}/toggle")
 def toggle_task_status(task_id: str):
@@ -909,16 +1001,15 @@ def get_event_status():
 
 
 @app.get("/api/calendar/events/simple")
-async def get_simple_events():
-    """Récupère une liste simplifiée des événements de tous les calendriers pour les menus déroulants."""
-    from app.services.calendar_sync.aggregator import get_unified_events
+async def get_simple_events(current_user: User = Depends(get_current_user)):
+    """Récupère une liste simplifiée des événements pour les menus déroulants."""
+    from app.services.calendar_sync.aggregator import get_unified_events, get_moodle_events, get_moodle_extension_events
     from starlette.concurrency import run_in_threadpool
     
     try:
-        events = await run_in_threadpool(get_unified_events, days=30)
+        events = await run_in_threadpool(get_unified_events, days=30, user_id=current_user.id)
     except Exception as e:
         print(f"Erreur get_simple_events: {e}")
-        events = []
     
     # Sort by start date, newest first or upcoming first. 
     # Let's just return them sorted by start date
@@ -945,41 +1036,26 @@ async def get_simple_events():
 
 # === Google Calendar Events ===
 
+from fastapi.responses import JSONResponse # Added for the new calendar_events endpoint
+
 @app.get("/api/calendar/events")
-async def calendar_events(days: int = 30):
-    """Récupère les événements unifiés (Google + Outlook + Tâches locales) pour les X prochains jours."""
+def calendar_events(days: int = 30, current_user: User = Depends(get_current_user)):
+    """Récupère les événements unifiés pour l'utilisateur actuel."""
     import traceback
     from app.services.calendar_sync.aggregator import get_unified_events
-    from app.services.calendar_sync.microsoft_auth import MicrosoftAuthService
-    
-    moodle_urls = _load_moodle_urls()
-    if not google_is_connected() and not MicrosoftAuthService.is_any_connected() and not moodle_urls:
-        raise HTTPException(status_code=401, detail="Aucun calendrier ou lien Moodle connecté.")
-    
     try:
-        # Exécuter l'appel dans un threadpool pour l'agrégation
-        events = await run_in_threadpool(get_unified_events, days=days)
+        events = get_unified_events(days=days, user_id=current_user.id)
+        return {"events": events, "count": len(events)}
     except Exception as e:
-        print(f"💥 CRASH in get_unified_events: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Erreur récupération calendrier: {str(e)}")
-    
-    # ⚡ AUTOMATION — Déclencher l'analyse IA si de nouveaux events sont détectés
-    # NOTE: L'analyse se fait TOUJOURS sur la plage complète (30j), peu importe le `days` demandé par le frontend.
-    # Cela évite les analyses partielles (ex: SmartFeed days=3 puis CalendarView days=30).
-    try:
-        existing_jobs = get_active_jobs()
-        is_running = any(job["name"] == "Analyse Calendrier" for job in existing_jobs)
-        
-        from app.services.automation import should_trigger_periodic_sync
-        
-        if not is_running and (has_new_events(events) or should_trigger_periodic_sync()):
-             await start_job("Analyse Calendrier", analyze_all_calendars(days=30))
-    except Exception as e:
-        print(f"Erreur déclenchement automation calendrier: {e}")
-
-    
-    return {"events": events, "count": len(events)}
+        err_detail = traceback.format_exc()
+        print(f"💥 CRASH in calendar_events: {e}\n{err_detail}")
+        return JSONResponse(
+            status_code=500, 
+            content={
+                "detail": f"Erreur récupération calendrier: {str(e)}",
+                "traceback": err_detail
+            }
+        )
 
 
 @app.get("/api/calendar/today")

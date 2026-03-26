@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Calendar } from "lucide-react";
+import { api } from "@/services/api";
 
 interface CalendarEvent {
     title?: string;
@@ -17,7 +18,6 @@ interface MiniCalendarProps {
     noWrapper?: boolean;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export default function MiniCalendar({ courseName, noWrapper = false }: MiniCalendarProps) {
     const now = new Date();
@@ -36,7 +36,7 @@ export default function MiniCalendar({ courseName, noWrapper = false }: MiniCale
     // Fetch all events for the month (remaining days)
     const fetchMonthEvents = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/calendar/events?days=${daysInMonth}`);
+            const res = await api.get(`/api/calendar/events?days=${daysInMonth}`);
             if (res.ok) {
                 const data = await res.json();
                 let events = data.events || [];

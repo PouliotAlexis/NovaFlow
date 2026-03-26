@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronRight, Settings 
 } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { api } from "@/services/api";
 
 interface Task {
     id: string;
@@ -121,7 +121,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
     const checkConnection = useCallback(async () => {
         let hasAny = false;
         try {
-            const res = await fetch(`${API_URL}/api/auth/google/accounts`);
+            const res = await api.get("/api/auth/google/accounts");
             if (res.ok) {
                 const data = await res.json();
                 setGoogleAccounts(data.accounts || []);
@@ -129,7 +129,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
             }
         } catch { }
         try {
-            const res = await fetch(`${API_URL}/api/auth/microsoft/accounts`);
+            const res = await api.get("/api/auth/microsoft/accounts");
             if (res.ok) {
                 const data = await res.json();
                 setMicrosoftAccounts(data.accounts || []);
@@ -137,7 +137,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
             }
         } catch { }
         try {
-            const res = await fetch(`${API_URL}/api/settings/moodle`);
+            const res = await api.get("/api/settings/moodle");
             if (res.ok) {
                 const data = await res.json();
                 const urls = data.urls || (data.url ? [data.url] : []);
@@ -152,8 +152,8 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
     const fetchEvents = useCallback(async () => {
         try {
             const [eventsRes, statusRes] = await Promise.all([
-                fetch(`${API_URL}/api/calendar/events?days=30`),
-                fetch(`${API_URL}/api/calendar/event-status`)
+                api.get("/api/calendar/events?days=30"),
+                api.get("/api/calendar/event-status")
             ]);
             if (!eventsRes.ok) return;
             const data = await eventsRes.json();
@@ -173,12 +173,8 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
 
     useEffect(() => {
         const init = async () => {
-            const connected = await checkConnection();
-            if (connected) {
-                await fetchEvents();
-            } else {
-                setIsLoading(false);
-            }
+            await checkConnection();
+            await fetchEvents();
         };
         init();
 
@@ -224,7 +220,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
 
     const handleConnect = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/auth/google/login`);
+            const res = await api.get("/api/auth/google/login");
             const data = await res.json();
             if (data.url) {
                 window.location.href = data.url;
@@ -250,7 +246,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
         }));
 
         try {
-            await fetch(`${API_URL}/api/tasks/${taskId}/toggle`, { method: "PATCH" });
+            await api.patch(`/api/tasks/${taskId}/toggle`);
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
             console.error("Erreur toggle tâche:", error);
@@ -263,7 +259,7 @@ export default function CalendarView({ onNavigate }: { onNavigate?: (view: strin
             evt.id === eventId ? { ...evt, done: !evt.done } : evt
         ));
         try {
-            await fetch(`${API_URL}/api/calendar/events/${encodeURIComponent(eventId)}/toggle`, { method: "PATCH" });
+            await api.patch(`/api/calendar/events/${encodeURIComponent(eventId)}/toggle`);
         } catch (error) {
             console.error("Erreur toggle event:", error);
             fetchEvents();

@@ -23,7 +23,7 @@ import hashlib
 from typing import List
 
 from app.core.config import settings
-from .document_processor import get_relevant_context, list_documents, extract_text, UPLOADS_DIR
+from .rag_engine.ingest import query_rag, list_documents, ingest_document, UPLOADS_DIR, extract_text
 from .ai_engine import chat
 from .task_manager import TaskManager, NovaFlowTask
 from .calendar_sync.google import get_upcoming_events

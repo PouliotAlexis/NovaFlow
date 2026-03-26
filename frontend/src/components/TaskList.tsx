@@ -3,9 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { CheckCircle, Clock, Calendar, Edit2, Trash2, Sparkles, AlertCircle, Book } from "lucide-react";
 
-const API_URL = typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000")
-    : "http://127.0.0.1:8000";
+import { api } from "@/services/api";
 
 interface Task {
     id: string;
@@ -315,7 +313,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
 
     const fetchTasks = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/tasks`, { cache: 'no-store' });
+            const res = await api.get("/api/tasks");
             if (res.ok) {
                 const data = await res.json();
                 setTasks(data);
@@ -329,7 +327,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
 
     const fetchEvents = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/calendar/events/simple`, { cache: 'no-store' });
+            const res = await api.get("/api/calendar/events/simple");
             if (res.ok) {
                 const data = await res.json();
                 setLocalEvents(data.events || []);
@@ -341,7 +339,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
 
     const fetchCourses = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/v2/moodle/courses`);
+            const res = await api.get("/api/v2/moodle/courses");
             if (res.ok) {
                 const data = await res.json();
                 setCourses(data || []);
@@ -374,7 +372,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
 
     const toggleTask = async (task: Task) => {
         try {
-            await fetch(`${API_URL}/api/tasks/${task.id}/toggle`, { method: "PATCH" });
+            await api.patch(`/api/tasks/${task.id}/toggle`);
             await fetchTasks();
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
@@ -384,11 +382,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
 
     const updateTaskCourse = async (taskId: string, courseId: string) => {
         try {
-            await fetch(`${API_URL}/api/tasks/${taskId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ course_id: courseId || null })
-            });
+            await api.patch(`/api/tasks/${taskId}`, { course_id: courseId || null });
             await fetchTasks();
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
         } catch (error) {
@@ -398,7 +392,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
 
     const deleteTask = async (taskId: string) => {
         try {
-            await fetch(`${API_URL}/api/tasks/${taskId}`, { method: "DELETE" });
+            await api.delete(`/api/tasks/${taskId}`);
             await fetchTasks();
             await fetchEvents();
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
@@ -409,12 +403,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
 
     const updateTaskParentEvent = async (taskId: string, newParentEventId: string) => {
         try {
-            const endpoint = `${API_URL}/api/tasks/${taskId}`;
-            await fetch(endpoint, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ parent_event_id: newParentEventId || null })
-            });
+            await api.patch(`/api/tasks/${taskId}`, { parent_event_id: newParentEventId || null });
             await fetchTasks();
             await fetchEvents();
             window.dispatchEvent(new CustomEvent("novaflow-task-changed"));
@@ -425,8 +414,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
 
     const forceCreateEvent = async (taskId: string) => {
         try {
-            const endpoint = `${API_URL}/api/tasks/${taskId}/force-create-event`;
-            const res = await fetch(endpoint, { method: "POST" });
+            const res = await api.post(`/api/tasks/${taskId}/force-create-event`);
             if (res.ok) {
                 await fetchTasks();
                 await fetchEvents();

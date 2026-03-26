@@ -5,6 +5,7 @@ import {
     User, GraduationCap, Briefcase, Home, Brain, 
     Cloud, Mail, Calendar, Link, Plus, Trash2, Shield 
 } from "lucide-react";
+import { api } from "@/services/api";
 
 export default function SettingsPanel() {
     const [aiMode, setAiMode] = useState<"local" | "cloud">("local");
@@ -17,11 +18,10 @@ export default function SettingsPanel() {
     const prevAccountCount = useRef<number | null>(null);
     const prevMsAccountCount = useRef<number | null>(null);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
     const fetchGoogleAccounts = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/auth/google/accounts`);
+            const res = await api.get("/api/auth/google/accounts");
             if (res.ok) {
                 const data = await res.json();
                 const accounts = data.accounts || [];
@@ -39,7 +39,7 @@ export default function SettingsPanel() {
 
     const fetchMicrosoftAccounts = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/auth/microsoft/accounts`);
+            const res = await api.get("/api/auth/microsoft/accounts");
             if (res.ok) {
                 const data = await res.json();
                 const accounts = data.accounts || [];
@@ -57,7 +57,7 @@ export default function SettingsPanel() {
 
     const fetchMoodleSettings = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/settings/moodle`);
+            const res = await api.get("/api/settings/moodle");
             if (res.ok) {
                 const data = await res.json();
                 setMoodleUrls(data.urls || (data.url ? [data.url] : []));
@@ -71,11 +71,7 @@ export default function SettingsPanel() {
         if (!newMoodleUrl.trim()) return;
         setIsSavingMoodle(true);
         try {
-            const res = await fetch(`${API_URL}/api/settings/moodle`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: newMoodleUrl.trim() }),
-            });
+            const res = await api.post("/api/settings/moodle", { url: newMoodleUrl.trim() });
             if (res.ok) {
                 const data = await res.json();
                 setMoodleUrls(data.urls || []);
@@ -90,9 +86,7 @@ export default function SettingsPanel() {
 
     const removeMoodleUrl = async (url: string) => {
         try {
-            const res = await fetch(`${API_URL}/api/settings/moodle?url=${encodeURIComponent(url)}`, {
-                method: "DELETE",
-            });
+            const res = await api.delete(`/api/settings/moodle?url=${encodeURIComponent(url)}`);
             if (res.ok) {
                 const data = await res.json();
                 setMoodleUrls(data.urls || []);
@@ -120,7 +114,7 @@ export default function SettingsPanel() {
 
     const connectGoogle = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/auth/google/login`);
+            const res = await api.get("/api/auth/google/login");
             if (res.ok) {
                 const data = await res.json();
                 window.open(data.url, "_blank", "width=600,height=600");
@@ -138,7 +132,7 @@ export default function SettingsPanel() {
     const disconnectGoogle = async (email: string) => {
         if (!confirm(`Disconnect account ${email}?`)) return;
         try {
-            const res = await fetch(`${API_URL}/api/auth/google/accounts/${email}`, { method: "DELETE" });
+            const res = await api.delete(`/api/auth/google/accounts/${email}`);
             if (res.ok) {
                 fetchGoogleAccounts();
             }
@@ -149,7 +143,7 @@ export default function SettingsPanel() {
 
     const connectMicrosoft = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/auth/microsoft/login`);
+            const res = await api.get("/api/auth/microsoft/login");
             if (res.ok) {
                 const data = await res.json();
                 window.open(data.url, "_blank", "width=600,height=700");
@@ -167,7 +161,7 @@ export default function SettingsPanel() {
     const disconnectMicrosoft = async (email: string) => {
         if (!confirm(`Disconnect Microsoft account ${email}?`)) return;
         try {
-            const res = await fetch(`${API_URL}/api/auth/microsoft/accounts/${email}`, { method: "DELETE" });
+            const res = await api.delete(`/api/auth/microsoft/accounts/${email}`);
             if (res.ok) {
                 fetchMicrosoftAccounts();
             }

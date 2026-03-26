@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Bell, Clock, AlertTriangle, CheckCircle, Info, Inbox } from "lucide-react";
+import { api } from "@/services/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface Notification {
     id: string;
@@ -23,7 +23,7 @@ export default function NotificationPanel() {
 
     const fetchNotifications = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/notifications`);
+            const res = await api.get("/api/notifications");
             if (res.ok) {
                 const data = await res.json();
                 setNotifications(data.notifications || []);
@@ -51,7 +51,7 @@ export default function NotificationPanel() {
 
     const markAsRead = async (id: string) => {
         try {
-            const res = await fetch(`${API_URL}/api/notifications/read/${id}`, { method: "POST" });
+            const res = await api.post(`/api/notifications/read/${id}`);
             if (res.ok) {
                 setNotifications((prev) =>
                     prev.map((n) => (n.id === id ? { ...n, read: true } : n))
@@ -64,7 +64,7 @@ export default function NotificationPanel() {
 
     const markAllAsRead = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/notifications/read-all`, { method: "POST" });
+            const res = await api.post("/api/notifications/read-all");
             if (res.ok) {
                 setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
             }
@@ -76,7 +76,7 @@ export default function NotificationPanel() {
     const clearAll = async () => {
         if (!confirm("Clear all notifications?")) return;
         try {
-            const res = await fetch(`${API_URL}/api/notifications`, { method: "DELETE" });
+            const res = await api.delete("/api/notifications");
             if (res.ok) {
                 setNotifications([]);
             }

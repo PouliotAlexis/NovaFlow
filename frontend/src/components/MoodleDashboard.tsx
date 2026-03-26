@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import CourseCard from "./CourseCard";
 import { GraduationCap, RefreshCw, Plus } from "lucide-react";
 import MoodleSyncDialog from "./MoodleSyncDialog";
+import { api } from "@/services/api";
 
 export default function MoodleDashboard() {
   const [courses, setCourses] = useState<any[]>([]);
@@ -11,12 +12,10 @@ export default function MoodleDashboard() {
 
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v2/moodle/session/status`);
+      const res = await api.get("/api/v2/moodle/session/status");
       if (res.ok) {
         const data = await res.json();
         setIsConnected(data.connected);
@@ -29,7 +28,7 @@ export default function MoodleDashboard() {
   const fetchCourses = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/v2/moodle/courses`);
+      const res = await api.get("/api/v2/moodle/courses");
       if (res.ok) {
         const data = await res.json();
         setCourses(data);
@@ -90,7 +89,7 @@ export default function MoodleDashboard() {
                   btn.disabled = true;
                   btn.innerHTML = '<span class="nf-spin">⏳</span>...';
                   try {
-                    const res = await fetch(`${API_URL}/api/v2/moodle/login`, { method: "POST" });
+                    const res = await api.post("/api/v2/moodle/login");
                     const data = await res.json();
                     if (data.success) {
                       await fetchStatus();

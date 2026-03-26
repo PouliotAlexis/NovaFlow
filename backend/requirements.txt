@@ -8,7 +8,15 @@ python-multipart
 python-dotenv
 sqlalchemy
 pytest
-chromadb
+# Vector Store
+chromadb==0.6.1
+pgvector==0.3.6
+langchain-postgres==0.0.12
+psycopg[binary]
+psycopg2-binary
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
 langchain
 langchain-community
 langchain-openai
