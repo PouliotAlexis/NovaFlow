@@ -1,6 +1,6 @@
 // NovaFlow API Service
 
-const API_BASE_URL = "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 async function getAuthHeaders() {
     const token = typeof window !== "undefined" ? localStorage.getItem("nf_token") : null;

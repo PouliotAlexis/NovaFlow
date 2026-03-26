@@ -21,10 +21,19 @@ import { Hammer } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function Home() {
-  const { user, isLoading } = useAuth();
+  const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState("dashboard");
+  const { user, isLoading } = useAuth();
 
-  if (isLoading) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  if (!mounted || isLoading) {
+    return (
+      <div style={{ background: "var(--nf-bg)", minHeight: "100vh" }} />
+    );
+  }
   
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
