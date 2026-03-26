@@ -296,7 +296,11 @@ async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_c
 
 
 @app.post("/api/chat/stream")
-async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
+async def chat_stream_endpoint(
+    request: ChatRequest, 
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user)
+):
     """
     Endpoint de chat avec réponse en streaming (Server-Sent Events).
     Envoie les tokens au fur et à mesure, puis un événement 'done' final
@@ -338,6 +342,9 @@ async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depend
                 full_response += token
                 yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
+        except asyncio.CancelledError:
+            print("[CHAT] Stream cancelled by client.")
+            return
         except Exception as e:
             err_trace = traceback.format_exc()
             print(f"💥 CHAT STREAM ERROR: {e}\n{err_trace}")
@@ -380,8 +387,19 @@ async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depend
             return f"✅ Tâche '{task_title}' ajoutée."
 
         processed = re.sub(task_pattern, create_and_confirm_task_stream, processed, flags=re.IGNORECASE)
+        
+        # Sauvegarde garantie via BackgroundTasks pour éviter les interruptions client
+        def task_save():
+            log_path = r"C:\Users\alexi\GIT\NovaFlow\backend\db_audit.log"
+            try:
+                save_chat_message("ai", processed, user_id=current_user.id)
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now()}] SUCCESS: AI message saved for user_id={current_user.id}\n")
+            except Exception as e:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now()}] ERROR: AI message save failed for user_id={current_user.id}: {e}\n")
 
-        save_chat_message("ai", processed, user_id=current_user.id)
+        background_tasks.add_task(task_save)
 
         yield f"data: {json.dumps({'type': 'done', 'response': processed, 'mode_used': active_mode, 'context_used': bool(context)})}\n\n"
 
@@ -390,7 +408,9 @@ async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depend
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "Content-Encoding": "identity",
         },
     )
 
@@ -406,8 +426,9 @@ def get_chat_history(current_user: User = Depends(get_current_user)):
 @app.delete("/api/chat/history")
 def delete_chat_history(current_user: User = Depends(get_current_user)):
     """Efface l'historique des conversations."""
-    clear_chat_history(user_id=current_user.id)
-    return {"status": "cleared"}
+    print(f"[CHAT DEBUG] Request: Delete history for user: {current_user.id} ({current_user.email})")
+    count = clear_chat_history(user_id=current_user.id)
+    return {"status": "cleared", "deleted_count": count}
 
 
 # === Endpoints Documents (RAG) ===

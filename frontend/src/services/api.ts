@@ -24,12 +24,7 @@ export const api = {
             console.log(`[DEBUG API] GET Response for "${url}":`, response.status);
             
             if (response.status === 401) {
-                // Redirection vers login si token invalide
-                if (typeof window !== "undefined") {
-                    localStorage.removeItem("nf_token");
-                    localStorage.removeItem("nf_user");
-                    window.location.href = "/auth/login";
-                }
+                this.handleUnauthorized();
             }
             return response;
         } catch (error) {
@@ -38,34 +33,55 @@ export const api = {
         }
     },
 
-    async post(endpoint: string, data?: any) {
+    async post(endpoint: string, data?: any, signal?: AbortSignal) {
         const headers = await getAuthHeaders();
-        return fetch(`${API_BASE_URL}${endpoint}`, {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: "POST",
             headers,
-            body: data ? JSON.stringify(data) : undefined
+            body: data ? JSON.stringify(data) : undefined,
+            signal
         });
+        if (response.status === 401) {
+            this.handleUnauthorized();
+        }
+        return response;
     },
 
     async patch(endpoint: string, data?: any) {
         const headers = await getAuthHeaders();
-        return fetch(`${API_BASE_URL}${endpoint}`, {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: "PATCH",
             headers,
             body: data ? JSON.stringify(data) : undefined
         });
+        if (response.status === 401) {
+            this.handleUnauthorized();
+        }
+        return response;
     },
 
     async delete(endpoint: string) {
         const headers = await getAuthHeaders();
-        return fetch(`${API_BASE_URL}${endpoint}`, {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: "DELETE",
             headers
         });
+        if (response.status === 401) {
+            this.handleUnauthorized();
+        }
+        return response;
+    },
+
+    handleUnauthorized() {
+        if (typeof window !== "undefined") {
+            localStorage.removeItem("nf_token");
+            localStorage.removeItem("nf_user");
+            window.location.href = "/auth/login";
+        }
     },
     
     // Support pour le streaming de chat
-    async stream(endpoint: string, data: any) {
+    async stream(endpoint: string, data: any, signal?: AbortSignal) {
         const token = typeof window !== "undefined" ? localStorage.getItem("nf_token") : null;
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: "POST",
@@ -73,15 +89,12 @@ export const api = {
                 "Content-Type": "application/json",
                 ...(token ? { "Authorization": `Bearer ${token}` } : {})
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(data),
+            signal
         });
 
         if (response.status === 401) {
-            if (typeof window !== "undefined") {
-                localStorage.removeItem("nf_token");
-                localStorage.removeItem("nf_user");
-                window.location.href = "/auth/login";
-            }
+            this.handleUnauthorized();
         }
         return response;
     }

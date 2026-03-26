@@ -1,0 +1,18 @@
+[
+  {
+    "id": "74e76be8-3542-4076-88ca-49e1238957c4",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Acheter du pain",
+    "type": "success",
+    "timestamp": "2026-03-26T07:20:51.031074",
+    "read": false
+  },
+  {
+    "id": "671b5db3-cb94-43b8-b3ca-eaeba80acab8",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Titre de la tâche",
+    "type": "success",
+    "timestamp": "2026-03-26T07:20:50.729745",
+    "read": false
+  }
+]

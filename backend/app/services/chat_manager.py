@@ -54,10 +54,32 @@ def save_chat_message(role: str, content: str, user_id: str = None):
 def clear_chat_history(user_id: str = None):
     """Efface l'historique de l'utilisateur en base de données."""
     with SessionLocal() as db:
+        # Logique de suppression atomique
         query = db.query(DBChatMessage)
         if user_id:
             query = query.filter(DBChatMessage.user_id == user_id)
         else:
             query = query.filter(DBChatMessage.user_id == None)
-        query.delete()
+        
+        deleted_count = query.delete(synchronize_session='fetch')
         db.commit()
+        
+        # Audit log pour diagnostic Supabase
+        log_path = r"C:\Users\alexi\GIT\NovaFlow\backend\db_audit.log"
+        from datetime import datetime
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now()}] DELETE_ACTION: user_id={user_id}, deleted_count={deleted_count}\n")
+        except:
+            pass
+        
+        # Libérer l'espace disque si on utilise SQLite
+        try:
+            if db.get_bind().dialect.name == 'sqlite':
+                db.execute("VACUUM")
+                print("[DB DEBUG] clear_chat_history: VACUUM executed successfully.")
+        except Exception as e:
+            print(f"[DB DEBUG] clear_chat_history: VACUUM check/execution failed: {e}")
+
+        print(f"[DB DEBUG] clear_chat_history: Deleted {deleted_count} messages for user_id={user_id}")
+        return deleted_count

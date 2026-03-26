@@ -86,7 +86,13 @@ async def chat_endpoint(request: CourseChatRequest):
 
         return StreamingResponse(
             generate(),
-            media_type="text/plain; charset=utf-8"
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+                "Content-Encoding": "identity",
+            }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

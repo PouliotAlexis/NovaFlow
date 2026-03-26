@@ -34,6 +34,7 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     const handleScroll = () => {
         if (!scrollContainerRef.current) return;
@@ -65,12 +66,21 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
         fetchHistory();
     }, []);
 
+    const [showConfirm, setShowConfirm] = useState(false);
+
     const clearHistory = async () => {
-        if (!confirm("Clear all chat history?")) return;
+        // Interrompre tout stream en cours avant la suppression
+        if (abortControllerRef.current) {
+            console.log("[CHAT] Aborting active stream before deletion.");
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+
         try {
             const response = await api.delete("/api/chat/history");
             if (response.ok) {
                 setMessages(INITIAL_MESSAGES);
+                setShowConfirm(false);
             }
         } catch (error) {
             console.error("Error clearing history:", error);
@@ -93,13 +103,17 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
         const aiMsgId = (Date.now() + 1).toString();
         setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: "" }]);
 
+        // Créer un nouveau contrôleur pour cette requête
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         try {
             const response = await api.stream("/api/chat/stream", {
                 message: userMsg.content,
                 system_prompt:
                     "Tu es NovaFlow, un assistant personnel intelligent et élégant. Réponds TOUJOURS en utilisant un formatage Markdown riche et structuré (listes à puces, texte en gras, tableaux si pertinent). Utilise des emojis avec parcimonie pour agrémenter la réponse. Sépare tes paragraphes par des sauts de ligne clairs.",
                 course_id: courseId,
-            });
+            }, controller.signal);
 
             if (!response.ok || !response.body) throw new Error("API Error");
 
@@ -121,28 +135,38 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                         const data = JSON.parse(line.slice(6));
                         if (data.type === "token") {
                             const cleanedToken = data.content;
-                            setMessages((prev) =>
-                                prev.map((msg) =>
+                            setMessages((prev) => {
+                                // Vérifier si le message existe encore (il pourrait avoir été supprimé par clearHistory)
+                                if (!prev.some(m => m.id === aiMsgId)) return prev;
+                                return prev.map((msg) =>
                                     msg.id === aiMsgId
                                         ? { ...msg, content: msg.content + cleanedToken }
                                         : msg
-                                )
-                            );
+                                );
+                            });
                         } else if (data.type === "done") {
-                            setMessages((prev) =>
-                                prev.map((msg) =>
+                            setMessages((prev) => {
+                                if (!prev.some(m => m.id === aiMsgId)) return prev;
+                                return prev.map((msg) =>
                                     msg.id === aiMsgId ? { ...msg, content: data.response } : msg
-                                )
-                            );
+                                );
+                            });
                         }
                     } catch (err) {
                         console.error("SSE Parse Error:", err, line);
                     }
                 }
             }
-        } catch {
-            setMessages((prev) =>
-                prev.map((msg) =>
+        } catch (error: any) {
+            // Ignorer l'erreur d'annulation
+            if (error.name === "AbortError") {
+                console.log("[CHAT] Stream aborted, skipping error display.");
+                return;
+            }
+
+            setMessages((prev) => {
+                if (!prev.some(m => m.id === aiMsgId)) return prev;
+                return prev.map((msg) =>
                     msg.id === aiMsgId
                         ? {
                               ...msg,
@@ -150,8 +174,8 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                                   "⚠️ I can't respond right now. Make sure the backend server (`python main.py`) and Ollama are running.",
                           }
                         : msg
-                )
-            );
+                );
+            });
         } finally {
             setIsLoading(false);
         }
@@ -252,11 +276,39 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                             <MessageSquare size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-accent)' }} />
                             Chat AI
                         </span>
-                        <button onClick={clearHistory} className="nf-btn nf-btn--ghost"
-                            style={{ padding: "2px 6px", fontSize: "11px", opacity: 0.6 }}
-                            title="Clear history">
-                            <Trash2 size={14} />
-                        </button>
+                        
+                        {!showConfirm ? (
+                            <button 
+                                onClick={() => setShowConfirm(true)} 
+                                className="nf-btn nf-btn--ghost"
+                                style={{ padding: "2px 6px", fontSize: "11px", opacity: 0.6 }}
+                                title="Clear history"
+                            >
+                                <Trash2 size={14} />
+                            </button>
+                        ) : (
+                            <div className="nf-animate-in" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                <button 
+                                    onClick={clearHistory} 
+                                    className="nf-btn nf-btn--primary"
+                                    style={{ 
+                                        padding: "2px 8px", 
+                                        fontSize: "10px", 
+                                        background: "var(--nf-error, #ff4d4f)",
+                                        borderColor: "var(--nf-error, #ff4d4f)"
+                                    }}
+                                >
+                                    Confirm
+                                </button>
+                                <button 
+                                    onClick={() => setShowConfirm(false)} 
+                                    className="nf-btn nf-btn--ghost"
+                                    style={{ padding: "2px 8px", fontSize: "10px" }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        )}
                     </div>
                     <div className="nf-ai-mode nf-ai-mode--local">
                         <span className="nf-ai-mode__dot" />
