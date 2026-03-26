@@ -14,6 +14,7 @@ export default function SettingsPanel() {
     const [microsoftAccounts, setMicrosoftAccounts] = useState<string[]>([]);
     const [moodleUrls, setMoodleUrls] = useState<string[]>([]);
     const [newMoodleUrl, setNewMoodleUrl] = useState<string>("");
+    const [privacyMode, setPrivacyMode] = useState(true);
     const [isSavingMoodle, setIsSavingMoodle] = useState(false);
     const prevAccountCount = useRef<number | null>(null);
     const prevMsAccountCount = useRef<number | null>(null);
@@ -97,10 +98,34 @@ export default function SettingsPanel() {
         }
     };
 
+    const fetchUserSettings = async () => {
+        try {
+            const res = await api.get("/api/auth/me");
+            if (res.ok) {
+                const data = await res.json();
+                setPrivacyMode(data.privacy_mode ?? true);
+            }
+        } catch (err) {
+            console.error("Error fetching user settings:", err);
+        }
+    };
+
+    const togglePrivacy = async () => {
+        const newValue = !privacyMode;
+        setPrivacyMode(newValue);
+        try {
+            await api.patch("/api/auth/settings", { privacy_mode: newValue });
+        } catch (err) {
+            console.error("Error updating privacy settings:", err);
+            setPrivacyMode(!newValue); // Rollback
+        }
+    };
+
     useEffect(() => {
         fetchGoogleAccounts();
         fetchMicrosoftAccounts();
         fetchMoodleSettings();
+        fetchUserSettings();
     }, []);
 
     useEffect(() => {
@@ -275,6 +300,27 @@ export default function SettingsPanel() {
                             Names, emails, and amounts are replaced with tokens.
                         </>
                     )}
+                </div>
+
+                <div style={{
+                    marginTop: "20px",
+                    paddingTop: "16px",
+                    borderTop: "1px solid var(--nf-border)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
+                }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 600 }}>Privacy Sanitizer</span>
+                        <span style={{ fontSize: '12px', color: 'var(--nf-text-muted)' }}>Mask sensitive PII before sending to AI</span>
+                    </div>
+                    <button 
+                        onClick={togglePrivacy}
+                        className={`nf-btn ${privacyMode ? "nf-btn--primary" : "nf-btn--ghost"}`}
+                        style={{ padding: "6px 12px", fontSize: "12px" }}
+                    >
+                        {privacyMode ? "Active" : "Disabled"}
+                    </button>
                 </div>
             </div>
 

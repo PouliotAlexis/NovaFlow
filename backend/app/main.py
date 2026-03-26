@@ -312,6 +312,14 @@ async def chat_stream_endpoint(
     context = ""
     prompt = request.message
 
+    # Utilisation du Sanitizer si activé
+    was_sanitized = False
+    san_map = None
+    if current_user.privacy_mode:
+        prompt, san_map = sanitize(prompt)
+        was_sanitized = True
+        print(f"🛡️ Privacy Mode: Prompt sanitized (Mapping size: {len(san_map)})")
+
     # Utilisation du ContextBuilder (Streaming)
     context = ContextBuilder.build_global_context(
         user_query=prompt,

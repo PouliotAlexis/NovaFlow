@@ -1,5 +1,13 @@
 [
   {
+    "id": "e65dd98c-0f04-44c9-be4c-c9db247008b1",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Titre de la tâche",
+    "type": "success",
+    "timestamp": "2026-03-26T07:46:57.959320",
+    "read": false
+  },
+  {
     "id": "74e76be8-3542-4076-88ca-49e1238957c4",
     "title": "Nouvelle tâche",
     "content": "L'IA a créé la tâche : Acheter du pain",

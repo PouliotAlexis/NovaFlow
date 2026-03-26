@@ -24,8 +24,12 @@ class UserResponse(BaseModel):
     id: str
     email: str
     full_name: Optional[str] = None
+    privacy_mode: Optional[bool] = True
     class Config:
         from_attributes = True
+
+class UserSettingsUpdate(BaseModel):
+    privacy_mode: bool
 
 @router.post("/register", response_model=UserResponse)
 def register(user_data: UserRegister, db: Session = Depends(get_db)):
@@ -69,3 +73,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.patch("/settings", response_model=UserResponse)
+def update_settings(settings: UserSettingsUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.id == current_user.id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    db_user.privacy_mode = settings.privacy_mode
+    db.commit()
+    db.refresh(db_user)
+    return db_user

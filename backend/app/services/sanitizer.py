@@ -1,173 +1,64 @@
-"""
-NovaFlow - Module de Sanitization Réversible (Reversible Redaction)
-
-Ce module est le cœur de la sécurité de NovaFlow en mode Cloud.
-Il remplace les entités sensibles (noms, emails, téléphones) par des tokens
-AVANT l'envoi à l'IA, puis restaure les vraies valeurs APRÈS la réponse.
-
-Flux :
-1. Input: "Envoie un mail à Jean Dupont à jean@email.com"
-2. Sanitize: "Envoie un mail à [PERSON_1] à [EMAIL_1]"
-   -> Map: {"[PERSON_1]": "Jean Dupont", "[EMAIL_1]": "jean@email.com"}
-3. AI répond avec les tokens
-4. Desanitize: Les tokens sont remplacés par les vraies valeurs
-"""
-
 import re
-from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
+class Sanitizer:
+    # Regex pour les emails
+    EMAIL_REGEX = r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'
+    
+    # Regex pour les numéros de téléphone (NA et International simple)
+    # Nécessite au moins la structure XXX-XXX-XXXX
+    PHONE_REGEX = r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
 
-@dataclass
-class SanitizationMap:
-    """Stocke le mapping bidirectionnel entre tokens et valeurs réelles."""
-    _token_to_value: Dict[str, str] = field(default_factory=dict)
-    _value_to_token: Dict[str, str] = field(default_factory=dict)
-    _counters: Dict[str, int] = field(default_factory=dict)
-
-    def add(self, entity_type: str, value: str) -> str:
-        """Ajoute une entité et retourne le token correspondant.
-        
-        Si la valeur existe déjà, retourne le token existant.
+    @staticmethod
+    def sanitize(text: str) -> Tuple[str, Dict[str, str]]:
         """
-        if value in self._value_to_token:
-            return self._value_to_token[value]
+        Remplace les PII par des placeholders et retourne le texte + le mapping.
+        """
+        if not text:
+            return text, {}
+            
+        mapping = {}
+        sanitized_text = text
+        
+        # 1. Emails
+        emails = re.findall(Sanitizer.EMAIL_REGEX, sanitized_text)
+        for i, email in enumerate(list(set(emails))):
+            placeholder = f"[EMAIL_{i+1}]"
+            mapping[placeholder] = email
+            sanitized_text = sanitized_text.replace(email, placeholder)
+            
+        # 2. Téléphones
+        phones = re.findall(Sanitizer.PHONE_REGEX, sanitized_text)
+        # Trier par longueur décroissante pour éviter de remplacer des sous-parties
+        phones = sorted(list(set(p.strip() for p in phones)), key=len, reverse=True)
+        for i, phone in enumerate(phones):
+            placeholder = f"[PHONE_{i+1}]"
+            mapping[placeholder] = phone
+            sanitized_text = sanitized_text.replace(phone, placeholder)
+            
+        return sanitized_text, mapping
 
-        # Incrémenter le compteur pour ce type d'entité
-        count = self._counters.get(entity_type, 0) + 1
-        self._counters[entity_type] = count
+    @staticmethod
+    def desanitize(text: str, mapping: Dict[str, str]) -> str:
+        """
+        Restaure les données originales à partir des placeholders.
+        """
+        if not text or not mapping:
+            return text
+            
+        restored_text = text
+        for placeholder, original in mapping.items():
+            restored_text = restored_text.replace(placeholder, original)
+            
+        return restored_text
 
-        token = f"[{entity_type}_{count}]"
-        self._token_to_value[token] = value
-        self._value_to_token[value] = token
-        return token
+# Fonctions utilitaires pour export simple
+def sanitize(text: str) -> Tuple[str, Dict[str, str]]:
+    return Sanitizer.sanitize(text)
 
-    def get_value(self, token: str) -> str | None:
-        """Récupère la valeur réelle à partir d'un token."""
-        return self._token_to_value.get(token)
+def desanitize(text: str, mapping: Dict[str, str]) -> str:
+    return Sanitizer.desanitize(text, mapping)
 
-    def get_token(self, value: str) -> str | None:
-        """Récupère le token à partir d'une valeur réelle."""
-        return self._value_to_token.get(value)
-
-    @property
-    def token_map(self) -> Dict[str, str]:
-        """Retourne le dictionnaire token -> valeur (lecture seule)."""
-        return dict(self._token_to_value)
-
-    def clear(self) -> None:
-        """Réinitialise le mapping."""
-        self._token_to_value.clear()
-        self._value_to_token.clear()
-        self._counters.clear()
-
-
-# === Patterns de détection (Regex - PAS d'IA) ===
-
-# Emails
-EMAIL_PATTERN = re.compile(
-    r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-)
-
-# Numéros de téléphone (formats nord-américains et internationaux)
-PHONE_PATTERN = re.compile(
-    r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b'
-)
-
-# Dates (formats courants)
-DATE_PATTERN = re.compile(
-    r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b'
-    r'|\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b'
-)
-
-# URLs
-URL_PATTERN = re.compile(
-    r'https?://[^\s<>\"\']+|www\.[^\s<>\"\']+' 
-)
-
-# Montants d'argent
-MONEY_PATTERN = re.compile(
-    r'[$]\s?\d+(?:\s?\d{3})*(?:[.,]\d{1,2})?(?:\s?(?:CAD|USD|EUR))?'
-    r'|\d+(?:\s?\d{3})*(?:[.,]\d{1,2})?\s?(?:CAD|USD|EUR|€)'
-)
-
-
-# === Fonctions principales ===
-
-def sanitize(text: str, extra_entities: List[str] | None = None) -> Tuple[str, SanitizationMap]:
-    """
-    Nettoie un texte en remplaçant les entités sensibles par des tokens.
-    
-    Args:
-        text: Le texte à nettoyer.
-        extra_entities: Liste optionnelle de mots/noms supplémentaires à censurer
-                       (fournis manuellement par l'utilisateur, ex: noms de profs).
-    
-    Returns:
-        Tuple (texte_nettoyé, mapping_de_restauration)
-    """
-    sanitization_map = SanitizationMap()
-    sanitized_text = text
-
-    # 1. Remplacer les entités fournies manuellement (les plus fiables)
-    if extra_entities:
-        # Trier par longueur décroissante pour éviter les remplacements partiels
-        sorted_entities = sorted(extra_entities, key=len, reverse=True)
-        for entity in sorted_entities:
-            if entity in sanitized_text:
-                token = sanitization_map.add("CUSTOM", entity)
-                sanitized_text = sanitized_text.replace(entity, token)
-
-    # 2. Remplacer les URLs (avant les emails pour éviter les conflits)
-    for match in URL_PATTERN.finditer(sanitized_text):
-        value = match.group()
-        token = sanitization_map.add("URL", value)
-        sanitized_text = sanitized_text.replace(value, token)
-
-    # 3. Remplacer les emails
-    for match in EMAIL_PATTERN.finditer(sanitized_text):
-        value = match.group()
-        token = sanitization_map.add("EMAIL", value)
-        sanitized_text = sanitized_text.replace(value, token)
-
-    # 4. Remplacer les montants d'argent (AVANT les téléphones pour éviter collision)
-    for match in MONEY_PATTERN.finditer(sanitized_text):
-        value = match.group()
-        token = sanitization_map.add("MONEY", value)
-        sanitized_text = sanitized_text.replace(value, token)
-
-    # 5. Remplacer les dates
-    for match in DATE_PATTERN.finditer(sanitized_text):
-        value = match.group()
-        token = sanitization_map.add("DATE", value)
-        sanitized_text = sanitized_text.replace(value, token)
-
-    # 6. Remplacer les numéros de téléphone (APRÈS montants et dates)
-    for match in PHONE_PATTERN.finditer(sanitized_text):
-        value = match.group()
-        token = sanitization_map.add("PHONE", value)
-        sanitized_text = sanitized_text.replace(value, token)
-
-    return sanitized_text, sanitization_map
-
-
-def desanitize(text: str, sanitization_map: SanitizationMap) -> str:
-    """
-    Restaure les vraies valeurs dans un texte en remplaçant les tokens.
-    
-    Args:
-        text: Le texte contenant des tokens (ex: [PERSON_1]).
-        sanitization_map: Le mapping créé lors de la sanitization.
-    
-    Returns:
-        Le texte avec les vraies valeurs restaurées.
-    """
-    result = text
-    # Trier par longueur de token décroissante pour éviter les remplacements partiels
-    for token, value in sorted(
-        sanitization_map.token_map.items(), 
-        key=lambda x: len(x[0]), 
-        reverse=True
-    ):
-        result = result.replace(token, value)
-    return result
+class SanitizationMap(dict):
+    """Alias pour type hint plus clair"""
+    pass
