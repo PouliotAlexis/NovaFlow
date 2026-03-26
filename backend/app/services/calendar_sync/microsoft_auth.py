@@ -8,10 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Define storage paths similar to Google Service
-CREDENTIALS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "credentials",
-)
+# Utilisation d'un chemin absolu direct pour Windows (MS)
+CREDENTIALS_DIR = r"C:\Users\alexi\GIT\NovaFlow\backend\credentials"
 TOKENS_DIR = os.path.join(CREDENTIALS_DIR, "tokens")
 
 # Verrou global pour protéger les opérations de lecture/écriture token concurrentes

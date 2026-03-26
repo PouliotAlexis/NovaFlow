@@ -12,6 +12,7 @@ if sys.platform == "win32":
         print(f"[WINDOWS FIX] Erreur lors de l'application de la politique: {e}")
 
 import os
+# NovaFlow v0.1.2 - Force Reload Final
 import shutil
 from datetime import datetime
 import traceback
@@ -199,11 +200,8 @@ def ping_auth(current_user: User = Depends(get_current_user)):
 async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
     """
     Endpoint principal de chat avec l'IA.
-    
-    Recherche automatiquement le contexte pertinent dans les documents
-    ingérés (RAG) pour enrichir la réponse de l'IA.
     """
-    active_mode = request.mode or settings.AI_MODE
+    active_mode = request.mode or current_user.ai_mode or settings.AI_MODE
     was_sanitized = False
     san_map = None
     context = ""
@@ -303,10 +301,8 @@ async def chat_stream_endpoint(
 ):
     """
     Endpoint de chat avec réponse en streaming (Server-Sent Events).
-    Envoie les tokens au fur et à mesure, puis un événement 'done' final
-    avec la réponse post-traitée (détection de commandes, desanitization).
     """
-    active_mode = request.mode or settings.AI_MODE
+    active_mode = request.mode or current_user.ai_mode or settings.AI_MODE
     was_sanitized = False
     san_map = None
     context = ""
@@ -684,17 +680,44 @@ def test_moodle_url():
         return {"status": "warning", "message": "Aucun événement dans les 30 prochains jours.", "events_count": 0}
 
 # === Google Calendar OAuth ===
+import traceback
 
 @app.get("/api/auth/google/login")
 def google_login():
     """Retourne l'URL de connexion Google."""
-    return {"url": get_auth_url()}
+    try:
+        url = get_auth_url()
+        return {"url": url}
+    except Exception as e:
+        print(f"❌ Error generating Google auth URL: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/auth/google/callback")
-def google_callback(code: str):
-    """Callback OAuth Google."""
-    return handle_callback(code)
+def google_callback(code: str, state: Optional[str] = None):
+    """Callback OAuth Google - retourne une page HTML de succès."""
+    from fastapi.responses import HTMLResponse
+    try:
+        result = handle_callback(code, state=state)
+        if result.get("status") == "connected":
+           email = result.get("message", "").split(" ")[1] # Récupère l'email s'il est dans le format standard
+           html = f"""
+           <html><body style="background:#1a1a2e;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
+               <div style="text-align:center">
+                   <h2 style="color: #4285F4">✅ Google connected!</h2>
+                   <p>Account linked successfully.</p>
+                   <p style="color:#888">You can close this window.</p>
+               </div>
+               <script>setTimeout(() => window.close(), 1500);</script>
+           </body></html>
+           """
+           return HTMLResponse(content=html)
+        else:
+           return JSONResponse(status_code=400, content=result)
+    except Exception as e:
+        print(f"❌ Error in Google callback: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
 @app.get("/api/auth/google/accounts")
@@ -1147,4 +1170,6 @@ def focus_stats():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    # En production, on utilise le PORT fourni par l'environnement
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port)

@@ -1,5 +1,93 @@
 [
   {
+    "id": "ae274403-685f-4ca7-8c88-e886cfe68436",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Méditer sur les principes de la vie et de l'univers",
+    "type": "success",
+    "timestamp": "2026-03-26T11:13:00.574318",
+    "read": false
+  },
+  {
+    "id": "8a61a74b-a71c-41f1-aebe-1881c07c43cc",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Vérifier les prochaines étapes pour les tâches en cours",
+    "type": "success",
+    "timestamp": "2026-03-26T11:12:47.808185",
+    "read": false
+  },
+  {
+    "id": "ea6248bd-0d37-491c-bcca-c2be3be0be2b",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Recevoir plus d'informations sur le test requis",
+    "type": "success",
+    "timestamp": "2026-03-26T11:12:41.794838",
+    "read": false
+  },
+  {
+    "id": "d93a866d-3465-44b3-b544-1e302fb0c45c",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Acheter des fournitures pour le travail",
+    "type": "success",
+    "timestamp": "2026-03-26T11:11:41.054220",
+    "read": false
+  },
+  {
+    "id": "2fe3ba9b-8ba5-429b-bfe3-e26278c73cc9",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Nom de la tâche",
+    "type": "success",
+    "timestamp": "2026-03-26T11:11:40.806483",
+    "read": false
+  },
+  {
+    "id": "34d375e9-cbcc-426b-a9fb-4a940e8a17f2",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Revoir les notes de cours pour la semaine",
+    "type": "success",
+    "timestamp": "2026-03-26T11:11:31.653151",
+    "read": false
+  },
+  {
+    "id": "c9b8fb56-edcb-4c1d-82e3-b25d3d34f31d",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Préciser les besoins de l'utilisateur (Cours: 43059)",
+    "type": "success",
+    "timestamp": "2026-03-26T11:09:28.866301",
+    "read": false
+  },
+  {
+    "id": "c65211f6-2399-42ce-8237-f9979ea2211e",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Acheter des fruits",
+    "type": "success",
+    "timestamp": "2026-03-26T11:08:55.508010",
+    "read": false
+  },
+  {
+    "id": "900692d0-ae50-4043-8cd5-8e734509d364",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Réviser les tâches en cours et planifier les prochaines étapes (Cours: 43059)",
+    "type": "success",
+    "timestamp": "2026-03-26T11:08:50.462248",
+    "read": false
+  },
+  {
+    "id": "7c948b48-5d5b-4f28-823d-f89f3b339a21",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Acheter des livres",
+    "type": "success",
+    "timestamp": "2026-03-26T11:08:38.286819",
+    "read": false
+  },
+  {
+    "id": "e092ffe0-a917-49b8-af22-36a341ba0c9e",
+    "title": "Nouvelle tâche",
+    "content": "L'IA a créé la tâche : Nom de la tâche",
+    "type": "success",
+    "timestamp": "2026-03-26T11:08:38.055022",
+    "read": false
+  },
+  {
     "id": "e65dd98c-0f04-44c9-be4c-c9db247008b1",
     "title": "Nouvelle tâche",
     "content": "L'IA a créé la tâche : Titre de la tâche",

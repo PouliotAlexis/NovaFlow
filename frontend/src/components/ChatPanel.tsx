@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MessageSquare, Sparkles, User, Trash2, Loader2, AlertCircle, Send } from "lucide-react";
+import { useAuth } from "./AuthProvider";
 
 interface Message {
     id: string;
@@ -34,18 +35,24 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const shouldAutoScroll = useRef(true);
+    const { user } = useAuth();
+    const aiMode = user?.ai_mode || "local";
     const abortControllerRef = useRef<AbortController | null>(null);
+    const streamingContentRef = useRef<string>("");
+    const lastUpdateRef = useRef<number>(0);
 
     const handleScroll = () => {
         if (!scrollContainerRef.current) return;
         const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-        const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+        // Seuil augmenté à 100px pour Groq (flux très rapide)
+        const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
         shouldAutoScroll.current = isAtBottom;
     };
 
+    // Défilement automatique robuste
     React.useEffect(() => {
-        if (shouldAutoScroll.current) {
-            messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        if (shouldAutoScroll.current && scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
         }
     }, [messages]);
 
@@ -102,6 +109,8 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
 
         const aiMsgId = (Date.now() + 1).toString();
         setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: "" }]);
+        streamingContentRef.current = "";
+        lastUpdateRef.current = 0;
 
         // Créer un nouveau contrôleur pour cette requête
         const controller = new AbortController();
@@ -135,15 +144,20 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                         const data = JSON.parse(line.slice(6));
                         if (data.type === "token") {
                             const cleanedToken = data.content;
-                            setMessages((prev) => {
-                                // Vérifier si le message existe encore (il pourrait avoir été supprimé par clearHistory)
-                                if (!prev.some(m => m.id === aiMsgId)) return prev;
-                                return prev.map((msg) =>
-                                    msg.id === aiMsgId
-                                        ? { ...msg, content: msg.content + cleanedToken }
-                                        : msg
-                                );
-                            });
+                            streamingContentRef.current += cleanedToken;
+                            
+                            const now = Date.now();
+                            if (now - lastUpdateRef.current > 60) { // Environ 16 FPS pour plus de fluidité
+                                lastUpdateRef.current = now;
+                                setMessages((prev) => {
+                                    if (!prev.some(m => m.id === aiMsgId)) return prev;
+                                    return prev.map((msg) =>
+                                        msg.id === aiMsgId
+                                            ? { ...msg, content: streamingContentRef.current }
+                                            : msg
+                                    );
+                                });
+                            }
                         } else if (data.type === "done") {
                             setMessages((prev) => {
                                 if (!prev.some(m => m.id === aiMsgId)) return prev;
@@ -199,9 +213,9 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                         <MessageSquare size={18} style={{ marginRight: '8px', verticalAlign: 'middle', color: 'var(--nf-accent)' }} />
                         Chat AI
                     </span>
-                    <div className="nf-ai-mode nf-ai-mode--local" style={{ fontSize: "10px" }}>
+                    <div className={`nf-ai-mode nf-ai-mode--${aiMode}`} style={{ fontSize: "10px" }}>
                         <span className="nf-ai-mode__dot" />
-                        Local
+                        {aiMode === "local" ? "Local" : aiMode === "openai" ? "OpenAI" : "Groq"}
                     </div>
                 </div>
 
@@ -310,9 +324,9 @@ export default function ChatPanel({ compact = false, courseId }: ChatPanelProps)
                             </div>
                         )}
                     </div>
-                    <div className="nf-ai-mode nf-ai-mode--local">
+                    <div className={`nf-ai-mode nf-ai-mode--${aiMode}`}>
                         <span className="nf-ai-mode__dot" />
-                        Local (Ollama)
+                        {aiMode === "local" ? "Local (Ollama)" : aiMode === "openai" ? "Cloud (OpenAI)" : "Cloud (Groq)"}
                     </div>
                 </div>
 

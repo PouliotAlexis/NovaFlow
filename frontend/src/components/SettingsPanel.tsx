@@ -6,9 +6,11 @@ import {
     Cloud, Mail, Calendar, Link, Plus, Trash2, Shield 
 } from "lucide-react";
 import { api } from "@/services/api";
+import { useAuth } from "./AuthProvider";
 
 export default function SettingsPanel() {
-    const [aiMode, setAiMode] = useState<"local" | "cloud">("local");
+    const { refreshUser } = useAuth();
+    const [aiMode, setAiMode] = useState<"local" | "openai" | "groq">("local");
     const [profile, setProfile] = useState<"student" | "pro" | "personal">("student");
     const [googleAccounts, setGoogleAccounts] = useState<string[]>([]);
     const [microsoftAccounts, setMicrosoftAccounts] = useState<string[]>([]);
@@ -104,20 +106,20 @@ export default function SettingsPanel() {
             if (res.ok) {
                 const data = await res.json();
                 setPrivacyMode(data.privacy_mode ?? true);
+                if (data.ai_mode) setAiMode(data.ai_mode);
             }
         } catch (err) {
             console.error("Error fetching user settings:", err);
         }
     };
 
-    const togglePrivacy = async () => {
-        const newValue = !privacyMode;
-        setPrivacyMode(newValue);
+    const updateAiMode = async (newMode: "local" | "openai" | "groq") => {
+        setAiMode(newMode);
         try {
-            await api.patch("/api/auth/settings", { privacy_mode: newValue });
+            await api.patch("/api/auth/settings", { ai_mode: newMode });
+            await refreshUser();
         } catch (err) {
-            console.error("Error updating privacy settings:", err);
-            setPrivacyMode(!newValue); // Rollback
+            console.error("Error updating AI mode:", err);
         }
     };
 
@@ -138,19 +140,28 @@ export default function SettingsPanel() {
     }, []);
 
     const connectGoogle = async () => {
+        console.log("[SETTINGS] connectGoogle clicked");
         try {
             const res = await api.get("/api/auth/google/login");
             if (res.ok) {
                 const data = await res.json();
-                window.open(data.url, "_blank", "width=600,height=600");
-                const onFocus = () => {
-                    setTimeout(fetchGoogleAccounts, 1500);
-                    window.removeEventListener("focus", onFocus);
-                };
-                window.addEventListener("focus", onFocus);
+                if (data.url) {
+                    window.open(data.url, "_blank", "width=600,height=600");
+                    const onFocus = () => {
+                        setTimeout(fetchGoogleAccounts, 1500);
+                        window.removeEventListener("focus", onFocus);
+                    };
+                    window.addEventListener("focus", onFocus);
+                } else {
+                    alert("Error: No authentication URL received");
+                }
+            } else {
+                const errData = await res.json().catch(() => ({ detail: "Unknown error" }));
+                alert(`Error: ${errData.detail || "Connection failed"}`);
             }
         } catch (err) {
-            alert("Error connecting to Google");
+            console.error("Connect error:", err);
+            alert("Error connecting to Google: Check backend logs");
         }
     };
 
@@ -248,24 +259,31 @@ export default function SettingsPanel() {
                     </span>
                     <div className={`nf-ai-mode nf-ai-mode--${aiMode}`}>
                         <span className="nf-ai-mode__dot" />
-                        {aiMode === "local" ? "Local (Ollama)" : "Cloud (OpenAI)"}
+                        {aiMode === "local" ? "Local (Ollama)" : aiMode === "openai" ? "Cloud (OpenAI)" : "Cloud (Groq)"}
                     </div>
                 </div>
 
                 <div style={{ display: "flex", gap: "12px" }}>
                     <button
                         className={`nf-btn ${aiMode === "local" ? "nf-btn--primary" : "nf-btn--ghost"}`}
-                        onClick={() => setAiMode("local")}
+                        onClick={() => updateAiMode("local")}
                         style={{ flex: 1, justifyContent: "center", gap: "8px" }}
                     >
-                        <Home size={16} /> Local (Private)
+                        <Home size={16} /> Local
                     </button>
                     <button
-                        className={`nf-btn ${aiMode === "cloud" ? "nf-btn--primary" : "nf-btn--ghost"}`}
-                        onClick={() => setAiMode("cloud")}
+                        className={`nf-btn ${aiMode === "openai" ? "nf-btn--primary" : "nf-btn--ghost"}`}
+                        onClick={() => updateAiMode("openai")}
                         style={{ flex: 1, justifyContent: "center", gap: "8px" }}
                     >
-                        <Cloud size={16} /> Cloud
+                        <Cloud size={16} /> OpenAI
+                    </button>
+                    <button
+                        className={`nf-btn ${aiMode === "groq" ? "nf-btn--primary" : "nf-btn--ghost"}`}
+                        onClick={() => updateAiMode("groq")}
+                        style={{ flex: 1, justifyContent: "center", gap: "8px" }}
+                    >
+                        <Shield size={16} /> Groq (Free)
                     </button>
                 </div>
 
@@ -315,7 +333,16 @@ export default function SettingsPanel() {
                         <span style={{ fontSize: '12px', color: 'var(--nf-text-muted)' }}>Mask sensitive PII before sending to AI</span>
                     </div>
                     <button 
-                        onClick={togglePrivacy}
+                        onClick={async () => {
+                            const newValue = !privacyMode;
+                            setPrivacyMode(newValue);
+                            try {
+                                await api.patch("/api/auth/settings", { privacy_mode: newValue });
+                            } catch (err) {
+                                console.error("Error updating privacy settings:", err);
+                                setPrivacyMode(!newValue);
+                            }
+                        }}
                         className={`nf-btn ${privacyMode ? "nf-btn--primary" : "nf-btn--ghost"}`}
                         style={{ padding: "6px 12px", fontSize: "12px" }}
                     >

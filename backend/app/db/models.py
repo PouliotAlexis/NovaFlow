@@ -128,6 +128,7 @@ class User(Base):
     full_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     privacy_mode = Column(Boolean, default=True)
+    ai_mode = Column(String, default="local") # "local", "openai", "groq"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relations

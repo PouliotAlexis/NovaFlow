@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -12,6 +12,8 @@ from app.services.task_manager import TaskManager
 from app.services.event_manager import get_or_create_course_event
 from app.services.context_builder import ContextBuilder
 from app.services.notification_manager import NotificationManager
+from app.db.models import User
+from app.services.auth_service import get_current_user
 
 router = APIRouter()
 
@@ -26,13 +28,16 @@ class CourseChatRequest(BaseModel):
     filenames: Optional[List[str]] = None
 
 @router.post("/chat")
-async def chat_endpoint(request: CourseChatRequest):
+async def chat_endpoint(request: CourseChatRequest, current_user: User = Depends(get_current_user)):
     """
     Endpoint de chat compatible avec Vercel AI SDK (Streaming).
     """
     try:
         # Le SDK Vercel AI envoie une liste 'messages'
         user_message = request.messages[-1].content if request.messages else ""
+        
+        # Priorité : mode request > mode utilisateur > mode config
+        active_mode = current_user.ai_mode or settings.AI_MODE
         
         # Utilisation du ContextBuilder pour le Second Brain
         context = ContextBuilder.build_course_context(
@@ -48,7 +53,7 @@ async def chat_endpoint(request: CourseChatRequest):
                 async for token in chat_stream(
                     prompt=user_message,
                     context=context,
-                    mode=settings.AI_MODE
+                    mode=active_mode
                 ):
                     full_response += token
                     # Data Stream Protocol : channel 0 pour le texte

@@ -18,17 +18,32 @@ import NotificationPanel from "@/components/NotificationPanel";
 import AutomationStatus from "@/components/AutomationStatus";
 import MoodleDashboard from "@/components/MoodleDashboard";
 import { Hammer } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function Home() {
+  const { user, isLoading } = useAuth();
   const [activeView, setActiveView] = useState("dashboard");
+
+  if (isLoading) return null;
   
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const view = params.get("view");
-    if (view) {
+    if (view && ["dashboard", "chat", "documents", "focus", "settings", "courses", "tasks", "calendar"].includes(view)) {
       setActiveView(view);
     }
   }, []);
+
+  // Synchroniser l'URL quand la vue change
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") !== activeView) {
+      const newUrl = activeView === "dashboard" ? "/" : `/?view=${activeView}`;
+      window.history.replaceState(null, "", newUrl);
+    }
+  }, [activeView]);
+
+  const aiMode = user?.ai_mode || "local";
 
   const renderDynamicView = () => {
     switch (activeView) {
@@ -77,9 +92,9 @@ export default function Home() {
         <header className="nf-header" style={{ position: "relative", zIndex: 50 }}>
           <div className="nf-header__actions">
             <AutomationStatus />
-            <div className="nf-ai-mode nf-ai-mode--local">
+            <div className={`nf-ai-mode nf-ai-mode--${aiMode}`}>
               <span className="nf-ai-mode__dot" />
-              AI Local
+              {aiMode === "local" ? "AI Local" : aiMode === "openai" ? "AI OpenAI" : "AI Groq"}
             </div>
             <NotificationPanel />
           </div>

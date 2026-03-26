@@ -18,12 +18,14 @@ import threading
 # Verrou global pour éviter les race conditions lors de la création de dossiers
 DRIVE_SYNC_LOCK = threading.Lock()
 
+# Stockage temporaire des verifiers PKCE (par state) pour le cycle OAuth
+PKCE_VERIFIERS = {}
+OAUTH_LOCK = threading.Lock()
+
 # === Configuration ===
 
-CREDENTIALS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "credentials",
-)
+# Utilisation d'un chemin absolu direct pour Windows pour éviter les problèmes de reload
+CREDENTIALS_DIR = r"C:\Users\alexi\GIT\NovaFlow\backend\credentials"
 TOKENS_DIR = os.path.join(CREDENTIALS_DIR, "tokens")
 CLIENT_SECRET_FILE = os.path.join(CREDENTIALS_DIR, "google_client_secret.json")
 
@@ -54,25 +56,34 @@ def get_auth_url() -> str:
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRET_FILE,
         scopes=SCOPES,
-        redirect_uri="http://localhost:8000/api/auth/google/callback",
+        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
     )
     
-    auth_url, _ = flow.authorization_url(
+    auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
     )
     
+    # Sauvegarder le verifier pour le callback (nécessaire pour PKCE)
+    with OAUTH_LOCK:
+        PKCE_VERIFIERS[state] = flow.code_verifier
+        
     return auth_url
 
 
-def handle_callback(authorization_code: str) -> dict:
+def handle_callback(authorization_code: str, state: Optional[str] = None) -> dict:
     """Traite le callback OAuth, identifie l'utilisateur et sauvegarde le token."""
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRET_FILE,
         scopes=SCOPES,
-        redirect_uri="http://localhost:8000/api/auth/google/callback",
+        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
     )
+    
+    # Récupérer le verifier PKCE si disponible pour ce state
+    if state and state in PKCE_VERIFIERS:
+        with OAUTH_LOCK:
+            flow.code_verifier = PKCE_VERIFIERS.pop(state)
     
     flow.fetch_token(code=authorization_code)
     credentials = flow.credentials
