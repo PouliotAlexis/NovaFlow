@@ -56,7 +56,7 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
                     <div className="nf-sidebar__user-avatar-premium">
                         {user.full_name ? 
                             user.full_name.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2) : 
-                            user.email[0].toUpperCase()
+                            (user.email && user.email.length > 0 ? user.email[0].toUpperCase() : <User size={16} />)
                         }
                     </div>
                     <div className="nf-sidebar__user-info">

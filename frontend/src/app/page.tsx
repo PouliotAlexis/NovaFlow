@@ -29,12 +29,6 @@ export default function Home() {
     setMounted(true);
   }, []);
   
-  if (!mounted || isLoading) {
-    return (
-      <div style={{ background: "var(--nf-bg)", minHeight: "100vh" }} />
-    );
-  }
-  
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const view = params.get("view");
@@ -51,6 +45,12 @@ export default function Home() {
       window.history.replaceState(null, "", newUrl);
     }
   }, [activeView]);
+
+  if (!mounted || isLoading) {
+    return (
+      <div style={{ background: "var(--nf-bg)", minHeight: "100vh" }} />
+    );
+  }
 
   const aiMode = user?.ai_mode || "local";
 
