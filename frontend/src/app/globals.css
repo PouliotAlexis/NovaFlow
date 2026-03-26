@@ -189,13 +189,67 @@ body {
   text-align: center;
 }
 
-.nf-sidebar__section {
-  padding: 20px 14px 8px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--nf-text-muted);
+.nf-sidebar__user {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px 14px !important;
+  margin: 0 10px 24px !important;
+  border-radius: var(--nf-radius-sm) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--nf-border-dim) !important;
+  transition: all var(--nf-transition);
+  width: calc(100% - 20px) !important;
+}
+
+.nf-sidebar__user:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--nf-border) !important;
+}
+
+.nf-sidebar__user-avatar-premium {
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  border-radius: 10px !important;
+  background: var(--nf-accent-gradient) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: white !important;
+  box-shadow: 0 4px 10px rgba(124, 92, 252, 0.25) !important;
+  flex-shrink: 0 !important;
+}
+
+.nf-sidebar__user-info {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+}
+
+.nf-sidebar__user-name {
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  color: var(--nf-text) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.2 !important;
+}
+
+.nf-sidebar__user-email {
+  font-size: 10.5px !important;
+  color: var(--nf-text-muted) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.2 !important;
+  margin-top: 2px !important;
 }
 
 .nf-sidebar__footer {
@@ -1549,4 +1603,88 @@ body {
 @keyframes nf-fade-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================
+   New Premium Utilities
+   ============================================ */
+
+.nf-glass {
+  background: var(--nf-bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--nf-border);
+  box-shadow: var(--nf-shadow-lg);
+}
+
+.nf-auth-bg {
+  background: var(--nf-bg-primary);
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(124, 92, 252, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.06) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(167, 139, 250, 0.03) 0%, transparent 60%);
+  position: relative;
+  overflow: hidden;
+}
+
+.nf-auth-bg::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: -10%;
+  width: 140%;
+  height: 140%;
+  background: radial-gradient(circle at center, rgba(124, 92, 252, 0.03) 0%, transparent 70%);
+  animation: nf-slow-rotate 60s linear infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes nf-slow-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.nf-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.nf-shimmer::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 45%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 55%
+  );
+  transform: rotate(0deg);
+  transition: transform 0.6s ease;
+  pointer-events: none;
+}
+
+.nf-shimmer:hover::after {
+  transform: translate(25%, 25%);
+}
+
+.nf-input-modern {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--nf-border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--nf-text);
+  font-size: 14px;
+  transition: all var(--nf-transition);
+}
+
+.nf-input-modern:focus {
+  border-color: var(--nf-accent);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 4px rgba(124, 92, 252, 0.1);
+  outline: none;
 }

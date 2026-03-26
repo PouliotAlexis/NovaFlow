@@ -8,8 +8,11 @@ import {
     FileText, 
     MessageSquare, 
     Target, 
-    Settings 
+    Settings,
+    LogOut,
+    User
 } from "lucide-react";
+import { useAuth } from "./AuthProvider";
 
 interface SidebarProps {
     activeView: string;
@@ -27,6 +30,8 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
+    const { user, logout } = useAuth();
+
     return (
         <aside className="nf-sidebar">
             {/* Logo */}
@@ -45,6 +50,22 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
                 <span className="nf-sidebar__logo-text">NovaFlow</span>
             </div>
 
+            {/* User Profile Info */}
+            {user && (
+                <div className="nf-sidebar__user">
+                    <div className="nf-sidebar__user-avatar-premium">
+                        {user.full_name ? 
+                            user.full_name.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2) : 
+                            user.email[0].toUpperCase()
+                        }
+                    </div>
+                    <div className="nf-sidebar__user-info">
+                        <span className="nf-sidebar__user-name">{user.full_name || user.email.split('@')[0]}</span>
+                        <span className="nf-sidebar__user-email">{user.email}</span>
+                    </div>
+                </div>
+            )}
+
             {/* Navigation */}
             <nav className="nf-sidebar__nav">
                 {NAV_ITEMS.map((item) => (
@@ -59,7 +80,7 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
                 ))}
             </nav>
 
-            {/* Footer - Settings */}
+            {/* Footer - Settings & Logout */}
             <div className="nf-sidebar__footer">
                 <button
                     className={`nf-sidebar__item ${activeView === "settings" ? "nf-sidebar__item--active" : ""}`}
@@ -67,6 +88,14 @@ export default function Sidebar({ activeView, onNavigate }: SidebarProps) {
                 >
                     <span className="nf-sidebar__icon"><Settings size={20} /></span>
                     Settings
+                </button>
+                
+                <button
+                    className="nf-sidebar__item nf-sidebar__item--logout"
+                    onClick={() => logout()}
+                >
+                    <span className="nf-sidebar__icon"><LogOut size={20} /></span>
+                    Déconnexion
                 </button>
             </div>
         </aside>
