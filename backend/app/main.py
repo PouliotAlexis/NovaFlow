@@ -90,6 +90,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:3000",
         "https://nova-flow-mu.vercel.app",
+        "https://nova-flow-mu.vercel.app/",
+        "http://nova-flow-mu.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
