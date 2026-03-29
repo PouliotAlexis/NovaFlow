@@ -205,7 +205,7 @@ async def trigger_moodle_sync(
     if not token and not (request.username and request.password):
         logger.error("[SYNC] Aucun jeton ni identifiant fourni.")
         raise HTTPException(
-            status_code=401, 
+            status_code=400, 
             detail="Session expirée. Veuillez vous reconnecter via le bouton SSO ou entrer vos identifiants."
         )
 
