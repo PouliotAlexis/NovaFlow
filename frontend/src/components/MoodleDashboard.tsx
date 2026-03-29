@@ -94,8 +94,22 @@ export default function MoodleDashboard() {
                     if (data.success) {
                       await fetchStatus();
                     } else if (data.bypass_url) {
-                      if (confirm("Le serveur ne peut pas ouvrir de fenêtre Moodle (mode Cloud).\n\nVoulez-vous ouvrir la page de connexion manuellement dans un nouvel onglet ?\n\nAprès connexion, vous devrez utiliser l'extension NovaFlow pour synchroniser.")) {
+                      if (confirm("Le serveur ne peut pas ouvrir de fenêtre Moodle (mode Cloud).\n\nVoulez-vous ouvrir la page de connexion manuellement dans un nouvel onglet ?\n\nL'onglet principal se mettra à jour automatiquement une fois connecté (nécessite l'extension NovaFlow).")) {
                         window.open(data.bypass_url, "_blank");
+                        
+                        // Active Polling: Check status every 2s for 2 minutes
+                        let checks = 0;
+                        const pollInterval = setInterval(async () => {
+                          checks++;
+                          const status = await api.get("/api/v2/moodle/session/status").then(r => r.json());
+                          if (status.connected || checks > 60) {
+                            clearInterval(pollInterval);
+                            if (status.connected) {
+                              fetchStatus();
+                              fetchCourses();
+                            }
+                          }
+                        }, 2000);
                       }
                     } else if (data.error) {
                       let msg = `Erreur de connexion : ${data.error}`;

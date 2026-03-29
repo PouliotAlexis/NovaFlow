@@ -16,6 +16,20 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const checkStatus = async () => {
+        try {
+          const res = await api.get("/api/v2/moodle/session/status");
+          const data = await res.json();
+          setIsConnected(data.connected);
+        } catch (err) {}
+      };
+      checkStatus();
+    }
+  }, [isOpen]);
   const [error, setError] = useState("");
 
 
@@ -171,12 +185,47 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
           {authMode === "sso" ? (
             <div className="nf-animate-in">
               <div style={{ padding: "12px", background: "var(--nf-accent-glow)", borderRadius: "var(--nf-radius-sm)", border: "1px solid var(--nf-accent-dim)" }}>
-                <p style={{ fontSize: "12px", color: "var(--nf-accent)", fontWeight: 600, margin: 0 }}>
-                  ✨ Utilise le bouton "Connecter" sur le dashboard pour capturer ta session Microsoft SSO, puis lance la synchro ici.
+                <p style={{ fontSize: "12px", color: "var(--nf-accent)", fontWeight: 600, margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                  ✨ {isConnected ? "Session Connectée !" : "Capture de session SSO"}
+                  {isConnected && <span style={{ padding: "2px 6px", background: "#22c55e", color: "white", borderRadius: "4px", fontSize: "10px" }}>OK</span>}
                 </p>
-                <p style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginTop: "8px", fontStyle: "italic" }}>
-                  Note : En ligne (Vercel/Render), privilégiez l'extension NovaFlow pour une capture fiable de votre session.
-                </p>
+                
+                {!isConnected && (
+                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--nf-accent-dim)" }}>
+                    <label className="nf-label" style={{ fontSize: "11px" }}>
+                      Ou colle ici le lien `moodlemobile://` (si tu n'as pas l'extension) :
+                    </label>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                      <input 
+                        type="text" 
+                        className="nf-input" 
+                        style={{ fontSize: "11px", height: "32px" }}
+                        placeholder="moodlemobile://token=..."
+                        onChange={async (e) => {
+                          const val = e.target.value;
+                          if (val.includes("token=")) {
+                            const token = val.split("token=")[1].split("&")[0];
+                            setLoading(true);
+                            try {
+                              const res = await api.post("/api/v2/moodle/sync", { url, token });
+                              if (res.ok) {
+                                onSyncStarted();
+                                onClose();
+                              }
+                            } catch (err) {}
+                            setLoading(false);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {isConnected && (
+                  <p style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginTop: "8px" }}>
+                    Ta session est déjà active. Clique sur "Lancer la synchronisation" ci-dessous.
+                  </p>
+                )}
               </div>
             </div>
           ) : (

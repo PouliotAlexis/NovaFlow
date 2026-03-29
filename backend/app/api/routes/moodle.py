@@ -13,6 +13,27 @@ from app.services.automation import sync_moodle_native_v2, start_job
 
 router = APIRouter()
 
+TOKEN_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data",
+    "moodle_token.json",
+)
+
+def _save_moodle_token(token: str) -> None:
+    os.makedirs(os.path.dirname(TOKEN_FILE), exist_ok=True)
+    with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+        json.dump({"token": token}, f, indent=2)
+
+def _get_moodle_token() -> Optional[str]:
+    if not os.path.exists(TOKEN_FILE):
+        return None
+    try:
+        with open(TOKEN_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("token")
+    except Exception:
+        return None
+
 def clean_course_name(name: str) -> str:
     """Nettoie le nom du cours pour enlever les codes techniques Moodle."""
     if not name:
@@ -98,7 +119,32 @@ async def trigger_moodle_capture(request: MoodleCaptureRequest):
     token = result
     if not token:
         raise HTTPException(status_code=408, detail="La capture du jeton a expiré ou a été annulée.")
+    
+    _save_moodle_token(token)
     return {"token": token}
+
+class MoodleSessionUpdate(BaseModel):
+    token: Optional[str] = None
+    sesskey: Optional[str] = None
+    host: Optional[str] = None
+
+@router.post("/moodle/session/update")
+async def update_moodle_session(request: MoodleSessionUpdate):
+    """
+    Mis à jour de la session Moodle (via extension).
+    """
+    if request.token:
+        _save_moodle_token(request.token)
+        return {"success": True, "type": "token"}
+    return {"success": False, "error": "No token provided"}
+
+@router.get("/moodle/session/status")
+async def get_moodle_session_status():
+    """
+    Vérifie si une session Moodle est active.
+    """
+    token = _get_moodle_token()
+    return {"connected": token is not None and len(token) > 0}
 
 @router.post("/moodle/sync")
 async def trigger_moodle_sync(
