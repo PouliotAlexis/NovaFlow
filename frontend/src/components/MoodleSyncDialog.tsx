@@ -222,19 +222,14 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                         className="nf-input" 
                         style={{ fontSize: "11px", height: "32px" }}
                         placeholder="moodlemobile://token=..."
-                        onChange={async (e) => {
+                        onChange={(e) => {
                           const val = e.target.value;
                           if (val.includes("token=")) {
                             const token = val.split("token=")[1].split("&")[0];
-                            setLoading(true);
-                            try {
-                              const res = await api.post("/api/v2/moodle/sync", { url, token });
-                              if (res.ok) {
-                                onSyncStarted();
-                                onClose();
-                              }
-                            } catch (err) {}
-                            setLoading(false);
+                            // Sauvegarder dans le localStorage pour que la route handleSync standard l'utilise
+                            localStorage.setItem("moodle_session", JSON.stringify({ token }));
+                            setIsConnected(true);
+                            setError(""); // Effacer l'erreur précédente si présente
                           }
                         }}
                       />
