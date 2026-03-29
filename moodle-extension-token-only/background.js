@@ -1,6 +1,18 @@
 // NovaFlow Simple Moodle Extension - background.js
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "REGISTER_BACKEND") {
+        chrome.storage.local.get(['knownBackends'], (result) => {
+            let backends = result.knownBackends || [];
+            if (!backends.includes(request.origin)) {
+                backends.push(request.origin);
+                chrome.storage.local.set({ knownBackends: backends });
+                console.log("NovaFlow: Nouveau backend enregistré : " + request.origin);
+            }
+        });
+        return;
+    }
+
     if (request.action === "UPDATE_SESSION" || request.action === "UPDATE_TOKEN") {
         const data = request.data;
         
@@ -26,14 +38,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // 3. (Optionnel) Envoyer aux backends connus si configurés
         const BACKENDS = [
             "http://localhost:8000/api/v2/moodle/session/update",
-            "https://nova-flow-mu.vercel.app/api/v2/moodle/session/update"
+            "https://nova-flow-mu.vercel.app/api/v2/moodle/session/update",
+            "https://novaflow-9lj7.onrender.com/api/v2/moodle/session/update"
         ];
-        BACKENDS.forEach(url => {
-            fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data)
-            }).catch(() => {});
+        chrome.storage.local.get(['knownBackends'], (result) => {
+            const backends = result.knownBackends || [];
+            const targets = [...new Set([...BACKENDS, ...backends.map(b => `${b}/api/v2/moodle/session/update`)])];
+            
+            targets.forEach(url => {
+                fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data),
+                    credentials: 'include'
+                })
+                .then(r => console.log(`NovaFlow: ✅ Envoyé à ${url}`))
+                .catch(err => console.log(`NovaFlow: ❌ Serveur ${url} injoignable.`));
+            });
         });
     }
 });

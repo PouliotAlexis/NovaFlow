@@ -43,7 +43,7 @@ async function findAndSendToken() {
         try {
             console.log("NovaFlow: Tentative de capture silencieuse du Token REST...");
             const launchUrl = `${host}/admin/tool/mobile/launch.php?service=moodle_mobile_app&urlscheme=moodlemobile`;
-            const response = await fetch(launchUrl);
+            const response = await fetch(launchUrl, { credentials: 'include' });
             const text = await response.text();
             
             if (text.includes("moodlemobile://token=")) {

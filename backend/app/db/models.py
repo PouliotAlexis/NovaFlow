@@ -82,6 +82,8 @@ class MoodleConfig(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     url = Column(String, nullable=False, unique=True)
+    token = Column(String, nullable=True)
+    sesskey = Column(String, nullable=True)
     last_sync = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True)
 

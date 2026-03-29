@@ -13,37 +13,47 @@ from app.services.automation import sync_moodle_native_v2, start_job
 
 router = APIRouter()
 
-TOKEN_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data",
-    "moodle_token.json",
-)
+from app.db.database import SessionLocal
+from app.db.models import MoodleConfig
 
-SESSKEY_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data",
-    "moodle_sesskey.json",
-)
+def _get_db():
+    db = SessionLocal()
+    try:
+        return db
+    finally:
+        db.close()
 
 def _save_moodle_token(token: str) -> None:
-    os.makedirs(os.path.dirname(TOKEN_FILE), exist_ok=True)
-    with open(TOKEN_FILE, "w", encoding="utf-8") as f:
-        json.dump({"token": token}, f, indent=2)
+    db = SessionLocal()
+    try:
+        config = db.query(MoodleConfig).first()
+        if not config:
+            config = MoodleConfig(url="https://moodle.usherbrooke.ca")
+            db.add(config)
+        config.token = token
+        db.commit()
+    finally:
+        db.close()
 
 def _save_moodle_sesskey(sesskey: str, host: str) -> None:
-    os.makedirs(os.path.dirname(SESSKEY_FILE), exist_ok=True)
-    with open(SESSKEY_FILE, "w", encoding="utf-8") as f:
-        json.dump({"sesskey": sesskey, "host": host}, f, indent=2)
+    db = SessionLocal()
+    try:
+        config = db.query(MoodleConfig).filter(MoodleConfig.url.contains(host)).first()
+        if not config:
+            config = MoodleConfig(url=host)
+            db.add(config)
+        config.sesskey = sesskey
+        db.commit()
+    finally:
+        db.close()
 
 def _get_moodle_token() -> Optional[str]:
-    if not os.path.exists(TOKEN_FILE):
-        return None
+    db = SessionLocal()
     try:
-        with open(TOKEN_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data.get("token")
-    except Exception:
-        return None
+        config = db.query(MoodleConfig).first()
+        return config.token if config else None
+    finally:
+        db.close()
 
 def clean_course_name(name: str) -> str:
     """Nettoie le nom du cours pour enlever les codes techniques Moodle."""
@@ -164,22 +174,19 @@ async def get_moodle_session_status():
     """
     Vérifie si une session Moodle est active.
     """
-    token = _get_moodle_token()
-    
-    # Check sesskey as fallback
-    sesskey = None
-    if os.path.exists(SESSKEY_FILE):
-        try:
-            with open(SESSKEY_FILE, "r") as f:
-                data = json.load(f)
-                sesskey = data.get("sesskey")
-        except: pass
+    db = SessionLocal()
+    try:
+        config = db.query(MoodleConfig).first()
+        token = config.token if config else None
+        sesskey = config.sesskey if config else None
 
-    return {
-        "connected": (token is not None and len(token) > 0) or (sesskey is not None and len(sesskey) > 0),
-        "has_token": token is not None and len(token) > 0,
-        "has_sesskey": sesskey is not None and len(sesskey) > 0
-    }
+        return {
+            "connected": (token is not None and len(token) > 0) or (sesskey is not None and len(sesskey) > 0),
+            "has_token": token is not None and len(token) > 0,
+            "has_sesskey": sesskey is not None and len(sesskey) > 0
+        }
+    finally:
+        db.close()
 
 @router.post("/moodle/sync")
 async def trigger_moodle_sync(

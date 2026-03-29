@@ -24,8 +24,24 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
         try {
           const res = await api.get("/api/v2/moodle/session/status");
           const data = await res.json();
+          if (!data.connected) {
+             const local = localStorage.getItem("moodle_session");
+             if (local) {
+               const localData = JSON.parse(local);
+               setIsConnected(!!localData.token || !!localData.sesskey);
+               return;
+             }
+          }
           setIsConnected(data.connected);
-        } catch (err) {}
+        } catch (err) {
+          const local = localStorage.getItem("moodle_session");
+          if (local) {
+             const localData = JSON.parse(local);
+             setIsConnected(!!localData.token || !!localData.sesskey);
+          } else {
+             setIsConnected(false);
+          }
+        }
       };
       checkStatus();
     }
@@ -70,8 +86,13 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
       }
 
       if (authMode === "sso") {
-        // Mode SSO : utilise le token capturé via le bouton "Connecter" du dashboard
-        const res = await api.post("/api/v2/moodle/sync/native");
+        // Mode SSO : utilise le token capturé via le bouton "Connecter" du dashboard ou localStorage
+        const localSession = localStorage.getItem("moodle_session");
+        const token = localSession ? JSON.parse(localSession).token : null;
+        
+        const body = { url: normalizedUrl, token: token };
+        
+        const res = await api.post("/api/v2/moodle/sync", body);
         if (res.ok) {
           onSyncStarted();
           onClose();

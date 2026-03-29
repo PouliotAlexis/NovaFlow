@@ -1,7 +1,13 @@
 // NovaFlow Bridge Script - novaflow-link.js
 // Runs on NovaFlow site to receive tokens from extension background
 
-console.log("NovaFlow Bridge: Active");
+console.log("NovaFlow Bridge: Active on " + window.location.origin);
+
+// Signaler cet onglet comme un backend potentiel au background
+chrome.runtime.sendMessage({ 
+    action: "REGISTER_BACKEND", 
+    origin: window.location.origin 
+});
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "UPDATE_TOKEN" || request.action === "UPDATE_SESSION") {
