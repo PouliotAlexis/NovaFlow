@@ -215,7 +215,7 @@ async def trigger_moodle_sync(
     # Lancer la synchro en arrière-plan
     background_tasks.add_task(
         sync_moodle_courses,
-        base_url=request.url,
+        url=request.url,
         username=request.username,
         password=request.password,
         token=token
