@@ -19,10 +19,21 @@ TOKEN_FILE = os.path.join(
     "moodle_token.json",
 )
 
+SESSKEY_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data",
+    "moodle_sesskey.json",
+)
+
 def _save_moodle_token(token: str) -> None:
     os.makedirs(os.path.dirname(TOKEN_FILE), exist_ok=True)
     with open(TOKEN_FILE, "w", encoding="utf-8") as f:
         json.dump({"token": token}, f, indent=2)
+
+def _save_moodle_sesskey(sesskey: str, host: str) -> None:
+    os.makedirs(os.path.dirname(SESSKEY_FILE), exist_ok=True)
+    with open(SESSKEY_FILE, "w", encoding="utf-8") as f:
+        json.dump({"sesskey": sesskey, "host": host}, f, indent=2)
 
 def _get_moodle_token() -> Optional[str]:
     if not os.path.exists(TOKEN_FILE):
@@ -133,10 +144,20 @@ async def update_moodle_session(request: MoodleSessionUpdate):
     """
     Mis à jour de la session Moodle (via extension).
     """
+    import logging
+    logger = logging.getLogger("moodle_api")
+    
     if request.token:
+        logger.info(f"✅ Reçu TOKEN via extension: {request.token[:8]}...")
         _save_moodle_token(request.token)
         return {"success": True, "type": "token"}
-    return {"success": False, "error": "No token provided"}
+        
+    if request.sesskey and request.host:
+        logger.info(f"✅ Reçu SESSKEY via extension pour {request.host}")
+        _save_moodle_sesskey(request.sesskey, request.host)
+        return {"success": True, "type": "sesskey"}
+        
+    return {"success": False, "error": "No valid session data provided"}
 
 @router.get("/moodle/session/status")
 async def get_moodle_session_status():
@@ -144,7 +165,21 @@ async def get_moodle_session_status():
     Vérifie si une session Moodle est active.
     """
     token = _get_moodle_token()
-    return {"connected": token is not None and len(token) > 0}
+    
+    # Check sesskey as fallback
+    sesskey = None
+    if os.path.exists(SESSKEY_FILE):
+        try:
+            with open(SESSKEY_FILE, "r") as f:
+                data = json.load(f)
+                sesskey = data.get("sesskey")
+        except: pass
+
+    return {
+        "connected": (token is not None and len(token) > 0) or (sesskey is not None and len(sesskey) > 0),
+        "has_token": token is not None and len(token) > 0,
+        "has_sesskey": sesskey is not None and len(sesskey) > 0
+    }
 
 @router.post("/moodle/sync")
 async def trigger_moodle_sync(

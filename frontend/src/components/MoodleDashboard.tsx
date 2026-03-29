@@ -4,11 +4,17 @@ import { GraduationCap, RefreshCw, Plus } from "lucide-react";
 import MoodleSyncDialog from "./MoodleSyncDialog";
 import { api } from "@/services/api";
 
+interface MoodleStatus {
+  connected: boolean;
+  has_token?: boolean;
+  has_sesskey?: boolean;
+}
+
 export default function MoodleDashboard() {
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSyncDialogOpen, setIsSyncDialogOpen] = useState(false);
-  const [isConnected, setIsConnected] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<MoodleStatus>({ connected: false });
 
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
 
@@ -18,10 +24,10 @@ export default function MoodleDashboard() {
       const res = await api.get("/api/v2/moodle/session/status");
       if (res.ok) {
         const data = await res.json();
-        setIsConnected(data.connected);
+        setStatus(data);
       }
     } catch (err) {
-      setIsConnected(false);
+      setStatus({ connected: false });
     }
   };
 
@@ -77,7 +83,7 @@ export default function MoodleDashboard() {
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <GraduationCap size={28} color="var(--nf-accent)" />
           <h2 className="nf-page-header__title" style={{ margin: 0 }}>Mes Cours Moodle Docs</h2>
-          {isConnected === false && (
+          {(!status.has_token && !status.has_sesskey) && (
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px" }}>
               <span className="nf-badge nf-badge--error" style={{ fontSize: "11px" }}>
                 Session expirée
@@ -94,52 +100,51 @@ export default function MoodleDashboard() {
                     if (data.success) {
                       await fetchStatus();
                     } else if (data.bypass_url) {
-                      if (confirm("Le serveur ne peut pas ouvrir de fenêtre Moodle (mode Cloud).\n\nVoulez-vous ouvrir la page de connexion manuellement dans un nouvel onglet ?\n\nL'onglet principal se mettra à jour automatiquement une fois connecté (nécessite l'extension NovaFlow).")) {
+                      if (confirm("L'extension NovaFlow a besoin d'ouvrir Moodle pour capturer votre session.\n\nVoulez-vous ouvrir l'onglet de connexion ?")) {
                         window.open(data.bypass_url, "_blank");
                         
-                        // Active Polling: Check status every 2s for 2 minutes
+                        // Active Polling: Check status every 2s
                         let checks = 0;
                         const pollInterval = setInterval(async () => {
                           checks++;
-                          const status = await api.get("/api/v2/moodle/session/status").then(r => r.json());
-                          if (status.connected || checks > 60) {
+                          const resStatus = await api.get("/api/v2/moodle/session/status");
+                          const statusData = await resStatus.json();
+                          if (statusData.has_token || checks > 30) {
                             clearInterval(pollInterval);
-                            if (status.connected) {
-                              fetchStatus();
-                              fetchCourses();
-                            }
+                            await fetchStatus();
+                            if (statusData.has_token) fetchCourses();
                           }
                         }, 2000);
                       }
-                    } else if (data.error) {
-                      let msg = `Erreur de connexion : ${data.error}`;
-                      if (data.error.includes("BrowserType.launch") || data.error.includes("executable")) {
-                        msg += "\n\n💡 Tip : Cette fonction nécessite un navigateur local. En ligne, utilisez l'extension NovaFlow pour capturer votre session Moodle.";
-                      }
-                      alert(msg);
-                    } else {
-                      alert("Échec de la connexion. Utilisez l'extension Moodle si vous êtes sur le Web.");
                     }
                   } catch (e: any) {
                     console.error("Login call failed", e);
-                    alert("Erreur de communication avec le serveur.");
                   } finally {
                     btn.disabled = false;
                     btn.innerText = "Connecter";
                   }
                 }}
                 style={{ fontSize: "10px", height: "24px", padding: "0 10px", borderRadius: "12px" }}
-                title="Ouvre une fenêtre pour rafraîchir la session Chrome"
               >
                 Connecter
               </button>
             </div>
           )}
-          {isConnected === true && (
-            <span className="nf-badge nf-badge--success" style={{ marginLeft: "8px", fontSize: "12px" }}>
-              Moodle : Connecté
-            </span>
+          {(status.has_sesskey && !status.has_token) && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px" }}>
+              <span className="nf-badge nf-badge--primary" style={{ fontSize: "11px", background: "var(--nf-accent-glow)", color: "var(--nf-accent)" }}>
+                ⏳ Génération du jeton...
+              </span>
+            </div>
           )}
+          {status.has_token && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px" }}>
+              <span className="nf-badge nf-badge--success" style={{ fontSize: "11px" }}>
+                Session active
+              </span>
+            </div>
+          )}
+          {/* Bloc temporaire retiré car remplacé par status.has_token */}
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
           <button 

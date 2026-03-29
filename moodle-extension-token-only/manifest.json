@@ -13,7 +13,11 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://moodle.usherbrooke.ca/*"],
+      "matches": [
+        "*://moodle.usherbrooke.ca/*",
+        "*://*.usherbrooke.ca/moodle/*",
+        "*://*.usherbrooke.ca/*moodle*"
+      ],
       "js": ["content.js"]
     }
   ]
