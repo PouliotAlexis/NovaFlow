@@ -93,10 +93,18 @@ export default function MoodleDashboard() {
                     const data = await res.json();
                     if (data.success) {
                       await fetchStatus();
+                    } else if (data.bypass_url) {
+                      if (confirm("Le serveur ne peut pas ouvrir de fenêtre Moodle (mode Cloud).\n\nVoulez-vous ouvrir la page de connexion manuellement dans un nouvel onglet ?\n\nAprès connexion, vous devrez utiliser l'extension NovaFlow pour synchroniser.")) {
+                        window.open(data.bypass_url, "_blank");
+                      }
                     } else if (data.error) {
-                      alert(`Erreur de connexion : ${data.error}`);
+                      let msg = `Erreur de connexion : ${data.error}`;
+                      if (data.error.includes("BrowserType.launch") || data.error.includes("executable")) {
+                        msg += "\n\n💡 Tip : Cette fonction nécessite un navigateur local. En ligne, utilisez l'extension NovaFlow pour capturer votre session Moodle.";
+                      }
+                      alert(msg);
                     } else {
-                      alert("Échec de la connexion. Assure-toi que Chrome est fermé.");
+                      alert("Échec de la connexion. Utilisez l'extension Moodle si vous êtes sur le Web.");
                     }
                   } catch (e: any) {
                     console.error("Login call failed", e);

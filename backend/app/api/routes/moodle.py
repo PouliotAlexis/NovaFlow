@@ -91,7 +91,11 @@ async def trigger_moodle_capture(request: MoodleCaptureRequest):
     import sys
     print(f"[ROUTE] /moodle/capture appelé avec url={request.url}", flush=True)
     sys.stdout.flush()
-    token = await capture_moodle_token(request.url)
+    result = await capture_moodle_token(request.url)
+    if isinstance(result, dict) and "bypass_url" in result:
+        return result # Return the bypass URL to the frontend
+        
+    token = result
     if not token:
         raise HTTPException(status_code=408, detail="La capture du jeton a expiré ou a été annulée.")
     return {"token": token}
@@ -205,8 +209,18 @@ async def trigger_moodle_login():
         moodle_url = settings.MOODLE_URL or "https://moodle.usherbrooke.ca"
         logger.info(f"[LOGIN] Lancement capture token SSO pour {moodle_url}...")
         
-        token = await capture_moodle_token(moodle_url)
+        token_result = await capture_moodle_token(moodle_url)
         
+        if isinstance(token_result, dict) and "bypass_url" in token_result:
+             logger.info(f"[LOGIN] Serveur incapable d'ouvrir le navigateur. Bypass_url renvoyé.")
+             return {
+                 "success": False, 
+                 "error": "headless_incompatible", 
+                 "bypass_url": token_result["bypass_url"],
+                 "message": "Le serveur ne peut pas ouvrir de fenêtre. Veuillez utiliser ce lien ou l'extension."
+             }
+        
+        token = token_result
         if token:
             _save_moodle_token(token)
             logger.info(f"[LOGIN] Token capturé avec succès: {token[:8]}...")

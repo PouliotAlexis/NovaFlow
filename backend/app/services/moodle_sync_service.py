@@ -21,9 +21,20 @@ async def capture_moodle_token(url: str):
     
     token = None
     
+    # On prépare l'URL de bypass pour l'utilisateur au cas où le serveur ne peut pas l'ouvrir
+    bypass_url = launch_url
+    
     async with async_playwright() as p:
-        # On lance un navigateur temporaire
-        browser = await p.chromium.launch(headless=False, args=["--app=" + launch_url])
+        try:
+            # On tente de lancer le navigateur
+            # NOTE: headless=False ne fonctionnera PAS sur un serveur (Render/Vercel)
+            # sans configuration de display virtuel (Xvfb).
+            browser = await p.chromium.launch(headless=False, args=["--app=" + launch_url])
+        except Exception as e:
+            print(f"[MOODLE SSO] ❌ Impossible de lancer le navigateur : {e}")
+            # Bypasser en proposant l'URL à l'utilisateur
+            return {"error": "headless_incompatible", "bypass_url": bypass_url}
+            
         page = await browser.new_page()
         
         print(f"[MOODLE SSO] En attente de connexion sur {base_url}...")

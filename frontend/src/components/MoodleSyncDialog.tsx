@@ -174,6 +174,9 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                 <p style={{ fontSize: "12px", color: "var(--nf-accent)", fontWeight: 600, margin: 0 }}>
                   ✨ Utilise le bouton "Connecter" sur le dashboard pour capturer ta session Microsoft SSO, puis lance la synchro ici.
                 </p>
+                <p style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginTop: "8px", fontStyle: "italic" }}>
+                  Note : En ligne (Vercel/Render), privilégiez l'extension NovaFlow pour une capture fiable de votre session.
+                </p>
               </div>
             </div>
           ) : (

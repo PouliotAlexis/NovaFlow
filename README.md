@@ -14,6 +14,14 @@
 
 *« Intelligence Centrale, Confidentialité Totale. »*
 
+---
+
+### 🌐 Liens de Déploiement
+- **Frontend (Vercel)** : [https://nova-flow-mu.vercel.app/](https://nova-flow-mu.vercel.app/)
+- **Backend (Render)** : [https://novaflow-9lj7.onrender.com/](https://novaflow-9lj7.onrender.com/)
+
+---
+
 [Fonctionnalités](#-fonctionnalités) •
 [Architecture](#-architecture) •
 [Installation](#-installation-et-lancement) •
