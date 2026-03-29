@@ -19,15 +19,61 @@ export default function MoodleDashboard() {
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
 
 
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === "NOVAFLOW_MOODLE_SESSION") {
+        const data = event.data.data;
+        console.log("MoodleDashboard: Reçu session de l'extension !", data);
+        
+        // Sauver en localstorage pour les déploiements serverless (Vercel)
+        localStorage.setItem("moodle_session", JSON.stringify(data));
+        
+        setStatus({
+          connected: true,
+          has_token: !!data.token,
+          has_sesskey: !!data.sesskey
+        });
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    
+    // Demander le statut actuel à l'extension
+    window.postMessage({ type: "GET_NOVAFLOW_EXTENSION_STATUS" }, "*");
+
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   const fetchStatus = async () => {
     try {
       const res = await api.get("/api/v2/moodle/session/status");
       if (res.ok) {
         const data = await res.json();
+        
+        // Si le serveur ne connaît pas la session, on vérifie notre localStorage
+        if (!data.connected) {
+           const local = localStorage.getItem("moodle_session");
+           if (local) {
+             const localData = JSON.parse(local);
+             setStatus({
+               connected: true,
+               has_token: !!localData.token,
+               has_sesskey: !!localData.sesskey
+             });
+             return;
+           }
+        }
         setStatus(data);
       }
     } catch (err) {
-      setStatus({ connected: false });
+      console.warn("Erreur status Moodle backend, tentative localstorage...");
+      const local = localStorage.getItem("moodle_session");
+      if (local) {
+        const localData = JSON.parse(local);
+        setStatus({ connected: true, has_token: !!localData.token, has_sesskey: !!localData.sesskey });
+      } else {
+        setStatus({ connected: false });
+      }
     }
   };
 
@@ -95,7 +141,11 @@ export default function MoodleDashboard() {
                   btn.disabled = true;
                   btn.innerHTML = '<span class="nf-spin">⏳</span>...';
                   try {
-                    const res = await api.post("/api/v2/moodle/login");
+                    // Récupérer le token local pour l'envoyer au serveur
+                    const localSession = localStorage.getItem("moodle_session");
+                    const token = localSession ? JSON.parse(localSession).token : null;
+                    
+                    const res = await api.post("/api/v2/moodle/login", { token });
                     const data = await res.json();
                     if (data.success) {
                       await fetchStatus();

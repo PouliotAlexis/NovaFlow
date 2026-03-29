@@ -3,7 +3,7 @@
   "name": "NovaFlow Moodle Sync (Simple)",
   "version": "1.0",
   "description": "Capture automatiquement votre jeton Moodle pour NovaFlow.",
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage", "tabs", "scripting"],
   "host_permissions": ["*://moodle.usherbrooke.ca/*", "http://localhost:8000/*", "https://nova-flow-mu.vercel.app/*"],
   "action": {
     "default_popup": "popup.html"
@@ -19,6 +19,13 @@
         "*://*.usherbrooke.ca/*moodle*"
       ],
       "js": ["content.js"]
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "https://*.vercel.app/*"
+      ],
+      "js": ["novaflow-link.js"]
     }
   ]
 }

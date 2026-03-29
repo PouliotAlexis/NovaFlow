@@ -187,21 +187,31 @@ async def trigger_moodle_sync(
     background_tasks: BackgroundTasks
 ):
     """
-    Déclenche la synchronisation Moodle en arrière-plan.
+    Déclenche la synchronisation des cours Moodle.
     """
-    if not request.token and (not request.username or not request.password):
-        raise HTTPException(status_code=400, detail="Vous devez fournir soit des identifiants (CIP/Pass), soit un jeton (Token).")
+    import logging
+    logger = logging.getLogger("moodle_api")
+    
+    # Priorité : le token envoyé dans la requête (localStorage frontend)
+    token = request.token or _get_moodle_token()
+    
+    if not token and not (request.username and request.password):
+        logger.error("[SYNC] Aucun jeton ni identifiant fourni.")
+        raise HTTPException(
+            status_code=401, 
+            detail="Session expirée. Veuillez vous reconnecter via le bouton SSO ou entrer vos identifiants."
+        )
 
-    # Si l'URL fournie est un flux calendrier Moodle (iCal/RSS),
-    # on l'ajoute aux réglages pour qu'il soit visible dans /api/calendar/events.
+    # Sauvegarder l'URL si c'est un flux calendrier
     _save_calendar_url_if_feed(request.url)
-
+    
+    # Lancer la synchro en arrière-plan
     background_tasks.add_task(
-        sync_moodle_courses, 
-        request.username, 
-        request.password, 
-        request.url,
-        request.token
+        sync_moodle_courses,
+        base_url=request.url,
+        username=request.username,
+        password=request.password,
+        token=token
     )
     
     return {"status": "started", "message": "La synchronisation Moodle a été lancée en arrière-plan."}
@@ -276,15 +286,23 @@ def _load_moodle_token() -> str | None:
             pass
     return None
 
+class MoodleLoginRequest(BaseModel):
+    token: Optional[str] = None
+
 @router.post("/moodle/login")
-async def trigger_moodle_login():
+async def trigger_moodle_login(request: MoodleLoginRequest):
     """
     Ouvre une fenêtre Chromium propre pour SSO Microsoft.
-    Capture le token Moodle Mobile automatiquement.
-    Utilise le même flux éprouvé que /moodle/capture.
+    Si un token est fourni dans la requête (via localStorage du frontend), on l'utilise directement.
     """
     import logging
     logger = logging.getLogger("moodle_api")
+    
+    # Si le frontend nous envoie déjà un token qu'il a en mémoire locale
+    if request.token:
+        logger.info(f"[LOGIN] Utilisation du token fourni par le client: {request.token[:8]}...")
+        _save_moodle_token(request.token)
+        return {"success": True, "message": "Token client enregistré."}
     
     try:
         moodle_url = settings.MOODLE_URL or "https://moodle.usherbrooke.ca"
