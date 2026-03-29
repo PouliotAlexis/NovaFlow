@@ -17,7 +17,7 @@ async def capture_moodle_token(url: str):
     
     base_url = normalize_moodle_url(url)
     # On utilise l'URL de l'app mobile pour forcer la génération de token
-    launch_url = f"{base_url}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport={time.time()}&urlscheme=moodlemobile"
+    launch_url = f"{base_url}/admin/tool/mobile/launch.php?service=moodle_mobile_app&urlscheme=moodlemobile"
     
     token = None
     
