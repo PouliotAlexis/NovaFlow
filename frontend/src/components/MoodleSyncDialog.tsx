@@ -24,20 +24,20 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
         try {
           const res = await api.get("/api/v2/moodle/session/status");
           const data = await res.json();
-          if (!data.connected) {
+          if (!data.has_token) {
              const local = localStorage.getItem("moodle_session");
              if (local) {
                const localData = JSON.parse(local);
-               setIsConnected(!!localData.token || !!localData.sesskey);
+               setIsConnected(!!localData.token);
                return;
              }
           }
-          setIsConnected(data.connected);
+          setIsConnected(data.has_token);
         } catch (err) {
           const local = localStorage.getItem("moodle_session");
           if (local) {
              const localData = JSON.parse(local);
-             setIsConnected(!!localData.token || !!localData.sesskey);
+             setIsConnected(!!localData.token);
           } else {
              setIsConnected(false);
           }
