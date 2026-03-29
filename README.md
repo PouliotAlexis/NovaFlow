@@ -4,13 +4,13 @@
 
 **Votre système d'exploitation de vie ("Life OS") unifié.**
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg?logo=python&logoColor=white)](https://www.python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Next.js](https://img.shields.io/badge/Next.js-14+-black.svg?logo=next.js&logoColor=white)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-18+-61DAFB.svg?logo=react&logoColor=black)](https://reactjs.org/)
-[![Ollama](https://img.shields.io/badge/AI-Ollama-white.svg?logo=ollama&logoColor=black)](https://ollama.ai/)
-[![wakatime](https://wakatime.com/badge/github/PouliotAlexis/NovaFlow.svg?style=flat)](https://wakatime.com/badge/github/PouliotAlexis/NovaFlow)
-[![License](https://img.shields.io/badge/License-Privée-red.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.2.0--Equinox-blueviolet.svg?style=for-the-badge)]()
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white&style=for-the-badge)](https://www.python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?logo=fastapi&logoColor=white&style=for-the-badge)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-14+-black.svg?logo=next.js&logoColor=white&style=for-the-badge)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-18+-61DAFB.svg?logo=react&logoColor=black&style=for-the-badge)](https://reactjs.org/)
+[![Ollama](https://img.shields.io/badge/AI-Ollama-white.svg?logo=ollama&logoColor=black&style=for-the-badge)](https://ollama.ai/)
+[![Database](https://img.shields.io/badge/DB-PostgreSQL-336791.svg?logo=postgresql&logoColor=white&style=for-the-badge)]()
 
 *« Intelligence Centrale, Confidentialité Totale. »*
 
@@ -18,6 +18,7 @@
 [Architecture](#-architecture) •
 [Installation](#-installation-et-lancement) •
 [Configuration](#️-configuration) •
+[Base de Données](#-accès-base-de-données) •
 [Sécurité](#-confidentialité--sécurité)
 
 </div>
@@ -26,111 +27,88 @@
 
 ## 🌟 Vue d'Ensemble
 
-**NovaFlow** n'est pas qu'un simple calendrier ou gestionnaire de tâches. C'est un véritable **Life OS** proactif conçu pour centraliser intelligemment l'ensemble de vos informations académiques, professionnelles et personnelles. Grâce à une IA locale ultra-sécurisée, NovaFlow organise, priorise et anticipe votre journée à votre place.
+**NovaFlow** est un **Life OS** proactif et privé (v1.2.0 "Equinox"). Conçu pour les étudiants et les professionnels exigeants, il centralise vos flux académiques, professionnels et personnels dans une interface unique et intelligente. Grâce à une architecture **Cloud-Hybrid**, bénéficiez de la puissance des derniers modèles d'IA tout en garantissant une confidentialité absolue grâce à notre couche de sanitisation locale.
 
 ---
 
 ## ✨ Fonctionnalités Principales
 
-### 📊 Dashboard & Smart Feed
-Le centre de commandement de votre journée.
-- **Tableau de bord intelligent IA** : Priorisation proactive du flot de travail.
-- **Résumé quotidien condensé** : Météo, événements imminents et ultra-priorités en un coup d'œil.
-- **Mini-calendrier interactif** : Prise de pouls rapide de votre planning.
-- **Analytiques & Tendances** : Suivi fin de votre productivité et de votre hygiène de travail.
+### 🧠 Cerveau Hybride & Privacy Layer (Nouveau !)
+- **Hybrid AI Engine** : Bascule dynamique entre **Ollama** (local), **OpenAI** (cloud) et **Groq** pour un équilibre parfait entre performance et latence.
+- **Reversible Redaction (Sanitizer)** : Technologie exclusive qui anonymise vos données sensibles (noms, emails, prix) *localement* avant tout envoi au cloud, puis restaure l'information originale dans la réponse reçue.
+- **ContextBuilder Intelligence** : L'IA ne répond plus "dans le noir". Elle agrège dynamiquement vos tâches, vos événements calendriers et vos documents RAG pour fournir des réponses ultra-contextualisées.
 
-### 📅 Calendrier Unifié (Google + Outlook)
-La fin absolue de la fragmentation de vos emplois du temps.
-- **Synchronisation Multi-Comptes & Multi-Sources** : Google Calendar et Microsoft Outlook dans une seule interface.
-- **Déduplication Cross-Source Intelligente** : Un même événement détecté sur deux calendriers n'est affiché qu'une seule fois.
-- **Polling Temps Réel** : Actualisation silencieuse (60s) pour ne jamais rater un changement.
+### 🎓 Intégration Moodle Profonde
+- **Chrome Extension "Auto-Sync"** : Capture automatique des dates d'échéance et des supports de cours directement depuis votre navigateur.
+- **Moodle RSS Ingestion** : Synchronisation persistante des nouvelles annonces et changements d'horaires.
+- **Cloud Document Sync** : Téléchargement automatique des fichiers Moodle et synchronisation bidirectionnelle avec **Google Drive** pour un accès multi-appareils.
 
-### ✅ Gestion de Tâches Autopilotée
-Oubliez la saisie manuelle.
-- **Synchronisation Multi-Sources** : Intégration transparente de **Google Tasks** et **Microsoft To Do**.
-- **Création Automatique IA** : Analyse sémantique des descriptions d'événements pour en extraire des livrables (Tasks).
-- **Association Parent/Enfant Intelligente** : L'IA analyse les nouvelles tâches externes pour les lier automatiquement à leurs événements correspondants (cours, rendez-vous) ou créer de nouveaux événements si nécessaire.
-- **Fusion Contextuelle** : L'IA regroupe les tâches similaires pour éviter les doublons inutiles (analyse sémantique, pas juste lettre par lettre).
-- **Synchronisation Bidirectionnelle** : Toute modification dans *Task List* se répercute instantanément sur votre *Calendar*.
+### 📅 Calendrier & Tâches Unifiés
+- **Fusion Multi-Sources** : Google Calendar, Microsoft Outlook et Microsoft To Do réunis dans une vue homogène.
+- **Auto-Tasking IA** : L'IA analyse vos descriptions d'événements et crée automatiquement des sous-tâches actionnables avec priorisation intelligente.
+- **Déduplication Sémantique** : Identification intelligente des doublons entre vos calendriers personnels et professionnels.
 
-### 🎓 Intégration Universitaire (Moodle Booster)
-Optimisé pour l'excellence académique.
-- **Extension Chrome Automatisée** : Téléchargement et organisation silencieuse de tous vos fichiers Moodle.
-- **Upload Google Drive Dynamique** : Sauvegarde et hiérarchisation automatique des cours sur le cloud. (Nouveau !)
+### 📁 Second Cerveau RAG v2
+- **Drop Zone Universelle** : Glisser-déposer PDF, Markdown et CSV pour une indexation instantanée.
+- **Vector Search (ChromaDB)** : Recherche sémantique haute performance avec citations directes des sources.
+- **Analyse Automatisée** : Dés qu'un document est ajouté, l'IA l'analyse pour en extraire des tâches ou des rappels importants.
 
-### 📁 Drop Zone & Second Cerveau (RAG)
-Votre assistant documentaire personnel.
-- **Glisser-Déposer Universel** : Importez PDF, notes, URL... L'IA s'occupe de lire, comprendre et classer le contenu.
-- **Pipeline RAG (ChromaDB)** : Posez des questions complexes sur vos documents, obtenez la réponse exacte avec la citation de la source.
-
-### 🧠 Cerveau Hybride (Ollama + OpenAI)
-- **Local First (Ollama)** : Mode 100% privé, exécution totale sur votre machine. Vos données personnelles restent chez vous.
-- **Cloud Boosté (OpenAI)** : Puissance analytique maximale avec le système de *Reversible Redaction* qui masque vos données sensibles (noms, emails, prix) AVANT de taper l'API Cloud.
-- **Chat IA Omniprésent** : Un co-pilote in-app toujours prêt à brainstormer.
-
-### 🎯 Mode Focus & Alertes
-- **Timer Pomodoro Connecté** : Directement greffé sur vos tâches actives pour garantir la *Deep Work*.
-- **Alertes Chirurgicales** : Notifications prioritaires pour les examens et les deadlines critiques. Zéro spam.
+### 📊 Dashboard & Focus
+- **Glassmorphism UI** : Interface premium basée sur Next.js 14 (App Router) avec un design moderne et réactif.
+- **Productivity Trends** : Visualisation claire de votre engagement et de votre hygiène de travail.
+- **Mode Deep Work** : Timer Pomodoro intégré et notifications priorisées pour éliminer les distractions.
 
 ---
 
 ## 🏗️ Architecture et Flux de Données
 
-NovaFlow repose sur une architecture moderne de type micro-services : un Frontend réactif Next.js communiquant avec un moteur backend robuste en Python FastAPI.
+NovaFlow repose sur une architecture micro-services moderne, optimisée pour la performance et la confidentialité.
 
 ```mermaid
 graph TD;
     %% Frontend
-    subgraph Frontend["Frontend (Next.js / React)"]
-        UI[Interface Utilisateur]
-        Dashboard[Dashboard & Feed]
-        Calendar[Vue Calendrier]
-        Tasks[Liste des Tâches]
+    subgraph Frontend["Frontend (Next.js 14 / Tailwind / Lucide)"]
+        UI[App Router / Glassmorphism]
+        Dashboard[Smart Dashboard]
+        ChatUI[Interactive Chat Streaming]
     end
 
     %% Backend
-    subgraph Backend["Backend (FastAPI / Python)"]
-        API[API Endpoints]
-        EventManager[Event Manager]
-        TaskManager[Task Manager]
-        AIEngine[Moteur IA Hybride]
-        RAG[Pipeline Documentaire]
-        CalendarAgg[Calendar Aggregator]
+    subgraph Backend["Backend (FastAPI / Python 3.11)"]
+        API[API Endpoints v2]
+        Context[ContextBuilder]
+        Sanitizer[Local Sanitizer / Privacy]
+        ManagerTasks[Task & Alert Manager]
+        SyncMoodle[Moodle Sync Service]
+        RAG[RAG v2 Engine]
     end
 
-    %% External & Storage
-    subgraph Storage["Stockage Local"]
-        DB[(ChromaDB / JSON)]
+    %% Storage
+    subgraph Storage["Persistance & Indexation"]
+        DB[(PostgreSQL / SQLite)]
+        VectorDB[(ChromaDB)]
+        GDrive[Google Drive Sync]
     end
 
-    subgraph External["Services Externes"]
-        Google[Google Calendar & Drive]
-        Outlook[Microsoft Outlook]
-        Moodle[Moodle (Extension)]
-        OpenAI[API OpenAI Cloud]
-        Ollama[Ollama Local]
+    %% Intelligence
+    subgraph AI["Intelligence Stratifiée"]
+        Ollama[Ollama (Local First)]
+        CloudAI[OpenAI / Groq (Cloud Boost)]
     end
 
     %% Connections
     UI --> API
-    Dashboard --> API
-    Calendar --> API
-    Tasks --> API
-
-    API --> EventManager
-    API --> TaskManager
-    API --> AIEngine
-    API --> RAG
+    API --> Sanitizer
+    Sanitizer <--> CloudAI
+    API --> Ollama
     
-    EventManager --> CalendarAgg
-    CalendarAgg <-- Sync --> Google
-    CalendarAgg <-- Sync --> Outlook
+    API --> Context
+    Context --> ManagerTasks
+    Context --> RAG
     
-    AIEngine -.-> Ollama
-    AIEngine -.-> OpenAI
-    
-    RAG <--> DB
-    Moodle -. "Extension Chrome" .-> Storage
+    RAG <--> VectorDB
+    API <--> DB
+    SyncMoodle <--> GDrive
 ```
 
 ---
@@ -139,122 +117,104 @@ graph TD;
 
 ```text
 NovaFlow/
-├── frontend/                  # Next.js (React 18 + TypeScript + Tailwind)
-│   ├── src/components/        # Composants réutilisables
-│   ├── src/pages/             # Navigation et Layouts
-│   └── package.json           # Dépendances NPM
-├── backend/                   # Python FastAPI ultra-performant
-│   ├── main.py                # Point d'entrée de l'API
-│   ├── core/                  # Configurations Pydantic
-│   ├── services/              # Logique métier lourde :
-│   │   ├── ai_engine.py       # Orchestrateur IA (Ollama/OpenAI)
-│   │   ├── automation.py      # Tâches background récurrentes
-│   │   ├── calendar_agg*.py   # Fusion de flux calendaires
-│   │   ├── document_pro*.py   # Extracteur RAG multiformats
-│   │   └── sanitizer.py       # Chiffrement et Anonymisation
-│   └── requirements.txt       # Stack Python
-├── moodle-extension/          # Extension Chrome ("Scraper & Downloader")
-│   ├── manifest.json
-│   └── background.js
-└── docs/                      # Spécifications et Documentation Technique
+├── frontend/                  # Next.js (App Router + React 18 + Tailwind)
+│   ├── src/app/               # Pages, Layouts et Routage
+│   ├── src/components/        # UI haut de gamme (Glassmorphism)
+│   └── package.json
+├── backend/                   # FastAPI robustifié
+│   ├── app/                   # Code source principal
+│   │   ├── api/               # Router API (v1/v2)
+│   │   ├── services/          # Logique métier (AI, Sync, RAG)
+│   │   ├── db/                # Modèles SQLAlchemy et migrations
+│   │   └── core/              # Config Pydantic Settings
+│   ├── main.py                # Point d'entrée
+│   └── requirements.txt
+├── moodle-extension/          # Extension Chrome (Payload Sync)
+└── docs/                      # Spécifications v1.2.0
 ```
 
 ---
 
-## 🚀 Installation Globale & Déploiement Local
+## 🚀 Installation et Lancement
 
 ### 🛠 Prérequis Systèmes
-- **Python** `3.10+`
-- **Node.js** `18+`
-- **Ollama** installé sur la machine hôte *(pour config 100% locale)*
+- **Python** `3.11+`
+- **Node.js** `18+` (Next.js 14+)
+- **Ollama** (pour l'IA locale)
 
-### 1️⃣ Cloner le Cortex
+### 1️⃣ Cloner le Projet
 ```bash
 git clone https://github.com/PouliotAlexis/NovaFlow.git
 cd NovaFlow
 ```
 
-### 2️⃣ Allumage du Backend (FastAPI)
+### 2️⃣ Backend (FastAPI)
 ```bash
-# 1. Ouvrir le répertoire backend
 cd backend
-
-# 2. Créer l'environnement virtuel silencieux
 python -m venv venv
+.\venv\Scripts\activate  # Windows
+# ou source venv/bin/activate # Linux/Mac
 
-# 3. L'activer :
-# -> Sous Windows PowerShell :
-.\venv\Scripts\activate.ps1
-# -> Sous macOS/Linux :
-source venv/bin/activate
-
-# 4. Injecter les dépendances
 pip install -r requirements.txt
-
-# 5. Définir le contexte d'environnement
-cp .env.example .env
-
-# 6. Boot du serveur
+cp .env.example .env     # Configurez vos clés ici
 python main.py
 ```
-> 🌐 Connexion établie sur : `http://localhost:8000`
 
-### 3️⃣ Allumage du Frontend (Next.js)
-Dans un **second terminal**, à la racine du projet complet :
+### 3️⃣ Frontend (Next.js)
 ```bash
-cd frontend
+cd ../frontend
 npm install
 npm run dev
 ```
-> 🖥️ Interface graphique disponible : `http://localhost:3000`
-
-### 4️⃣ Activation IA Locale (Optionnel mais recommandé)
-Si vous optez pour une confidentialité maximale :
-```bash
-ollama pull llama3    # Ou tout autre modèle configuré dans le .env
-ollama run llama3
-```
 
 ---
 
-## ⚙️ Paramétrage Fin (.env)
-
-Modifiez minutieusement le fichier `backend/.env` :
+## ⚙️ Configuration (.env)
 
 | Variable | Description | Requis |
 |----------|-------------|:------:|
-| `AI_MODE` | Sélecteur : `local` (Ollama DB) ou `cloud` (OpenAI). | ✅ |
-| `OLLAMA_HOST` | URL de votre instance locale (souvent `http://localhost:11434`). | Si `local` |
-| `OLLAMA_MODEL` | Modèle préchargé (ex: `llama3`, `mistral`, `phi3`). | Si `local` |
-| `OPENAI_API_KEY` | Clé secrète OpenAI. | Si `cloud` |
-| `OPENAI_MODEL` | Moteur Cloud demandé (ex: `gpt-4o-mini`). | Si `cloud` |
-| `MICROSOFT_*`| Identifiants Microsoft Azure (`CLIENT_ID`, `CLIENT_SECRET`). | Pour Outlook |
-
-### 🔑 Connexions Externes OAuth
-* **Google (Calendar & Drive)** : Générez un `credentials.json` via Google Cloud Console et déposez-le dans `backend/credentials/`.
-* **Microsoft Outlook** : Mettez en place une App Azure Active Directory.
-  * Permissions : `User.Read`, `Calendars.ReadWrite`, `Tasks.ReadWrite`.
-  * Redirection URI : `http://localhost:8000/api/auth/microsoft/callback`.
+| `AI_MODE` | `local` (Ollama), `openai`, ou `groq`. | ✅ |
+| `DATABASE_URL` | URL PostgreSQL ou SQLite (`sqlite:///./novaflow.db`). | ✅ |
+| `OPENAI_API_KEY` | Clé pour GPT-4o-mini / GPT-4o. | Optionnel |
+| `GROQ_API_KEY` | Clé pour Llama-3 (Haute performance gratuite). | Optionnel |
+| `GOOGLE_*` | Identifiants OAuth pour Calendar & Drive. | ✅ |
+| `MICROSOFT_*` | Identifiants Azure pour Outlook & To Do. | ✅ |
 
 ---
 
-## 🛡️ Protocole de Confidentialité & Sécurité
+## 🗄️ Accès Base de Données
 
-L'architecture de NovaFlow est un coffre-fort de données par design :
-1. **Zéro-Knowledge par Défaut** : Sur `AI_MODE=local`, aucune ligne de texte n'est envoyée à l'extérieur. L'IA tourne sur vos propres processeurs.
-2. **Reversible Redaction** : En `AI_MODE=cloud`, NovaFlow intercepte le texte, supprime toute mention de personnes physiques, d'adresses ou de finances (Remplacement par tokens type `[NOM_1]`), requitte l'IA globale, puis re-traduit le texte reçu avant l'affichage.
-3. **Cage OAuth** : Les tokens API des services interconnectés restent scellés dans le dossier `backend/credentials/tokens/`, non exposés.
+Pour faciliter le développement et la maintenance, voici les points d'accès directs aux couches de données :
 
+### 🔙 Backend (Core Data)
+- **Logique de Connexion** : [database.py](file:///c:/Users/alexi/GIT/NovaFlow/backend/app/db/database.py) (Gestion des sessions SQLAlchemy)
+- **Modèles & Schéma** : [models.py](file:///c:/Users/alexi/GIT/NovaFlow/backend/app/db/models.py) (Définition des tables PostgreSQL/SQLite)
+- **Vecteurs (AI Context)** : [ingest.py](file:///c:/Users/alexi/GIT/NovaFlow/backend/app/services/rag_engine/ingest.py) (Interface avec ChromaDB)
 
-<br/>
-<br/>
+### 🔜 Frontend (State & Bridge)
+- **Service API** : [api.ts](file:///c:/Users/alexi/GIT/NovaFlow/frontend/src/services/api.ts) (Lien direct vers la base backend)
+- **Stockage Local** : Utilisation du `localStorage` pour la persistence des sessions (`nf_token`, `nf_user`).
+
+---
+
+## 🛡️ Confidentialité & Sécurité : Le Système "Sanitizer"
+
+L'innovation majeure de NovaFlow v1.2.0 est son **Sanitizer réversible** :
+
+1. **Interception** : Avant qu'une requête ne quitte votre machine vers un Cloud (OpenAI/Groq), le Sanitizer analyse le texte.
+2. **Anonymisation** : Les entités sensibles (ex: "RDV avec Jean Dupont à 14h") sont remplacées par des tokens (ex: "RDV avec [USER_1] à 14h").
+3. **Traitement Cloud** : L'IA Cloud traite la version anonymisée. Elle ne sait jamais à qui elle parle.
+4. **Restauration** : À la réception, NovaFlow remplace les tokens par vos vraies données avant de vous afficher la réponse.
+
+**Vos données restent privées, même en utilisant l'IA la plus puissante du monde.**
+
 <br/>
 
 <div align="center">
 
-**[ NovaFlow Core ]**
-*Reprenez le contrôle total de l'espace et du temps.*
-<br/><br/>
-© Projet Privé — Développé et architecturé par Alexis Pouliot.
+**[ NovaFlow Core v1.2.0 ]**  
+*L'équilibre parfait entre puissance et vie privée.*
+
+© Projet Privé — Architecturé par Alexis Pouliot.
 
 </div>
