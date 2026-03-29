@@ -213,27 +213,75 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                 
                 {!isConnected && (
                   <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--nf-accent-dim)" }}>
-                    <label className="nf-label" style={{ fontSize: "11px" }}>
-                      Ou colle ici le lien `moodlemobile://` (si tu n'as pas l'extension) :
-                    </label>
-                    <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-                      <input 
-                        type="text" 
-                        className="nf-input" 
-                        style={{ fontSize: "11px", height: "32px" }}
-                        placeholder="moodlemobile://token=..."
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val.includes("token=")) {
-                            const token = val.split("token=")[1].split("&")[0];
-                            // Sauvegarder dans le localStorage pour que la route handleSync standard l'utilise
-                            localStorage.setItem("moodle_session", JSON.stringify({ token }));
-                            setIsConnected(true);
-                            setError(""); // Effacer l'erreur précédente si présente
+                    <p style={{ fontSize: "11px", color: "var(--nf-text-muted)", marginBottom: "12px" }}>
+                      NovaFlow a besoin d'ouvrir Moodle pour capturer votre session automatiquement via l'extension.
+                    </p>
+                    <button
+                      type="button"
+                      className="nf-btn nf-btn--primary"
+                      style={{ width: "100%", justifyContent: "center", marginBottom: "12px" }}
+                      onClick={async (e) => {
+                        const btn = e.currentTarget;
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="nf-spin">⏳</span> En attente du jeton...';
+                        try {
+                          const res = await api.post("/api/v2/moodle/login", { token: null });
+                          const data = await res.json();
+                          if (data.bypass_url) {
+                            window.open(data.bypass_url, "_blank");
+                            
+                            // Polling pour attendre que l'extension ou le localStorage reçoive le token
+                            let checks = 0;
+                            const pollInterval = setInterval(async () => {
+                              checks++;
+                              const resStatus = await api.get("/api/v2/moodle/session/status");
+                              const statusData = await resStatus.json();
+                              
+                              const local = localStorage.getItem("moodle_session");
+                              const localToken = local ? JSON.parse(local).token : null;
+                              
+                              if (statusData.has_token || localToken || checks > 30) {
+                                clearInterval(pollInterval);
+                                if (statusData.has_token || localToken) {
+                                  setIsConnected(true);
+                                  setError("");
+                                }
+                                btn.disabled = false;
+                                btn.innerText = "Connecter automatiquement";
+                              }
+                            }, 2000);
                           }
-                        }}
-                      />
-                    </div>
+                        } catch (err) {
+                          btn.disabled = false;
+                          btn.innerText = "Connecter automatiquement";
+                        }
+                      }}
+                    >
+                      Connecter automatiquement
+                    </button>
+                    
+                    <details style={{ marginTop: "8px" }}>
+                      <summary style={{ fontSize: "10px", color: "var(--nf-text-muted)", cursor: "pointer", opacity: 0.7 }}>
+                        Mode manuel (coller le lien)
+                      </summary>
+                      <div style={{ marginTop: "8px" }}>
+                        <input 
+                          type="text" 
+                          className="nf-input" 
+                          style={{ fontSize: "11px", height: "32px", width: "100%" }}
+                          placeholder="moodlemobile://token=..."
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val.includes("token=")) {
+                              const token = val.split("token=")[1].split("&")[0];
+                              localStorage.setItem("moodle_session", JSON.stringify({ token }));
+                              setIsConnected(true);
+                              setError("");
+                            }
+                          }}
+                        />
+                      </div>
+                    </details>
                   </div>
                 )}
                 

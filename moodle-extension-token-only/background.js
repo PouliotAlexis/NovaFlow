@@ -30,20 +30,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         chrome.tabs.query({}, (tabs) => {
             tabs.forEach(tab => {
                 if (tab.url && (tab.url.includes("localhost:3000") || tab.url.includes("vercel.app"))) {
-                    chrome.tabs.sendMessage(tab.id, request);
+                    // Ignorer les onglets qui n'ont pas fini de charger le script de réception
+                    chrome.tabs.sendMessage(tab.id, request).catch(() => {});
                 }
             });
         });
 
-        // 3. (Optionnel) Envoyer aux backends connus si configurés
+        // 3. Envoyer directement au backend de production (Render)
         const BACKENDS = [
-            "http://localhost:8000/api/v2/moodle/session/update",
-            "https://nova-flow-mu.vercel.app/api/v2/moodle/session/update",
             "https://novaflow-9lj7.onrender.com/api/v2/moodle/session/update"
         ];
         chrome.storage.local.get(['knownBackends'], (result) => {
             const backends = result.knownBackends || [];
-            const targets = [...new Set([...BACKENDS, ...backends.map(b => `${b}/api/v2/moodle/session/update`)])];
+            // On ignore knownBackends pour l'instant car ce sont les URLs du frontend
+            const targets = [...BACKENDS];
             
             targets.forEach(url => {
                 fetch(url, {
