@@ -220,41 +220,81 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                       type="button"
                       className="nf-btn nf-btn--primary"
                       style={{ width: "100%", justifyContent: "center", marginBottom: "12px" }}
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         const btn = e.currentTarget;
                         btn.disabled = true;
                         btn.innerHTML = '<span class="nf-spin">⏳</span> En attente du jeton...';
-                        try {
-                          const res = await api.post("/api/v2/moodle/login", { token: null });
-                          const data = await res.json();
-                          if (data.bypass_url) {
-                            window.open(data.bypass_url, "_blank");
-                            
-                            // Polling pour attendre que l'extension ou le localStorage reçoive le token
-                            let checks = 0;
-                            const pollInterval = setInterval(async () => {
-                              checks++;
-                              const resStatus = await api.get("/api/v2/moodle/session/status");
-                              const statusData = await resStatus.json();
-                              
-                              const local = localStorage.getItem("moodle_session");
-                              const localToken = local ? JSON.parse(local).token : null;
-                              
-                              if (statusData.has_token || localToken || checks > 30) {
-                                clearInterval(pollInterval);
-                                if (statusData.has_token || localToken) {
-                                  setIsConnected(true);
-                                  setError("");
-                                }
-                                btn.disabled = false;
-                                btn.innerText = "Connecter automatiquement";
-                              }
-                            }, 2000);
-                          }
-                        } catch (err) {
+
+                        // 1. Générer un passport aléatoire
+                        const passport = crypto.randomUUID().replace(/-/g, '');
+
+                        // 2. Préparer l'URL de callback avec l'astuce du hashtag
+                        const baseUrl = window.location.origin;
+                        const callbackScheme = encodeURIComponent(`${baseUrl}/moodle-callback#`);
+
+                        // Normaliser l'URL moodle
+                        let moodleBase = url.trim();
+                        if (!moodleBase) {
+                          setError("Veuillez entrer une URL Moodle valide.");
                           btn.disabled = false;
                           btn.innerText = "Connecter automatiquement";
+                          return;
                         }
+                        try {
+                          const parsed = new URL(moodleBase);
+                          moodleBase = `${parsed.protocol}//${parsed.hostname}${parsed.port ? ':' + parsed.port : ''}`;
+                        } catch { }
+
+                        // 3. Construire l'URL de lancement Moodle Mobile
+                        const moodleLaunchUrl = `${moodleBase}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=${passport}&urlscheme=${callbackScheme}`;
+
+                        // 4. Ouvrir le popup centré
+                        const width = 500;
+                        const height = 700;
+                        const left = window.screen.width / 2 - width / 2;
+                        const top = window.screen.height / 2 - height / 2;
+                        const popup = window.open(
+                          moodleLaunchUrl, 
+                          "Moodle SSO", 
+                          `width=${width},height=${height},top=${top},left=${left}`
+                        );
+
+                        // 5. Écouter la réponse du popup
+                        const messageListener = async (event: MessageEvent) => {
+                          if (event.origin !== window.location.origin) return;
+                          
+                          if (event.data?.type === "MOODLE_AUTH_SUCCESS") {
+                            const { token } = event.data.payload;
+                            localStorage.setItem("moodle_session", JSON.stringify({ token }));
+                            setIsConnected(true);
+                            setError("");
+                            btn.disabled = false;
+                            btn.innerText = "Connecter automatiquement";
+                            window.removeEventListener("message", messageListener);
+                          }
+                          
+                          if (event.data?.type === "MOODLE_AUTH_ERROR") {
+                            setError("Erreur d'authentification Moodle");
+                            btn.disabled = false;
+                            btn.innerText = "Connecter automatiquement";
+                            window.removeEventListener("message", messageListener);
+                          }
+                        };
+                        window.addEventListener("message", messageListener);
+
+                        // Gérer la fermeture manuelle du popup
+                        const checkPopupInterval = setInterval(() => {
+                          if (popup?.closed) {
+                            clearInterval(checkPopupInterval);
+                            const local = localStorage.getItem("moodle_session");
+                            const localToken = local ? JSON.parse(local).token : null;
+                            if (!localToken) {
+                              btn.disabled = false;
+                              btn.innerText = "Connecter automatiquement";
+                            }
+                            window.removeEventListener("message", messageListener);
+                          }
+                        }, 1000);
                       }}
                     >
                       Connecter automatiquement
