@@ -270,7 +270,8 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                           moodleBase = `${parsed.protocol}//${parsed.hostname}${parsed.port ? ':' + parsed.port : ''}`;
                         } catch { }
 
-                        const moodleLaunchUrl = `${moodleBase}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=${passport}&urlscheme=web+novaflow`;
+                        const encodedScheme = encodeURIComponent("web+novaflow");
+                        const moodleLaunchUrl = `${moodleBase}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=${passport}&urlscheme=${encodedScheme}`;
 
                         const width = 500;
                         const height = 700;
