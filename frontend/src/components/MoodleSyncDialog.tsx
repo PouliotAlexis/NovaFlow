@@ -219,35 +219,50 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                     <button
                       type="button"
                       className="nf-btn nf-btn--primary"
-                      style={{ width: "100%", justifyContent: "center", marginBottom: "12px" }}
+                      style={{ 
+                        width: "100%", 
+                        justifyContent: "center", 
+                        marginBottom: "12px",
+                        position: "relative",
+                        overflow: "hidden"
+                      }}
                       onClick={(e) => {
                         const btn = e.currentTarget;
-                        btn.disabled = true;
-                        btn.innerHTML = '<span class="nf-spin">⏳</span> En attente du jeton...';
+                        const isRegistered = btn.getAttribute("data-registered") === "true";
 
-                        const baseUrl = window.location.origin;
-
-                        // 1. Enregistrer le protocole personnalisé
-                        try {
-                          if (navigator.registerProtocolHandler) {
-                            navigator.registerProtocolHandler(
-                              "web+novaflow", 
-                              `${baseUrl}/moodle-callback?uri=%s`
-                            );
+                        if (!isRegistered) {
+                          // ÉTAPE 1 : ENREGISTREMENT
+                          const baseUrl = window.location.origin;
+                          try {
+                            if (navigator.registerProtocolHandler) {
+                              navigator.registerProtocolHandler(
+                                "web+novaflow", 
+                                `${baseUrl}/moodle-callback?uri=%s`
+                              );
+                              btn.setAttribute("data-registered", "true");
+                              btn.innerHTML = '✨ Prêt ! Cliquez pour connecter';
+                              setError("Veuillez autoriser NovaFlow dans votre navigateur si demandé (icône dans la barre d'adresse).");
+                            } else {
+                              throw new Error("registerProtocolHandler non supporté");
+                            }
+                          } catch (err) {
+                            setError("Erreur : Votre navigateur ne supporte pas cette méthode.");
+                            console.error(err);
                           }
-                        } catch (err) {
-                          console.error("Erreur registerProtocolHandler:", err);
+                          return;
                         }
 
-                        // 2. Générer un passport
-                        const passport = crypto.randomUUID().replace(/-/g, '');
+                        // ÉTAPE 2 : CONNEXION
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="nf-spin">⏳</span> En attente du jeton...';
+                        setError("");
 
-                        // Normaliser l'URL moodle
+                        const passport = crypto.randomUUID().replace(/-/g, '');
                         let moodleBase = url.trim();
                         if (!moodleBase) {
                           setError("Veuillez entrer une URL Moodle valide.");
                           btn.disabled = false;
-                          btn.innerText = "Connecter automatiquement";
+                          btn.innerHTML = 'Connecter automatiquement';
                           return;
                         }
                         try {
@@ -255,10 +270,8 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                           moodleBase = `${parsed.protocol}//${parsed.hostname}${parsed.port ? ':' + parsed.port : ''}`;
                         } catch { }
 
-                        // 3. Lancer Moodle avec web+novaflow
                         const moodleLaunchUrl = `${moodleBase}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=${passport}&urlscheme=web+novaflow`;
 
-                        // 4. Ouvrir le popup
                         const width = 500;
                         const height = 700;
                         const left = window.screen.width / 2 - width / 2;
@@ -269,38 +282,33 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                           `width=${width},height=${height},top=${top},left=${left}`
                         );
 
-                        // 5. Écouter la réponse du popup
                         const messageListener = async (event: MessageEvent) => {
                           if (event.origin !== window.location.origin) return;
-                          
                           if (event.data?.type === "MOODLE_AUTH_SUCCESS") {
                             const { token } = event.data.payload;
                             localStorage.setItem("moodle_session", JSON.stringify({ token }));
                             setIsConnected(true);
                             setError("");
                             btn.disabled = false;
-                            btn.innerText = "Connecter automatiquement";
+                            btn.innerHTML = "Connecter automatiquement";
                             window.removeEventListener("message", messageListener);
                           }
-                          
                           if (event.data?.type === "MOODLE_AUTH_ERROR") {
                             setError("Erreur d'authentification Moodle");
                             btn.disabled = false;
-                            btn.innerText = "Connecter automatiquement";
+                            btn.innerHTML = "Réessayer la connexion";
                             window.removeEventListener("message", messageListener);
                           }
                         };
                         window.addEventListener("message", messageListener);
 
-                        // Nettoyage si fermé manuellement
                         const checkPopupInterval = setInterval(() => {
                           if (popup?.closed) {
                             clearInterval(checkPopupInterval);
                             const local = localStorage.getItem("moodle_session");
-                            const localToken = local ? JSON.parse(local).token : null;
-                            if (!localToken) {
+                            if (!local || !JSON.parse(local).token) {
                               btn.disabled = false;
-                              btn.innerText = "Connecter automatiquement";
+                              btn.innerHTML = "Réessayer la connexion";
                             }
                             window.removeEventListener("message", messageListener);
                           }
