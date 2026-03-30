@@ -295,45 +295,40 @@ def _load_moodle_token() -> str | None:
 
 class MoodleLoginRequest(BaseModel):
     token: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
 
 @router.post("/moodle/login")
 async def trigger_moodle_login(request: MoodleLoginRequest):
     """
-    Ouvre une fenêtre Chromium propre pour SSO Microsoft.
-    Si un token est fourni dans la requête (via localStorage du frontend), on l'utilise directement.
+    Ouvre un navigateur distant via Browserless pour capturer le token Moodle SSO Microsoft.
+    Si un token est fourni directement par le client, on le sauvegarde.
     """
     import logging
     logger = logging.getLogger("moodle_api")
     
-    # Si le frontend nous envoie déjà un token qu'il a en mémoire locale
     if request.token:
-        logger.info(f"[LOGIN] Utilisation du token fourni par le client: {request.token[:8]}...")
+        logger.info(f"[LOGIN] Utilisation du token fourni par le client.")
         _save_moodle_token(request.token)
         return {"success": True, "message": "Token client enregistré."}
     
+    if not request.email or not request.password:
+        return {"success": False, "error": "Email et mot de passe requis pour le SSO automatique."}
+        
     try:
-        moodle_url = settings.MOODLE_URL or "https://moodle.usherbrooke.ca"
-        logger.info(f"[LOGIN] Lancement capture token SSO pour {moodle_url}...")
+        logger.info(f"[LOGIN] Lancement Browserless pour {request.email}...")
         
-        token_result = await capture_moodle_token(moodle_url)
+        from app.services.moodle_scraper import get_moodle_session_via_browserless
+        result = await get_moodle_session_via_browserless(request.email, request.password)
         
-        if isinstance(token_result, dict) and "bypass_url" in token_result:
-             logger.info(f"[LOGIN] Serveur incapable d'ouvrir le navigateur. Bypass_url renvoyé.")
-             return {
-                 "success": False, 
-                 "error": "headless_incompatible", 
-                 "bypass_url": token_result["bypass_url"],
-                 "message": "Le serveur ne peut pas ouvrir de fenêtre. Veuillez utiliser ce lien ou l'extension."
-             }
-        
-        token = token_result
-        if token:
-            _save_moodle_token(token)
-            logger.info(f"[LOGIN] Token capturé avec succès: {token[:8]}...")
-            return {"success": True, "message": "Connexion réussie ! Token capturé."}
+        if result.get("success") and result.get("token"):
+            _save_moodle_token(result["token"])
+            logger.info(f"[LOGIN] Token Moodle capturé avec succès (Browserless)!")
+            return {"success": True, "message": "Connexion réussie ! Token capturé.", "token": result["token"]}
         else:
-            logger.warning("[LOGIN] Capture annulée ou timeout.")
-            return {"success": False, "error": "Capture annulée ou fenêtre fermée avant la connexion."}
+            logger.warning(f"[LOGIN] Échec Browserless: {result.get('error')}")
+            return {"success": False, "error": result.get("error", "Erreur inconnue.")}
+
     except Exception as e:
         import traceback
         logger.error(f"[LOGIN] CRASH: {traceback.format_exc()}")

@@ -101,13 +101,34 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
           setError(data.detail || data.message || "Erreur de synchronisation. As-tu cliqué sur 'Connecter' d'abord ?");
         }
       } else {
-        // Mode identifiants : username/password via l'API Moodle
+        // Mode identifiants : email/password via Browserless Moodle SSO
         if (!username || !password) {
-          setError("Veuillez entrer votre CIP et mot de passe.");
+          setError("Veuillez entrer votre courriel/CIP et mot de passe.");
           setLoading(false);
           return;
         }
-        const body = { url: normalizedUrl, username, password };
+        
+        let email = username.trim();
+        if (!email.includes("@")) {
+          email = `${email}@usherbrooke.ca`;
+        }
+
+        // 1. Authentification Moodle SSO via Browserless
+        const loginRes = await api.post("/api/v2/moodle/login", { email, password });
+        const loginData = await loginRes.json();
+        
+        if (!loginRes.ok || !loginData.success) {
+           setError(loginData.error || loginData.detail || "Échec de l'authentification Moodle (Browserless)");
+           setLoading(false);
+           return;
+        }
+        
+        const token = loginData.token;
+        localStorage.setItem("moodle_session", JSON.stringify({ token }));
+        setIsConnected(true);
+
+        // 2. Lancer la synchronisation avec le token capturé
+        const body = { url: normalizedUrl, token };
         const res = await api.post("/api/v2/moodle/sync", body);
         if (res.ok) {
           onSyncStarted();
@@ -350,11 +371,11 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
           ) : (
             /* Mode Identifiants */
             <div className="nf-animate-in">
-              <p style={{ fontSize: "12px", color: "var(--nf-text-muted)", marginBottom: "8px" }}>
-                ⚠️ Ne fonctionne que si votre Moodle accepte la connexion par identifiants directs (pas Microsoft SSO).
+              <p style={{ fontSize: "12px", color: "var(--nf-accent)", marginBottom: "8px", fontWeight: 600 }}>
+                ✨ Supporte la connexion sécurisée Microsoft SSO (Browserless)
               </p>
               <div className="nf-form-group">
-                <label className="nf-label"><User size={14} /> CIP / Nom d'utilisateur</label>
+                <label className="nf-label"><User size={14} /> Courriel ou CIP</label>
                 <input
                   type="text"
                   className="nf-input"
