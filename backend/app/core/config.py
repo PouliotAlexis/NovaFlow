@@ -26,9 +26,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
     
-    # Cloud AI (Groq - Free)
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    
+    # Browserless
+    BROWSERLESS_API_KEY: str = ""
+    BROWSERLESS_URL: str = ""  # Optionnel: ws://localhost:3000 ou wss://...
     
     # Database
     DATABASE_URL: str = "sqlite:///./novaflow.db"

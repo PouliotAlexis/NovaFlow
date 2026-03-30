@@ -3,11 +3,12 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 import urllib.parse
 
 async def get_moodle_session_via_browserless(email: str, password: str):
-    browserless_key = os.getenv("BROWSERLESS_API_KEY")
-
-    ws_endpoint = None
-    if browserless_key and browserless_key != "your_key_here":
-        ws_endpoint = f"wss://chrome.browserless.io?token={browserless_key}"
+    from app.core.config import settings
+    
+    ws_endpoint = settings.BROWSERLESS_URL
+    # Si pas d'URL personnalisée mais une clé est présente, utiliser le cloud
+    if not ws_endpoint and settings.BROWSERLESS_API_KEY:
+        ws_endpoint = f"wss://chrome.browserless.io?token={settings.BROWSERLESS_API_KEY}"
 
     async with async_playwright() as p:
         browser = None

@@ -4,7 +4,7 @@
   "version": "1.0",
   "description": "Capture automatiquement votre jeton Moodle pour NovaFlow.",
   "permissions": ["storage", "tabs", "scripting"],
-  "host_permissions": ["*://moodle.usherbrooke.ca/*", "http://localhost:8000/*", "https://nova-flow-mu.vercel.app/*", "https://*.onrender.com/*"],
+  "host_permissions": ["*://moodle.usherbrooke.ca/*", "*://*.usherbrooke.ca/*", "http://localhost:8000/*", "https://nova-flow-mu.vercel.app/*", "https://*.onrender.com/*"],
   "action": {
     "default_popup": "popup.html"
   },
@@ -15,8 +15,8 @@
     {
       "matches": [
         "*://moodle.usherbrooke.ca/*",
-        "*://*.usherbrooke.ca/moodle/*",
-        "*://*.usherbrooke.ca/*moodle*"
+        "*://*.usherbrooke.ca/*moodle*",
+        "*://*.usherbrooke.ca/*"
       ],
       "js": ["content.js"]
     },

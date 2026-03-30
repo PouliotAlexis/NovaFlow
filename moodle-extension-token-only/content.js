@@ -75,3 +75,18 @@ findAndSendToken();
 // Surveiller les changements de DOM (pour les sites dynamiques)
 const observer = new MutationObserver(findAndSendToken);
 observer.observe(document.body, { childList: true, subtree: true });
+
+// scanner additionnel pour les tokens cachés dans le code source
+function scanSourceForToken() {
+    const pageSource = document.documentElement.innerHTML;
+    const match = pageSource.match(/moodlemobile:\/\/token=([a-zA-Z0-9]+)/);
+    if (match && match[1]) {
+        console.log("NovaFlow: ✅ Token trouvé par scan de source !");
+        chrome.runtime.sendMessage({ 
+            action: "UPDATE_TOKEN", 
+            data: { token: match[1], host: window.location.origin } 
+        });
+    }
+}
+scanSourceForToken();
+setInterval(scanSourceForToken, 3000);
