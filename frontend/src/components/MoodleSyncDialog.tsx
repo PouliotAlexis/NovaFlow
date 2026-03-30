@@ -225,12 +225,22 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                         btn.disabled = true;
                         btn.innerHTML = '<span class="nf-spin">⏳</span> En attente du jeton...';
 
-                        // 1. Générer un passport aléatoire
-                        const passport = crypto.randomUUID().replace(/-/g, '');
-
-                        // 2. Préparer l'URL de callback avec l'astuce du hashtag
                         const baseUrl = window.location.origin;
-                        const callbackScheme = encodeURIComponent(`${baseUrl}/moodle-callback#`);
+
+                        // 1. Enregistrer le protocole personnalisé
+                        try {
+                          if (navigator.registerProtocolHandler) {
+                            navigator.registerProtocolHandler(
+                              "web+novaflow", 
+                              `${baseUrl}/moodle-callback?uri=%s`
+                            );
+                          }
+                        } catch (err) {
+                          console.error("Erreur registerProtocolHandler:", err);
+                        }
+
+                        // 2. Générer un passport
+                        const passport = crypto.randomUUID().replace(/-/g, '');
 
                         // Normaliser l'URL moodle
                         let moodleBase = url.trim();
@@ -245,10 +255,10 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                           moodleBase = `${parsed.protocol}//${parsed.hostname}${parsed.port ? ':' + parsed.port : ''}`;
                         } catch { }
 
-                        // 3. Construire l'URL de lancement Moodle Mobile
-                        const moodleLaunchUrl = `${moodleBase}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=${passport}&urlscheme=${callbackScheme}`;
+                        // 3. Lancer Moodle avec web+novaflow
+                        const moodleLaunchUrl = `${moodleBase}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=${passport}&urlscheme=web+novaflow`;
 
-                        // 4. Ouvrir le popup centré
+                        // 4. Ouvrir le popup
                         const width = 500;
                         const height = 700;
                         const left = window.screen.width / 2 - width / 2;
@@ -282,7 +292,7 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                         };
                         window.addEventListener("message", messageListener);
 
-                        // Gérer la fermeture manuelle du popup
+                        // Nettoyage si fermé manuellement
                         const checkPopupInterval = setInterval(() => {
                           if (popup?.closed) {
                             clearInterval(checkPopupInterval);
