@@ -273,14 +273,10 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                         const encodedScheme = encodeURIComponent("web+novaflow");
                         const moodleLaunchUrl = `${moodleBase}/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=${passport}&urlscheme=${encodedScheme}`;
 
-                        const width = 500;
-                        const height = 700;
-                        const left = window.screen.width / 2 - width / 2;
-                        const top = window.screen.height / 2 - height / 2;
+                        // 4. Ouvrir dans un nouvel onglet (au lieu d'un popup restreint) pour éviter les blocages ADFS
                         const popup = window.open(
                           moodleLaunchUrl, 
-                          "Moodle SSO", 
-                          `width=${width},height=${height},top=${top},left=${left}`
+                          "_blank"
                         );
 
                         const messageListener = async (event: MessageEvent) => {
