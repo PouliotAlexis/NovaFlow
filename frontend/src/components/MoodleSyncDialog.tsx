@@ -371,9 +371,26 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
           ) : (
             /* Mode Identifiants */
             <div className="nf-animate-in">
-              <p style={{ fontSize: "12px", color: "var(--nf-accent)", marginBottom: "8px", fontWeight: 600 }}>
-                ✨ Connexion sécurisée en arrière-plan (Microsoft SSO)
-              </p>
+              <div style={{ 
+                padding: "10px", 
+                background: "var(--nf-accent-glow)", 
+                borderRadius: "var(--nf-radius-sm)", 
+                border: "1px solid var(--nf-accent-dim)",
+                marginBottom: "16px",
+                fontSize: "12px",
+                color: "var(--nf-accent)",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "8px"
+              }}>
+                <span style={{ fontSize: "16px" }}>✨</span>
+                <div>
+                  <strong style={{ display: "block", marginBottom: "2px" }}>Mode Automatique</strong>
+                  <span style={{ opacity: 0.8, fontSize: "11px" }}>
+                    Vos identifiants seront utilisés par Browserless pour se connecter de manière sécurisée (Microsoft SSO) en arrière-plan.
+                  </span>
+                </div>
+              </div>
               <div className="nf-form-group">
                 <label className="nf-label"><User size={14} /> Courriel ou CIP</label>
                 <input
