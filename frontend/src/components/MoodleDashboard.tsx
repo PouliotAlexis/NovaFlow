@@ -136,44 +136,7 @@ export default function MoodleDashboard() {
               </span>
               <button 
                 className="nf-btn nf-btn--primary nf-btn--sm" 
-                onClick={async (e) => {
-                  const btn = e.currentTarget;
-                  btn.disabled = true;
-                  btn.innerHTML = '<span class="nf-spin">⏳</span>...';
-                  try {
-                    // Récupérer le token local pour l'envoyer au serveur
-                    const localSession = localStorage.getItem("moodle_session");
-                    const token = localSession ? JSON.parse(localSession).token : null;
-                    
-                    const res = await api.post("/api/v2/moodle/login", { token });
-                    const data = await res.json();
-                    if (data.success) {
-                      await fetchStatus();
-                    } else if (data.bypass_url) {
-                      if (confirm("L'extension NovaFlow a besoin d'ouvrir Moodle pour capturer votre session.\n\nVoulez-vous ouvrir l'onglet de connexion ?")) {
-                        window.open(data.bypass_url, "_blank");
-                        
-                        // Active Polling: Check status every 2s
-                        let checks = 0;
-                        const pollInterval = setInterval(async () => {
-                          checks++;
-                          const resStatus = await api.get("/api/v2/moodle/session/status");
-                          const statusData = await resStatus.json();
-                          if (statusData.has_token || checks > 30) {
-                            clearInterval(pollInterval);
-                            await fetchStatus();
-                            if (statusData.has_token) fetchCourses();
-                          }
-                        }, 2000);
-                      }
-                    }
-                  } catch (e: any) {
-                    console.error("Login call failed", e);
-                  } finally {
-                    btn.disabled = false;
-                    btn.innerText = "Connecter";
-                  }
-                }}
+                onClick={() => setIsSyncDialogOpen(true)}
                 style={{ fontSize: "10px", height: "24px", padding: "0 10px", borderRadius: "12px" }}
               >
                 Connecter

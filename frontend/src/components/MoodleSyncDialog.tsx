@@ -11,7 +11,7 @@ interface MoodleSyncDialogProps {
 }
 
 export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: MoodleSyncDialogProps) {
-  const [authMode, setAuthMode] = useState<"sso" | "credentials">("sso");
+  const [authMode, setAuthMode] = useState<"sso" | "credentials">("credentials");
   const [url, setUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -164,29 +164,6 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
           <div style={{ display: "flex", gap: "6px", background: "var(--nf-bg-secondary)", padding: "5px", borderRadius: "12px", marginBottom: "12px" }}>
             <button
               type="button"
-              onClick={() => setAuthMode("sso")}
-              style={{
-                flex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                padding: "10px 16px",
-                borderRadius: "9px",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "13px",
-                fontWeight: 600,
-                transition: "all 0.2s ease",
-                background: authMode === "sso" ? "var(--nf-accent)" : "transparent",
-                color: authMode === "sso" ? "#fff" : "var(--nf-text-muted)",
-                boxShadow: authMode === "sso" ? "0 2px 8px rgba(99, 102, 241, 0.35)" : "none",
-              }}
-            >
-              <Key size={15} /> Connexion SSO
-            </button>
-            <button
-              type="button"
               onClick={() => setAuthMode("credentials")}
               style={{
                 flex: 1,
@@ -206,7 +183,30 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
                 boxShadow: authMode === "credentials" ? "0 2px 8px rgba(99, 102, 241, 0.35)" : "none",
               }}
             >
-              <User size={15} /> Identifiants
+              <RefreshCw size={15} className={loading && authMode === "credentials" ? "nf-spin" : ""} /> Automatique (Browserless)
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthMode("sso")}
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                padding: "10px 16px",
+                borderRadius: "9px",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: 600,
+                transition: "all 0.2s ease",
+                background: authMode === "sso" ? "var(--nf-accent)" : "transparent",
+                color: authMode === "sso" ? "#fff" : "var(--nf-text-muted)",
+                boxShadow: authMode === "sso" ? "0 2px 8px rgba(99, 102, 241, 0.35)" : "none",
+              }}
+            >
+              <Globe size={15} /> Manuel (Nouvel Onglet)
             </button>
           </div>
 
@@ -228,7 +228,7 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
             <div className="nf-animate-in">
               <div style={{ padding: "12px", background: "var(--nf-accent-glow)", borderRadius: "var(--nf-radius-sm)", border: "1px solid var(--nf-accent-dim)" }}>
                 <p style={{ fontSize: "12px", color: "var(--nf-accent)", fontWeight: 600, margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                  ✨ {isConnected ? "Session Connectée !" : "Capture de session SSO"}
+                  🌐 {isConnected ? "Session Connectée !" : "Capture Manuelle (Navigateur)"}
                   {isConnected && <span style={{ padding: "2px 6px", background: "#22c55e", color: "white", borderRadius: "4px", fontSize: "10px" }}>OK</span>}
                 </p>
                 
@@ -372,7 +372,7 @@ export default function MoodleSyncDialog({ isOpen, onClose, onSyncStarted }: Moo
             /* Mode Identifiants */
             <div className="nf-animate-in">
               <p style={{ fontSize: "12px", color: "var(--nf-accent)", marginBottom: "8px", fontWeight: 600 }}>
-                ✨ Supporte la connexion sécurisée Microsoft SSO (Browserless)
+                ✨ Connexion sécurisée en arrière-plan (Microsoft SSO)
               </p>
               <div className="nf-form-group">
                 <label className="nf-label"><User size={14} /> Courriel ou CIP</label>
