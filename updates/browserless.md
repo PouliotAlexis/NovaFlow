@@ -65,8 +65,8 @@ async def get_moodle_session_via_browserless(email: str, password: str):
     if not browserless_key:
         raise ValueError("BROWSERLESS_API_KEY manquante dans l'environnement.")
 
-    # URL WebSocket pour se connecter à Browserless
-    ws_endpoint = f"wss://chrome.browserless.io?token={browserless_key}"
+    # URL WebSocket pour se connecter à Browserless v2
+    ws_endpoint = f"wss://production-sfo.browserless.io?token={browserless_key}"
 
     async with async_playwright() as p:
         try:

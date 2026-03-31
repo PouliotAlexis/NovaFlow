@@ -8,7 +8,7 @@ async def get_moodle_session_via_browserless(email: str, password: str):
     ws_endpoint = settings.BROWSERLESS_URL
     # Si pas d'URL personnalisée mais une clé est présente, utiliser le cloud
     if not ws_endpoint and settings.BROWSERLESS_API_KEY:
-        ws_endpoint = f"wss://chrome.browserless.io?token={settings.BROWSERLESS_API_KEY}"
+        ws_endpoint = f"wss://production-sfo.browserless.io?token={settings.BROWSERLESS_API_KEY}"
 
     async with async_playwright() as p:
         browser = None
