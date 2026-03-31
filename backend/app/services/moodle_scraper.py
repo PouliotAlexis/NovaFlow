@@ -27,19 +27,33 @@ async def get_moodle_session_via_browserless(email: str, password: str):
             print("[BROWSERLESS] Go to Moodle login...", flush=True)
             await page.goto("https://moodle.usherbrooke.ca/login/index.php")
 
-            # Remplir l'email (Microsoft SSO)
+            # Remplir l'email (Microsoft SSO / ADFS)
             print("[BROWSERLESS] Fill email...", flush=True)
             await page.wait_for_selector('input[type="email"]', timeout=10000)
             await page.fill('input[type="email"]', email)
-            await page.click('input[type="submit"]')
+            
+            # Vérifier si on est sur la page ADFS de l'UdeS (email et mot de passe sur la même page)
+            # On attend un tout petit peu pour laisser les scripts s'exécuter si c'est moderne
+            try:
+                await page.wait_for_selector('input[type="password"]', timeout=2000)
+                adfs_mode = True
+            except PlaywrightTimeoutError:
+                adfs_mode = False
 
-            # Attendre et remplir le mot de passe
-            print("[BROWSERLESS] Fill password...", flush=True)
-            await page.wait_for_selector('input[type="password"]', timeout=10000)
-            await page.fill('input[type="password"]', password)
-            await page.click('input[type="submit"]')
+            if adfs_mode:
+                print("[BROWSERLESS] Page ADFS détectée, remplissage du mot de passe...", flush=True)
+                await page.fill('input[type="password"]', password)
+                # Le bouton de soumission ADFS UdeS est un span avec id="submitButton"
+                await page.click('#submitButton')
+            else:
+                # Flux en 2 étapes classique (Modern Azure AD)
+                await page.click('input[type="submit"], #idSIButton9')
+                print("[BROWSERLESS] Fill password...", flush=True)
+                await page.wait_for_selector('input[type="password"]', timeout=10000)
+                await page.fill('input[type="password"]', password)
+                await page.click('input[type="submit"], #idSIButton9')
 
-            # Gérer la demande "Rester connecté ?"
+            # Gérer la demande "Rester connecté ?" (Optionnel)
             try:
                 await page.wait_for_selector('#idSIButton9', timeout=5000)
                 await page.click('#idSIButton9')
