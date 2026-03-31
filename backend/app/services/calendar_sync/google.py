@@ -25,8 +25,8 @@ OAUTH_LOCK = threading.Lock()
 
 # === Configuration ===
 
-# Utilisation d'un chemin absolu direct pour Windows pour éviter les problèmes de reload
-CREDENTIALS_DIR = r"C:\Users\alexi\GIT\NovaFlow\backend\credentials"
+# Utilisation de la configuration centralisée pour les chemins
+CREDENTIALS_DIR = settings.CREDENTIALS_DIR
 TOKENS_DIR = os.path.join(CREDENTIALS_DIR, "tokens")
 CLIENT_SECRET_FILE = os.path.join(CREDENTIALS_DIR, "google_client_secret.json")
 
@@ -54,11 +54,28 @@ def _save_google_token(email: str, token_data: dict):
 
 def get_auth_url() -> str:
     """Génère l'URL d'autorisation Google."""
-    flow = Flow.from_client_secrets_file(
-        CLIENT_SECRET_FILE,
-        scopes=SCOPES,
-        redirect_uri=settings.GOOGLE_REDIRECT_URI or os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
-    )
+    # Build redirect URI: check env first, then settings, then construct from APP_BASE_URL
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI") or settings.GOOGLE_REDIRECT_URI
+    if not redirect_uri:
+        redirect_uri = f"{settings.APP_BASE_URL.rstrip('/')}/api/auth/google/callback"
+
+    if settings.GOOGLE_CLIENT_SECRET_JSON:
+        import json
+        client_config = json.loads(settings.GOOGLE_CLIENT_SECRET_JSON)
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=SCOPES,
+            redirect_uri=redirect_uri,
+        )
+    else:
+        if not os.path.exists(CLIENT_SECRET_FILE):
+             raise FileNotFoundError(f"Google credentials file not found: {CLIENT_SECRET_FILE}. Pro-tip: Set GOOGLE_CLIENT_SECRET_JSON in your environment variables for cloud deployments.")
+             
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRET_FILE,
+            scopes=SCOPES,
+            redirect_uri=redirect_uri,
+        )
     
     auth_url, state = flow.authorization_url(
         access_type="offline",
@@ -77,11 +94,25 @@ def get_auth_url() -> str:
 
 def handle_callback(authorization_code: str, state: Optional[str] = None) -> dict:
     """Traite le callback OAuth, identifie l'utilisateur et sauvegarde le token."""
-    flow = Flow.from_client_secrets_file(
-        CLIENT_SECRET_FILE,
-        scopes=SCOPES,
-        redirect_uri=settings.GOOGLE_REDIRECT_URI or os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
-    )
+    # Build redirect URI consistently with get_auth_url
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI") or settings.GOOGLE_REDIRECT_URI
+    if not redirect_uri:
+        redirect_uri = f"{settings.APP_BASE_URL.rstrip('/')}/api/auth/google/callback"
+
+    if settings.GOOGLE_CLIENT_SECRET_JSON:
+        import json
+        client_config = json.loads(settings.GOOGLE_CLIENT_SECRET_JSON)
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=SCOPES,
+            redirect_uri=redirect_uri,
+        )
+    else:
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRET_FILE,
+            scopes=SCOPES,
+            redirect_uri=redirect_uri,
+        )
     
     # Récupérer le verifier PKCE si disponible pour ce state
     if state and state in PKCE_VERIFIERS:

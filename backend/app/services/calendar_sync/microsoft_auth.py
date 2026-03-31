@@ -8,9 +8,8 @@ from app.core.config import settings
 
 load_dotenv()
 
-# Define storage paths similar to Google Service
-# Utilisation d'un chemin absolu direct pour Windows (MS)
-CREDENTIALS_DIR = r"C:\Users\alexi\GIT\NovaFlow\backend\credentials"
+# Utilisation de la configuration centralisée pour les chemins
+CREDENTIALS_DIR = settings.CREDENTIALS_DIR
 TOKENS_DIR = os.path.join(CREDENTIALS_DIR, "tokens")
 
 # Verrou global pour protéger les opérations de lecture/écriture token concurrentes
@@ -30,8 +29,13 @@ class MicrosoftAuthService:
         self.client_secret = settings.MICROSOFT_CLIENT_SECRET or os.getenv("MICROSOFT_CLIENT_SECRET")
         self.tenant_id = settings.MICROSOFT_TENANT_ID or os.getenv("MICROSOFT_TENANT_ID", "common")
         
-        # Ensure redirect URI matches Azure portal (Using standardized settings)
-        self.redirect_uri = settings.MICROSOFT_REDIRECT_URI or os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:8000/api/auth/microsoft/callback")
+        # Ensure redirect URI matches Azure portal
+        # Build redirect URI: check env first, then settings, then construct from APP_BASE_URL
+        redirect_uri = os.getenv("MICROSOFT_REDIRECT_URI") or settings.MICROSOFT_REDIRECT_URI
+        if not redirect_uri:
+            redirect_uri = f"{settings.APP_BASE_URL.rstrip('/')}/api/auth/microsoft/callback"
+        
+        self.redirect_uri = redirect_uri
         
         self.authority = f"https://login.microsoftonline.com/{self.tenant_id}"
         self.scopes = ["User.Read", "Calendars.ReadWrite", "Tasks.ReadWrite"]

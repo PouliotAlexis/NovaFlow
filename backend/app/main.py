@@ -397,7 +397,7 @@ async def chat_stream_endpoint(
         
         # Sauvegarde garantie via BackgroundTasks pour éviter les interruptions client
         def task_save():
-            log_path = r"C:\Users\alexi\GIT\NovaFlow\backend\db_audit.log"
+            log_path = os.path.join(settings.BASE_DIR, "db_audit.log")
             try:
                 save_chat_message("ai", processed, user_id=current_user.id)
                 with open(log_path, "a", encoding="utf-8") as f:
