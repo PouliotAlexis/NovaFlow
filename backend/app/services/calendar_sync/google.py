@@ -14,6 +14,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import threading
+from app.core.config import settings
 
 # Verrou global pour éviter les race conditions lors de la création de dossiers
 DRIVE_SYNC_LOCK = threading.Lock()
@@ -56,7 +57,7 @@ def get_auth_url() -> str:
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRET_FILE,
         scopes=SCOPES,
-        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
+        redirect_uri=settings.GOOGLE_REDIRECT_URI or os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
     )
     
     auth_url, state = flow.authorization_url(
@@ -69,6 +70,8 @@ def get_auth_url() -> str:
     with OAUTH_LOCK:
         PKCE_VERIFIERS[state] = flow.code_verifier
         
+    print(f"DEBUG: Google Redirect URI: {flow.redirect_uri}")
+    print(f"DEBUG: Google Auth URL: {auth_url}")
     return auth_url
 
 
@@ -77,7 +80,7 @@ def handle_callback(authorization_code: str, state: Optional[str] = None) -> dic
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRET_FILE,
         scopes=SCOPES,
-        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
+        redirect_uri=settings.GOOGLE_REDIRECT_URI or os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
     )
     
     # Récupérer le verifier PKCE si disponible pour ce state

@@ -53,18 +53,45 @@ async def get_moodle_session_via_browserless(email: str, password: str):
                 await page.fill('input[type="password"]', password)
                 await page.click('input[type="submit"], #idSIButton9')
 
-            # Gérer la demande "Rester connecté ?" (Optionnel)
-            try:
-                await page.wait_for_selector('#idSIButton9', timeout=5000)
-                await page.click('#idSIButton9')
-            except PlaywrightTimeoutError:
-                pass
+            # Gérer MFA long et la demande "Rester connecté ?"
+            print("[BROWSERLESS] Attente post-login (gestion MFA / Rester connecté)...", flush=True)
+            
+            moodle_reached = False
+            for _ in range(60): # 60 secondes max pour approuver le MFA sur son cell
+                current_url = page.url
+                if "moodle.usherbrooke.ca/my" in current_url:
+                    moodle_reached = True
+                    break
+                
+                try:
+                    # Si on voit le bouton Microsoft "Rester connecté" ou "Suivant", on clique
+                    btn = await page.query_selector('#idSIButton9')
+                    if btn and await btn.is_visible():
+                        print("[BROWSERLESS] Clic sur 'Rester connecté / Suivant'...", flush=True)
+                        await btn.click()
+                        await asyncio.sleep(2) # Laisser le temps de rediriger
+                except Exception:
+                    pass
+                
+                # DEBUG: Si Microsoft demande "number matching"
+                try:
+                    display_num = await page.query_selector('.display-sign-in-number')
+                    if display_num and await display_num.is_visible():
+                        num_text = await display_num.inner_text()
+                        print(f"\n[!!!] MICROSOFT MFA NUMBER MATCHING : {num_text} [!!!]\n", flush=True)
+                except:
+                    pass
+                
+                await asyncio.sleep(1)
+            
+            if not moodle_reached:
+                # Capture d'écran pour le debug de l'erreur dans la console Render
+                try:
+                    print(f"[BROWSERLESS] Timeout final URL: {page.url}", flush=True)
+                except: pass
+                raise Exception("Délai d'attente dépassé (MFA requis, identifiants invalides ou Number Matching requis).")
 
-            # Attendre le dashboard Moodle
-            print("[BROWSERLESS] Wait for dashboard...", flush=True)
-            await page.wait_for_url("**/my/**", timeout=15000)
-
-            print("[BROWSERLESS] Authentifié! Récupération du jeton Moodle SSO...", flush=True)
+            print("[BROWSERLESS] Authentifié! Tableau de bord Moodle atteint.", flush=True)
             
             # Naviguer vers launch.php pour déclencher la génération du token Mobile
             launch_url = "https://moodle.usherbrooke.ca/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=12345&urlscheme=moodlemobile"

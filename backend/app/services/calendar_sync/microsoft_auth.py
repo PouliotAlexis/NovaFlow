@@ -4,6 +4,7 @@ import json
 import threading
 import requests
 from dotenv import load_dotenv
+from app.core.config import settings
 
 load_dotenv()
 
@@ -25,12 +26,12 @@ def _get_token_lock(email: str) -> threading.Lock:
 
 class MicrosoftAuthService:
     def __init__(self):
-        self.client_id = os.getenv("MICROSOFT_CLIENT_ID")
-        self.client_secret = os.getenv("MICROSOFT_CLIENT_SECRET")
-        self.tenant_id = os.getenv("MICROSOFT_TENANT_ID", "common")
+        self.client_id = settings.MICROSOFT_CLIENT_ID or os.getenv("MICROSOFT_CLIENT_ID")
+        self.client_secret = settings.MICROSOFT_CLIENT_SECRET or os.getenv("MICROSOFT_CLIENT_SECRET")
+        self.tenant_id = settings.MICROSOFT_TENANT_ID or os.getenv("MICROSOFT_TENANT_ID", "common")
         
-        # Ensure redirect URI matches Azure portal
-        self.redirect_uri = os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:8000/auth/microsoft/callback")
+        # Ensure redirect URI matches Azure portal (Using standardized settings)
+        self.redirect_uri = settings.MICROSOFT_REDIRECT_URI or os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:8000/api/auth/microsoft/callback")
         
         self.authority = f"https://login.microsoftonline.com/{self.tenant_id}"
         self.scopes = ["User.Read", "Calendars.ReadWrite", "Tasks.ReadWrite"]
@@ -46,6 +47,8 @@ class MicrosoftAuthService:
             self.scopes,
             redirect_uri=self.redirect_uri
         )
+        print(f"DEBUG: Microsoft Redirect URI: {self.redirect_uri}")
+        print(f"DEBUG: Microsoft Auth URL: {auth_url}")
         return auth_url
 
     def acquire_token_by_code(self, code: str):
