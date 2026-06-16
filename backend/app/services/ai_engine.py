@@ -1,8 +1,12 @@
 """
 NovaFlow - Service AI
 
-Gère la communication avec le modèle AI (Local via Ollama ou Cloud via OpenAI).
-Le choix est configurable dans les settings.
+Gère la communication avec le modèle AI :
+  - Local via Ollama
+  - Cloud via OpenAI
+  - Cloud via Groq (API compatible OpenAI, gratuit)
+
+Le choix est configurable dans les settings (AI_MODE).
 """
 
 import json
@@ -40,6 +44,99 @@ def _build_system_prompt(system_prompt: str, context: str = "") -> str:
     return base
 
 
+# =============================================================================
+# Fonctions utilitaires pour les APIs compatibles OpenAI (OpenAI, Groq, etc.)
+# =============================================================================
+
+def _get_api_config(mode: str) -> tuple[str, str, str]:
+    """Retourne (base_url, api_key, model) selon le mode AI."""
+    if mode == "groq":
+        return (
+            "https://api.groq.com/openai/v1/chat/completions",
+            settings.GROQ_API_KEY,
+            settings.GROQ_MODEL,
+        )
+    else:  # "cloud" ou "openai"
+        return (
+            "https://api.openai.com/v1/chat/completions",
+            settings.OPENAI_API_KEY,
+            settings.OPENAI_MODEL,
+        )
+
+
+async def _chat_openai_compatible(
+    prompt: str, system_prompt: str = "", context: str = "", mode: str = "cloud"
+) -> str:
+    """Requête non-streaming vers une API compatible OpenAI (OpenAI, Groq, etc.)."""
+    full_system = _build_system_prompt(system_prompt, context)
+    messages = [
+        {"role": "system", "content": full_system},
+        {"role": "user", "content": prompt},
+    ]
+    
+    url, api_key, model = _get_api_config(mode)
+    print(f"[AI] Calling {mode} model: {model}")
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": messages,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+
+async def _chat_openai_compatible_stream(
+    prompt: str, system_prompt: str = "", context: str = "", mode: str = "cloud"
+) -> AsyncGenerator[str, None]:
+    """Streaming vers une API compatible OpenAI (OpenAI, Groq, etc.)."""
+    full_system = _build_system_prompt(system_prompt, context)
+    messages = [
+        {"role": "system", "content": full_system},
+        {"role": "user", "content": prompt},
+    ]
+    
+    url, api_key, model = _get_api_config(mode)
+    print(f"[AI] Starting {mode} stream with model: {model}")
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        async with client.stream(
+            "POST",
+            url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={"model": model, "messages": messages, "stream": True},
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                payload = line[6:]
+                if payload == "[DONE]":
+                    break
+                try:
+                    data = json.loads(payload)
+                    token = data["choices"][0]["delta"].get("content", "")
+                    if token:
+                        yield token
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+
+
+# =============================================================================
+# Fonctions Ollama (Local)
+# =============================================================================
+
 async def chat_local(prompt: str, system_prompt: str = "", context: str = "") -> str:
     """
     Envoie une requête au modèle Ollama local.
@@ -72,42 +169,6 @@ async def chat_local(prompt: str, system_prompt: str = "", context: str = "") ->
         return data["message"]["content"]
 
 
-async def chat_cloud(prompt: str, system_prompt: str = "", context: str = "") -> str:
-    """
-    Envoie une requête au modèle Cloud (OpenAI).
-    IMPORTANT: Le prompt doit être sanitizé AVANT d'appeler cette fonction.
-    
-    Args:
-        prompt: Le message utilisateur (déjà sanitizé).
-        system_prompt: Instructions système optionnelles.
-        context: Contexte RAG extrait des documents.
-    
-    Returns:
-        La réponse du modèle (contenant des tokens à desanitizer).
-    """
-    full_system = _build_system_prompt(system_prompt, context)
-    messages = [
-        {"role": "system", "content": full_system},
-        {"role": "user", "content": prompt},
-    ]
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": settings.OPENAI_MODEL,
-                "messages": messages,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
-
-
 async def chat_local_stream(
     prompt: str, system_prompt: str = "", context: str = ""
 ) -> AsyncGenerator[str, None]:
@@ -131,13 +192,9 @@ async def chat_local_stream(
                 if not line:
                     continue
                 try:
-                    # Debug : On log CHAQUE ligne brute reçue
-                    # print(f"[RAW OLLAMA] {line}")
                     data = json.loads(line)
                     token = data.get("message", {}).get("content", "")
                     if token:
-                        # Log discret pour ne pas polluer mais voir que ça avance
-                        # print(".", end="", flush=True) 
                         yield token
                     if data.get("done"):
                         print(f"\n[AI] Local stream finished. (Total response length: {data.get('total_duration', 0)}ns)")
@@ -146,40 +203,9 @@ async def chat_local_stream(
                     continue
 
 
-async def chat_cloud_stream(
-    prompt: str, system_prompt: str = "", context: str = ""
-) -> AsyncGenerator[str, None]:
-    """OpenAI streaming — yields tokens one by one."""
-    full_system = _build_system_prompt(system_prompt, context)
-    messages = [
-        {"role": "system", "content": full_system},
-        {"role": "user", "content": prompt},
-    ]
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        async with client.stream(
-            "POST",
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={"model": settings.OPENAI_MODEL, "messages": messages, "stream": True},
-        ) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                payload = line[6:]
-                if payload == "[DONE]":
-                    break
-                try:
-                    data = json.loads(payload)
-                    token = data["choices"][0]["delta"].get("content", "")
-                    if token:
-                        yield token
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
-
+# =============================================================================
+# Points d'entrée principaux
+# =============================================================================
 
 async def chat_stream(
     prompt: str,
@@ -187,14 +213,15 @@ async def chat_stream(
     mode: str | None = None,
     context: str = "",
 ) -> AsyncGenerator[str, None]:
-    """Point d'entrée streaming — sélectionne local ou cloud."""
+    """Point d'entrée streaming — sélectionne local, openai, groq ou cloud."""
     active_mode = mode or settings.AI_MODE
     print(f"[AI] Starting stream in mode: {active_mode}")
+    
     if active_mode == "local":
         async for token in chat_local_stream(prompt, system_prompt, context):
             yield token
-    elif active_mode == "cloud":
-        async for token in chat_cloud_stream(prompt, system_prompt, context):
+    elif active_mode in ("cloud", "openai", "groq"):
+        async for token in _chat_openai_compatible_stream(prompt, system_prompt, context, mode=active_mode):
             yield token
     else:
         raise ValueError(f"Mode AI inconnu: {active_mode}")
@@ -209,13 +236,16 @@ async def chat(
     """
     Point d'entrée principal pour communiquer avec l'IA.
     
-    Sélectionne automatiquement le mode (local/cloud) selon la config,
-    ou utilise le mode spécifié en paramètre.
+    Sélectionne automatiquement le mode selon la config :
+      - "local"  → Ollama (privé, sur la machine)
+      - "cloud"  → OpenAI API
+      - "openai" → OpenAI API (alias de cloud)
+      - "groq"   → Groq API (Llama 3.3, gratuit)
     
     Args:
         prompt: Le message utilisateur.
         system_prompt: Instructions système optionnelles.
-        mode: Force le mode ("local" ou "cloud"). Si None, utilise la config.
+        mode: Force le mode. Si None, utilise la config.
         context: Contexte RAG extrait des documents.
     
     Returns:
@@ -225,7 +255,7 @@ async def chat(
 
     if active_mode == "local":
         return await chat_local(prompt, system_prompt, context)
-    elif active_mode == "cloud":
-        return await chat_cloud(prompt, system_prompt, context)
+    elif active_mode in ("cloud", "openai", "groq"):
+        return await _chat_openai_compatible(prompt, system_prompt, context, mode=active_mode)
     else:
         raise ValueError(f"Mode AI inconnu: {active_mode}")

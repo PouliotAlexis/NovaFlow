@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Define storage paths similar to Google Service
-CREDENTIALS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "credentials",
-)
+# __file__ = backend/app/services/calendar_sync/microsoft_auth.py
+# On remonte de 4 niveaux : calendar_sync → services → app → backend
+_BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+CREDENTIALS_DIR = os.path.join(_BACKEND_ROOT, "credentials")
 TOKENS_DIR = os.path.join(CREDENTIALS_DIR, "tokens")
 
 # Verrou global pour protéger les opérations de lecture/écriture token concurrentes

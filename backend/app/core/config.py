@@ -38,9 +38,13 @@ class Settings(BaseSettings):
     OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"
     
-    # Cloud AI (Fallback)
+    # Cloud AI — OpenAI
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
+    
+    # Cloud AI — Groq (API compatible OpenAI, gratuit)
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     
     # Database
     DATABASE_URL: str = f"sqlite:///{os.path.join(APP_DATA_DIR, 'novaflow.db')}"
