@@ -34,11 +34,7 @@ def clean_course_name(name: str) -> str:
     return name
 
 
-MOODLE_SETTINGS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data",
-    "moodle_settings.json",
-)
+MOODLE_SETTINGS_FILE = os.path.join(settings.DATA_DIR, "moodle_settings.json")
 
 
 def _is_calendar_feed_url(url: str) -> bool:
@@ -168,11 +164,7 @@ async def get_moodle_session_status():
     except Exception as e:
         return {"connected": False, "error": str(e)}
 
-MOODLE_TOKEN_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data",
-    "moodle_token.json",
-)
+MOODLE_TOKEN_FILE = os.path.join(settings.DATA_DIR, "moodle_token.json")
 
 def _save_moodle_token(token: str):
     """Stocke le token Moodle capturé pour réutilisation."""

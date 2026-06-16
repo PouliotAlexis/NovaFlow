@@ -27,8 +27,9 @@ from PyPDF2 import PdfReader
 
 # === Configuration ChromaDB ===
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-CHROMA_DIR = os.path.join(DATA_DIR, "chromadb")
+from app.core.config import settings
+DATA_DIR = settings.DATA_DIR
+CHROMA_DIR = settings.CHROMA_DIR
 UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
 
 # Créer les dossiers s'ils n'existent pas

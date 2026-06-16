@@ -3,12 +3,10 @@ import os
 from datetime import datetime
 from typing import List, Dict
 
+from app.core.config import settings
+
 # Chemin vers le fichier de stockage
-CHAT_HISTORY_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "chat_history.json"
-)
+CHAT_HISTORY_FILE = os.path.join(settings.DATA_DIR, "chat_history.json")
 
 def load_chat_history() -> List[Dict]:
     """Charge l'historique complet depuis le fichier JSON."""

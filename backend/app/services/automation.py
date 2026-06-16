@@ -38,11 +38,7 @@ from .moodle_sync_service import sync_moodle_courses
 
 
 # Logging setup
-LOG_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-    "data", 
-    "automation.log"
-)
+LOG_FILE = os.path.join(settings.DATA_DIR, "automation.log")
 
 # Gestionnaire de Jobs
 active_jobs = {} # id -> {task, name, started_at}
@@ -158,11 +154,7 @@ def get_recent_logs(lines: int = 5) -> List[str]:
 
 
 # Fichier pour stocker les IDs des éléments déjà traités (pour éviter les doublons)
-PROCESSED_DATA_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-    "data", 
-    "processed_items.json"
-)
+PROCESSED_DATA_FILE = os.path.join(settings.DATA_DIR, "processed_items.json")
 
 # Timestamp pour le throttling de la synchronisation périodique (Tasks, etc.)
 _last_auto_sync_time = datetime.datetime.min
@@ -770,7 +762,7 @@ async def sync_moodle_native_v2():
     """
     log_auto("🔄 Sync Moodle Native v2 : Démarrage...")
     # Charger le token depuis le fichier de persistance
-    token_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "moodle_token.json")
+    token_path = os.path.join(settings.DATA_DIR, "moodle_token.json")
     token = None
     if os.path.exists(token_path):
         try:

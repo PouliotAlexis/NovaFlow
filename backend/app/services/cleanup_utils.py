@@ -1,7 +1,8 @@
 import os
 import json
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+from app.core.config import settings
+DATA_DIR = settings.DATA_DIR
 
 def reset_all_data():
     """Efface les tâches, l'historique de traitement et les notifications."""

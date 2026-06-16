@@ -64,9 +64,8 @@ def get_unified_events(days: int = 30) -> List[Dict[str, Any]]:
 
     # 3. Récupérer les événements Moodle (multi-URL)
     moodle_events = []
-    # Chemin corrigé : remonter 3 niveaux pour arriver à app/
-    app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    moodle_file = os.path.join(app_root, "data", "moodle_settings.json")
+    from app.core.config import settings
+    moodle_file = os.path.join(settings.DATA_DIR, "moodle_settings.json")
     if os.path.exists(moodle_file):
         try:
             with open(moodle_file, "r", encoding="utf-8") as f:

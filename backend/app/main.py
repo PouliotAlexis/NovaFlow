@@ -451,7 +451,7 @@ def get_settings():
 
 # === Moodle Settings ===
 
-MOODLE_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "moodle_settings.json")
+MOODLE_SETTINGS_FILE = os.path.join(settings.DATA_DIR, "moodle_settings.json")
 
 def _load_moodle_urls() -> list:
     """Charge les URLs Moodle. Compatible ancien format {url} et nouveau {urls}."""
@@ -878,7 +878,7 @@ def clear_user_notifications():
 
 # === Event Status (remis/done) ===
 
-EVENT_STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "event_status.json")
+EVENT_STATUS_FILE = os.path.join(settings.DATA_DIR, "event_status.json")
 
 def _load_event_status() -> dict:
     if os.path.exists(EVENT_STATUS_FILE):
