@@ -44,7 +44,9 @@ async def capture_moodle_token(url: str):
         page.on("requestfailed", on_request)
 
         try:
-            print(f"[MOODLE SSO] Lancement de {launch_url}")
+            print(f"[MOODLE SSO] Lancement de {launch_url}", flush=True)
+            await page.evaluate("document.write('<div style=\"font-family: sans-serif; padding: 20px; text-align: center; margin-top: 50px;\"><h2>NovaFlow Moodle SSO</h2><p>Connexion en cours vers Moodle...</p></div>')")
+            await asyncio.sleep(1) # Laisse le temps de lire
             await page.goto(launch_url)
         except Exception as e:
             print(f"[MOODLE SSO] Goto a terminé avec : {e}")
@@ -76,7 +78,19 @@ class MoodleService:
         self.base_url = normalize_moodle_url(base_url)
         self.username = username
         self.password = password
+        
+        # Le token Moodle Mobile est souvent encodé en base64 et contient 'token:::private:::...'
+        if token:
+            try:
+                import base64
+                # Ajouter le padding '=' au cas où
+                decoded = base64.b64decode(token + '==').decode('utf-8')
+                if ':::' in decoded:
+                    token = decoded.split(':::')[0]
+            except Exception:
+                pass
         self.token = token
+        
         self.client = httpx.AsyncClient(timeout=30.0)
 
     async def authenticate(self) -> str:
@@ -162,10 +176,18 @@ async def sync_moodle_courses(username, password, url, token=None):
     
     # Get user info for ID
     user_info = await service.call_web_service("core_webservice_get_site_info")
+    if "exception" in user_info:
+        print(f"[MOODLE SYNC] Erreur d'authentification Moodle: {user_info.get('message', user_info)}")
+        return [{"status": "error", "error": f"Erreur Moodle: {user_info.get('message', 'inconnue')}"}]
+
     user_id = user_info.get("userid")
     print(f"[MOODLE SYNC] user_id={user_id}", flush=True)
     
     courses = await service.get_courses(user_id)
+    if isinstance(courses, dict) and "exception" in courses:
+        print(f"[MOODLE SYNC] Erreur récupération cours: {courses.get('message', courses)}")
+        return [{"status": "error", "error": f"Erreur récupération cours: {courses.get('message', 'inconnue')}"}]
+
     print(f"[MOODLE SYNC] {len(courses)} cours trouvés", flush=True)
     download_dir = settings.MOODLE_DOWNLOADS_DESTINATION
     

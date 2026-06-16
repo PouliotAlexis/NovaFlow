@@ -34,11 +34,11 @@ pub fn run() {
         cmd.args(&["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]);
         cmd.current_dir("../backend");
 
-        // Masquer la fenêtre de console sous Windows
+        // Masquer la fenêtre de console sous Windows (Désactivé pour Playwright)
         #[cfg(target_os = "windows")]
         {
-          use std::os::windows::process::CommandExt;
-          cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+          // use std::os::windows::process::CommandExt;
+          // cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
         match cmd.spawn() {
