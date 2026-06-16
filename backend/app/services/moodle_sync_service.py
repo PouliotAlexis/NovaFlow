@@ -23,32 +23,31 @@ async def capture_moodle_token(url: str):
     
     async with async_playwright() as p:
         # On lance un navigateur temporaire
+
         browser = await p.chromium.launch(headless=False)
-        context = await browser.new_context(viewport={"width": 600, "height": 700})
+        context = await browser.new_context(viewport={"width": 800, "height": 800})
         page = await context.new_page()
         
         print(f"[MOODLE SSO] En attente de connexion sur {base_url}...")
         
-        # Intercepter la requête moodlemobile:// pour éviter l'erreur ERR_UNKNOWN_URL_SCHEME
-        async def route_handler(route):
+        def on_request(request):
             nonlocal token
-            url = route.request.url
-            if "moodlemobile://token=" in url or "token=" in url:
+            url = request.url
+            if "moodlemobile://token=" in url:
                 try:
                     token = url.split("token=")[1].split("&")[0]
-                    print(f"[MOODLE SSO] ✅ Token capturé via route !")
+                    print(f"[MOODLE SSO] ✅ Token capturé via requête interceptée !")
                 except Exception:
                     pass
-                await route.abort()
-            else:
-                await route.continue_()
 
-        await page.route("**/*", route_handler)
+        page.on("request", on_request)
+        page.on("requestfailed", on_request)
 
         try:
+            print(f"[MOODLE SSO] Lancement de {launch_url}")
             await page.goto(launch_url)
         except Exception as e:
-            # Peut throw ERR_UNKNOWN_URL_SCHEME si redirection immédiate
+            print(f"[MOODLE SSO] Goto a terminé avec : {e}")
             pass
 
         # On surveille l'URL ou la variable token
@@ -56,9 +55,10 @@ async def capture_moodle_token(url: str):
             while not token:
                 try:
                     current_url = page.url
-                    if "token=" in current_url:
+                    if "moodlemobile://token=" in current_url:
                         token = current_url.split("token=")[1].split("&")[0]
                         print(f"[MOODLE SSO] ✅ Token capturé via URL !")
+                        break
                         break
                     if page.is_closed():
                         break
