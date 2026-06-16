@@ -347,7 +347,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
                 setCourses(data || []);
             }
         } catch (error) {
-            console.error("Erreur fetch courses", error);
+            console.warn("Erreur fetch courses", error);
         }
     }, []);
 

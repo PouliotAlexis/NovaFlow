@@ -23,21 +23,43 @@ async def capture_moodle_token(url: str):
     
     async with async_playwright() as p:
         # On lance un navigateur temporaire
-        browser = await p.chromium.launch(headless=False, args=["--app=" + launch_url])
-        page = await browser.new_page()
+        browser = await p.chromium.launch(headless=False)
+        context = await browser.new_context(viewport={"width": 600, "height": 700})
+        page = await context.new_page()
         
         print(f"[MOODLE SSO] En attente de connexion sur {base_url}...")
         
-        # On surveille l'URL pour la redirection moodlemobile://token=xxx
+        # Intercepter la requête moodlemobile:// pour éviter l'erreur ERR_UNKNOWN_URL_SCHEME
+        async def route_handler(route):
+            nonlocal token
+            url = route.request.url
+            if "moodlemobile://token=" in url or "token=" in url:
+                try:
+                    token = url.split("token=")[1].split("&")[0]
+                    print(f"[MOODLE SSO] ✅ Token capturé via route !")
+                except Exception:
+                    pass
+                await route.abort()
+            else:
+                await route.continue_()
+
+        await page.route("**/*", route_handler)
+
+        try:
+            await page.goto(launch_url)
+        except Exception as e:
+            # Peut throw ERR_UNKNOWN_URL_SCHEME si redirection immédiate
+            pass
+
+        # On surveille l'URL ou la variable token
         try:
             while not token:
                 try:
                     current_url = page.url
                     if "token=" in current_url:
                         token = current_url.split("token=")[1].split("&")[0]
-                        print(f"[MOODLE SSO] ✅ Token capturé !")
+                        print(f"[MOODLE SSO] ✅ Token capturé via URL !")
                         break
-                    
                     if page.is_closed():
                         break
                 except Exception:
