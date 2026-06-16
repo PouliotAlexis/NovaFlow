@@ -46,7 +46,7 @@ export default function AutomationStatus() {
                     prevJobCount.current = jobsData.length;
                 }
             } catch (error) {
-                console.error("Error fetching automation data", error);
+                console.warn("Error fetching automation data", error);
             }
         };
 

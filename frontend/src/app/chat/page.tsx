@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useChat, Message } from "ai/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowLeft, Send, BookOpen, Paperclip, AlertTriangle, Loader2, ExternalLink, CheckSquare, Square, Sparkles, User } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 interface CourseFile {
   name: string;
@@ -14,8 +15,9 @@ interface CourseFile {
   path: string;
 }
 
-export default function CourseChatPage({ params }: { params: Promise<{ courseId: string }> }) {
-  const { courseId } = React.use(params);
+function CourseChatContent() {
+  const searchParams = useSearchParams();
+  const courseId = searchParams.get("courseId") || "";
   const [files, setFiles] = useState<CourseFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [selectedFilenames, setSelectedFilenames] = useState<Set<string>>(new Set());
@@ -379,5 +381,13 @@ export default function CourseChatPage({ params }: { params: Promise<{ courseId:
         </form>
       </main>
     </div>
+  );
+}
+
+export default function CourseChatPage() {
+  return (
+    <Suspense fallback={<div className="nf-empty-state">Chargement du chat...</div>}>
+      <CourseChatContent />
+    </Suspense>
   );
 }

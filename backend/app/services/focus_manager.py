@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-FOCUS_DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "focus_sessions.json")
+from app.core.config import settings
+FOCUS_DATA_FILE = os.path.join(settings.DATA_DIR, "focus_sessions.json")
 
 def _load_sessions() -> List[Dict[str, Any]]:
     if not os.path.exists(FOCUS_DATA_FILE):

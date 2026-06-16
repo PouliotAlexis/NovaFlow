@@ -321,7 +321,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
                 setTasks(data);
             }
         } catch (error) {
-            console.error("Erreur fetch tasks", error);
+            console.warn("Erreur fetch tasks", error);
         } finally {
             setLoading(false);
         }
@@ -335,7 +335,7 @@ export default function TaskList({ compact = false, onNavigate, courseName, cour
                 setLocalEvents(data.events || []);
             }
         } catch (error) {
-            console.error("Erreur fetch events", error);
+            console.warn("Erreur fetch events", error);
         }
     }, []);
 

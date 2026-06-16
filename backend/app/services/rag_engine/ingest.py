@@ -18,8 +18,8 @@ def normalize_text(text: str) -> str:
     return unicodedata.normalize('NFC', text)
 
 # Configuration des dossiers
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
-CHROMA_DIR = os.path.join(DATA_DIR, "chromadb_v2")
+DATA_DIR = settings.DATA_DIR
+CHROMA_DIR = settings.CHROMA_DIR
 
 def get_embeddings():
     """Retourne le modèle d'embeddings selon la configuration."""

@@ -11,7 +11,8 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 
 # Chemin du fichier de données
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+from app.core.config import settings
+DATA_DIR = settings.DATA_DIR
 TASKS_FILE = os.path.join(DATA_DIR, "tasks.json")
 
 def _ensure_data_dir():

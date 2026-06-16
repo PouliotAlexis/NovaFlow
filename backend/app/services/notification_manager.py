@@ -9,11 +9,8 @@ from datetime import datetime
 from typing import List, Dict, Optional
 
 # Chemin vers le fichier de stockage
-NOTIFICATIONS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "notifications.json"
-)
+from app.core.config import settings
+NOTIFICATIONS_FILE = os.path.join(settings.DATA_DIR, "notifications.json")
 
 class Notification:
     def __init__(self, id: str, title: str, content: str, type: str, timestamp: str, read: bool = False):

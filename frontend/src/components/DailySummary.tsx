@@ -18,7 +18,7 @@ export default function DailySummary() {
                 setStats({ total, completed, tasks: active, ticks: completed });
             }
         } catch (e) {
-            console.error("DailySummary fetch error", e);
+            console.warn("DailySummary fetch error", e);
         }
     }, []);
 

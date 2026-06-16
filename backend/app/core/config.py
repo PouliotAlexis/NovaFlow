@@ -2,10 +2,26 @@
 NovaFlow Backend Configuration
 """
 from pydantic_settings import BaseSettings
-
-
 from typing import Literal
 import os
+import platform
+
+def get_app_data_dir() -> str:
+    # Répertoire de stockage local de l'application selon l'OS
+    if platform.system() == "Windows":
+        base_dir = os.getenv("APPDATA") or os.path.expanduser("~")
+    elif platform.system() == "Darwin":  # macOS
+        base_dir = os.path.expanduser("~/Library/Application Support")
+    else:  # Linux / autre
+        base_dir = os.getenv("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    
+    app_dir = os.path.join(base_dir, "NovaFlow")
+    os.makedirs(app_dir, exist_ok=True)
+    os.makedirs(os.path.join(app_dir, "data"), exist_ok=True)
+    os.makedirs(os.path.join(app_dir, "chromadb_v2"), exist_ok=True)
+    return app_dir
+
+APP_DATA_DIR = get_app_data_dir()
 
 class Settings(BaseSettings):
     """Configuration principale de NovaFlow."""
@@ -16,7 +32,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # AI Engine
-    AI_MODE: Literal["local", "cloud"] = "local"
+    AI_MODE: Literal["local", "cloud", "openai", "groq"] = "local"
     
     # Ollama (Local AI)
     OLLAMA_HOST: str = "http://localhost:11434"
@@ -27,7 +43,9 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o-mini"
     
     # Database
-    DATABASE_URL: str = "sqlite:///./novaflow.db"
+    DATABASE_URL: str = f"sqlite:///{os.path.join(APP_DATA_DIR, 'novaflow.db')}"
+    DATA_DIR: str = os.path.join(APP_DATA_DIR, "data")
+    CHROMA_DIR: str = os.path.join(APP_DATA_DIR, "chromadb_v2")
     
     # Security
     SECRET_KEY: str = "dev-secret-key-change-in-production"

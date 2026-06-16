@@ -5,10 +5,11 @@ import threading
 import time
 from datetime import datetime
 
+from app.core.config import settings
 # Où sauvegarder les événements Moodle envoyés par l'extension
-MOODLE_EXT_EVENTS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "moodle_ext_events.json")
-MOODLE_EXT_COURSES_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "moodle_ext_courses.json")
-MOODLE_EXT_DOWNLOADED_KEYS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "moodle_ext_downloaded_keys.json")
+MOODLE_EXT_EVENTS_FILE = os.path.join(settings.DATA_DIR, "moodle_ext_events.json")
+MOODLE_EXT_COURSES_FILE = os.path.join(settings.DATA_DIR, "moodle_ext_courses.json")
+MOODLE_EXT_DOWNLOADED_KEYS_FILE = os.path.join(settings.DATA_DIR, "moodle_ext_downloaded_keys.json")
 
 def _ensure_data_dir():
     os.makedirs(os.path.dirname(MOODLE_EXT_EVENTS_FILE), exist_ok=True)

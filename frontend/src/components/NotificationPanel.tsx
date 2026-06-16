@@ -29,7 +29,7 @@ export default function NotificationPanel() {
                 setNotifications(data.notifications || []);
             }
         } catch (err) {
-            console.error("Error fetching notifications:", err);
+            console.warn("Error fetching notifications:", err);
         }
     };
 

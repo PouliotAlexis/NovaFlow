@@ -17,7 +17,7 @@ from app.services.task_manager import TaskManager
 
 
 # Chemin du fichier de données
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+DATA_DIR = settings.DATA_DIR
 EVENTS_FILE = os.path.join(DATA_DIR, "events.json")
 
 def _ensure_data_dir():

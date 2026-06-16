@@ -68,7 +68,7 @@ export default function MoodleDashboard() {
   };
 
   const handleChat = (id: string) => {
-    window.location.href = `/chat/${id}`;
+    window.location.href = `/chat?courseId=${id}`;
   };
 
   return (
