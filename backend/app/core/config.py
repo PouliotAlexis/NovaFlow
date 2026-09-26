@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # AI Engine
-    AI_MODE: Literal["local", "cloud"] = "local"
+    AI_MODE: Literal["local", "cloud", "groq"] = "local"
     
     # Ollama (Local AI)
     OLLAMA_HOST: str = "http://localhost:11434"
@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     # Cloud AI (Fallback)
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
+    
+    # Groq Cloud (Gratuit)
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    
+    # Discord Bot
+    DISCORD_BOT_TOKEN: str = ""
+    DISCORD_USER_ID: int = 0
     
     # Database
     DATABASE_URL: str = "sqlite:///./novaflow.db"

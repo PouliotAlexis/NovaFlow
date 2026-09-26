@@ -26,3 +26,4 @@ playwright
 python-docx
 python-pptx
 PyMuPDF
+discord.py

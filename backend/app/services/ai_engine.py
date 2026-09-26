@@ -187,7 +187,7 @@ async def chat_stream(
     mode: str | None = None,
     context: str = "",
 ) -> AsyncGenerator[str, None]:
-    """Point d'entrée streaming — sélectionne local ou cloud."""
+    """Point d'entrée streaming — sélectionne local, cloud ou groq."""
     active_mode = mode or settings.AI_MODE
     print(f"[AI] Starting stream in mode: {active_mode}")
     if active_mode == "local":
@@ -196,8 +196,71 @@ async def chat_stream(
     elif active_mode == "cloud":
         async for token in chat_cloud_stream(prompt, system_prompt, context):
             yield token
+    elif active_mode == "groq":
+        async for token in chat_groq_stream(prompt, system_prompt, context):
+            yield token
     else:
         raise ValueError(f"Mode AI inconnu: {active_mode}")
+
+
+async def chat_groq(prompt: str, system_prompt: str = "", context: str = "") -> str:
+    """Envoie une requête au modèle Groq Cloud (API compatible OpenAI)."""
+    full_system = _build_system_prompt(system_prompt, context)
+    messages = [
+        {"role": "system", "content": full_system},
+        {"role": "user", "content": prompt},
+    ]
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": settings.GROQ_MODEL,
+                "messages": messages,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+
+async def chat_groq_stream(
+    prompt: str, system_prompt: str = "", context: str = ""
+) -> AsyncGenerator[str, None]:
+    """Groq streaming — yields tokens one by one (API compatible OpenAI)."""
+    full_system = _build_system_prompt(system_prompt, context)
+    messages = [
+        {"role": "system", "content": full_system},
+        {"role": "user", "content": prompt},
+    ]
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        async with client.stream(
+            "POST",
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={"model": settings.GROQ_MODEL, "messages": messages, "stream": True},
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                payload = line[6:]
+                if payload == "[DONE]":
+                    break
+                try:
+                    data = json.loads(payload)
+                    token = data["choices"][0]["delta"].get("content", "")
+                    if token:
+                        yield token
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
 
 
 async def chat(
@@ -209,13 +272,13 @@ async def chat(
     """
     Point d'entrée principal pour communiquer avec l'IA.
     
-    Sélectionne automatiquement le mode (local/cloud) selon la config,
+    Sélectionne automatiquement le mode (local/cloud/groq) selon la config,
     ou utilise le mode spécifié en paramètre.
     
     Args:
         prompt: Le message utilisateur.
         system_prompt: Instructions système optionnelles.
-        mode: Force le mode ("local" ou "cloud"). Si None, utilise la config.
+        mode: Force le mode ("local", "cloud" ou "groq"). Si None, utilise la config.
         context: Contexte RAG extrait des documents.
     
     Returns:
@@ -227,5 +290,8 @@ async def chat(
         return await chat_local(prompt, system_prompt, context)
     elif active_mode == "cloud":
         return await chat_cloud(prompt, system_prompt, context)
+    elif active_mode == "groq":
+        return await chat_groq(prompt, system_prompt, context)
     else:
         raise ValueError(f"Mode AI inconnu: {active_mode}")
+
