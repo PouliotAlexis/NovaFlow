@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # Discord Bot
     DISCORD_BOT_TOKEN: str = ""
     DISCORD_USER_ID: int = 0
+    WEB_APP_URL: str = "http://localhost:3000"
     
     # Database
     DATABASE_URL: str = "sqlite:///./novaflow.db"

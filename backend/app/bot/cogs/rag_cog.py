@@ -172,6 +172,50 @@ class RagCog(commands.Cog):
                 )
             )
 
+    # ── /site ────────────────────────────────────────────────────
+    @app_commands.command(
+        name="site",
+        description="Ouvre le lien direct vers l'interface Web et le Dashboard de NovaFlow"
+    )
+    async def site_command(self, interaction: discord.Interaction):
+        """Fournit le lien vers le dashboard web NovaFlow avec un bouton cliquable."""
+        from app.core.config import settings
+
+        web_url = settings.WEB_APP_URL.rstrip("/")
+        api_url = "http://localhost:8000"
+
+        embed = discord.Embed(
+            title="🌐 NovaFlow — Interface Web",
+            description=(
+                f"Accède directement à ton Life OS complet, calendrier, tâches et documents :\n\n"
+                f"🔗 **Dashboard Web :** [{web_url}]({web_url})\n"
+                f"⚙️ **API & Docs :** [{api_url}/docs]({api_url}/docs)\n"
+            ),
+            color=discord.Color.from_rgb(99, 102, 241),  # Indigo
+        )
+        embed.set_footer(text="NovaFlow • Synchronisé en temps réel avec ton bot Discord")
+
+        # Vue avec un bouton cliquable URL
+        view = discord.ui.View()
+        view.add_item(
+            discord.ui.Button(
+                label="Ouvrir NovaFlow Web",
+                url=web_url,
+                style=discord.ButtonStyle.link,
+                emoji="🚀",
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label="Documentation API",
+                url=f"{api_url}/docs",
+                style=discord.ButtonStyle.link,
+                emoji="📖",
+            )
+        )
+
+        await interaction.response.send_message(embed=embed, view=view)
+
 
 async def setup(bot: commands.Bot):
     """Point d'entrée pour charger le cog."""

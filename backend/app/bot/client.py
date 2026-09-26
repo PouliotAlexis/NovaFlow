@@ -21,10 +21,11 @@ def create_bot() -> commands.Bot:
     intents = discord.Intents.default()
     intents.message_content = True
 
+    web_url = settings.WEB_APP_URL.rstrip("/")
     bot = commands.Bot(
         command_prefix="!",
         intents=intents,
-        description="NovaFlow — Ton assistant d'étude intelligent 🎓",
+        description=f"NovaFlow — Ton assistant d'étude intelligent 🎓 | 🌐 Dashboard : {web_url}",
     )
 
     @bot.event
@@ -36,12 +37,12 @@ def create_bot() -> commands.Bot:
         print(f"🚀 NovaFlow Bot connecté : {bot.user} (ID: {bot.user.id})")
         print(f"📡 Commandes slash synchronisées")
         print(f"🏠 Serveurs : {len(bot.guilds)}")
+        print(f"🌐 Dashboard Web : {web_url}")
         print(f"{'='*50}")
 
-        # Définir le statut du bot
-        activity = discord.Activity(
-            type=discord.ActivityType.watching,
-            name="tes devoirs 📚"
+        # Définir le statut du bot affichant l'accès au site web
+        activity = discord.CustomActivity(
+            name=f"🌐 {web_url} | /site"
         )
         await bot.change_presence(activity=activity)
 
